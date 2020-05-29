@@ -8,6 +8,11 @@ pub enum SuperBlockState {
     EMPTY
 }
 
+mod desc;
+mod proc_heap;
+pub use proc_heap::{ProcHeap, get_heaps, Heaps};
+pub use desc::{Descriptor, DescriptorNode};
+
 impl From<u64> for SuperBlockState {
     fn from(u: u64) -> Self {
         match u {
@@ -40,9 +45,10 @@ bitfield! {
     pub struct Anchor(u64);
     impl Debug;
     pub from into SuperBlockState, state, set_state: 1, 0;
-    pub avail, set_avail: 2, 31;
-    pub count, set_count: 32, 63;
+    pub avail, set_avail: 31, 2;
+    pub count, set_count: 63, 32;
 }
+
 
 #[cfg(test)]
 mod test {
@@ -59,7 +65,7 @@ mod test {
         let mut anchor = Anchor::default();
         assert_eq!(anchor.state(), FULL);
         anchor.set_state(EMPTY);
-        anchor.set_avail(45);
+        anchor.set_avail(4);
         assert_eq!(anchor.state(), EMPTY, "{:?} ",anchor);
     }
 }
