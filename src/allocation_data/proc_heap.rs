@@ -1,12 +1,14 @@
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicPtr, Ordering, AtomicBool};
 use crate::allocation_data::DescriptorNode;
 use crate::size_classes::{SizeClassData, SIZE_CLASSES};
-use std::ptr::null_mut;
+use std::ptr::{null_mut, null};
 use crate::mem_info::MAX_SZ_IDX;
 use std::borrow::{Borrow, BorrowMut};
 use std::ops::{Index, IndexMut};
 use std::mem::MaybeUninit;
 use crossbeam::atomic::AtomicCell;
+use memmap::MmapMut;
+use bitfield::size_of;
 
 #[repr(align(64))]
 pub struct ProcHeap {
@@ -46,25 +48,17 @@ impl Default for ProcHeap {
     }
 }
 
-impl Clone for ProcHeap {
-    fn clone(&self) -> Self {
-        let ptr = self.partial_list.clone();
-        Self {
-            partial_list: ptr,
-            size_class_index: self.size_class_index
-        }
-    }
-}
 
-impl Copy for ProcHeap{
-
-}
-
-pub struct Heaps([ProcHeap; MAX_SZ_IDX]);
+#[repr(transparent)]
+pub struct Heaps(MaybeUninit<MmapMut>);
 
 impl Heaps {
-    pub const fn new(field0: [ProcHeap; 40]) -> Self {
-        Heaps(field0)
+    pub const fn uninit() -> Self {
+        Heaps(MaybeUninit::uninit())
+    }
+
+    pub fn new(field0: MmapMut) -> Self {
+        Heaps(MaybeUninit::new(field0))
     }
 
     pub fn get_heap_at(&self, index: usize) -> &ProcHeap {
@@ -76,13 +70,21 @@ impl Heaps {
     }
 }
 
-static mut HEAPS: Heaps= Heaps([ProcHeap::default(); MAX_SZ_IDX]);
+static mut HEAPS: Heaps = Heaps::uninit();
+static mut HEAP_INIT: AtomicBool = AtomicBool::new(false);
+
+unsafe fn init_heaps() {
+    let map = MmapMut::map_anon(size_of::<Heaps>()).expect("Should be able to get the map");
+}
 
 pub fn get_heaps() -> &'static mut Heaps {
     unsafe {
-        &mut HEAPS
-    }
+        if !HEAP_INIT.load(Ordering::Acquire) {
+            init_heaps();
+            HEAP_INIT.store(true, Ordering::Release)
+        }
 
-    
+        &mut *HEAPS
+    }
 }
 
