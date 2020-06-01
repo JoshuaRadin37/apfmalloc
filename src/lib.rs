@@ -2,6 +2,7 @@
 mod size_classes;
 mod mem_info;
 mod allocation_data;
+mod apf;
 
 #[macro_use]
 extern crate bitfield;
