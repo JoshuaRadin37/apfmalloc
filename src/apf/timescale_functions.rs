@@ -173,12 +173,15 @@ fn quadratic_reuse(t: &Trace) -> HashMap<usize, f32> {
 		let k = j+1;
 		let (mut xk, mut yk, mut zk) = (x[j-1], y[j-1], z[j-1]);	// These represent values to be added to previous index
 
+		let mut x_debug_0 = 0;
+		let mut x_debug_1 = 0;
+
 		for i in 0..intervals.len() {
 			let interval = *intervals.get(i).unwrap();
 
 			// X(k)
-			if interval.1 - interval.0 == k { xk += min(n-k-1, interval.0); }
-			if interval.0 >= n-k { xk -= 1; }
+			if interval.1 - interval.0 == k { xk += min(n-k-1, interval.0); x_debug_1 += min(n-k-1, interval.0); }
+			if interval.0 >= n-k { xk -= 1; x_debug_0 -= 1; }
 
 			// Y(k)
 			if interval.1 <= k-1 { yk += 1; }
@@ -194,6 +197,7 @@ fn quadratic_reuse(t: &Trace) -> HashMap<usize, f32> {
 		z[j] = zk;
 
 		println!("quadratic {}: {}, {}, {}", j, x[j], y[j], z[j]);
+		println!("x breakdown: {} + {} + {}", x[j-1], x_debug_0, x_debug_1);
 	}
 
 	// Construct histogram
@@ -238,8 +242,8 @@ fn linear_reuse(t: &Trace) -> HashMap<usize, f32> {
 	end_index_k_1[0] = 0; // Cannot end at index 0
 	len_leq_k[0] = len_counts[0];	// I(e_i - s_i <= 1) = I(e_i - s_i = 1)
 
-	for i in 1..n {
-		start_index_n_k[i] = start_index_n_k[i-1] + start_index_counts[n-i];
+	for i in 1..n-1 {
+		start_index_n_k[i] = start_index_n_k[i-1] + start_index_counts[n-i-1];
 		end_index_k_1[i] = end_index_k_1[i-1] + end_index_counts[i];
 		len_leq_k[i] = len_leq_k[i-1] + len_counts[i];
 	}
@@ -260,7 +264,7 @@ fn linear_reuse(t: &Trace) -> HashMap<usize, f32> {
 		z[i] = z[i-1] + len_leq_k[i] + k * len_counts[i];
 
 		println!("linear {}: {}, {}, {}", i, x[i], y[i], z[i]);
-		println!("x breakdown: {} + {} + {}", x[i-1], start_index_n_k[i], start_indices_min_sums[i]);
+		println!("x breakdown: {} - {} + {}", x[i-1], start_index_n_k[i], start_indices_min_sums[i]);
 	}
 
 	let mut result = HashMap::<usize, f32>::new();
