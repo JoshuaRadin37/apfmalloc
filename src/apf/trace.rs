@@ -16,6 +16,7 @@ use crate::apf::trace::Event::*;
 pub struct Trace {
     accesses: Vec<Event>,
     length: usize,
+    allocCount: usize
 }
 
 /*
@@ -27,6 +28,7 @@ impl Trace {
         Trace {
             accesses: Vec::new(),
             length: 0,
+            allocCount: 0
         }
     }
 
@@ -34,14 +36,28 @@ impl Trace {
         self.length
     }
 
+    pub fn alloc_length(&self) -> usize {
+        self.allocCount
+    }
+
     pub fn add(&mut self, add: Event) -> () {
         self.accesses.push(add);
         self.length += 1;
+        match add {
+            Alloc(_) => { self.allocCount += 1; },
+            Free(_) => {}
+        };
     }
 
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
         self.accesses.append(&mut vec.clone());
         self.length += vec.len();
+        for i in 0..vec.len() {
+            match vec[i] {
+                Alloc(_) => { self.allocCount += 1; },
+                Free(_) => {}
+            };
+        }
     }
 
     pub fn get(&self, index: usize) -> Event {
@@ -78,6 +94,29 @@ impl Trace {
 
     // Converts trace to vector of free intervals represented (si, ei)
     pub fn free_intervals(&self) -> Vec<(usize, usize)> {
+        let mut frees = HashMap::<usize, usize>::new();
+        let mut result = Vec::new();
+
+        let mut alloc_clock = 0;
+
+        for i in 0..self.length() {
+            match self.get(i) {
+                Free(s) => { frees.insert(s.clone(), alloc_clock); },
+                Alloc(e) => { match frees.get(&e) {
+                                Some(&s) => { result.push((s, alloc_clock)); }   // Should format error to include index
+                                None => {}
+                              }
+                              alloc_clock += 1;
+                            }
+            }
+        }
+
+        result
+    }
+
+    // Converts tract to vector of free intervals represented by (s_i, e_i)
+    // Does not use allocation clock
+    pub fn free_intervals_alt(&self) -> Vec<(usize, usize)> {
         let mut frees = HashMap::<usize, usize>::new();
         let mut result = Vec::new();
 
@@ -123,18 +162,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_alloc_clock() {
+        let mut t = Trace::new();
+        t.extend(vec![Alloc(3), Free(3), Free(2), Free(1), Alloc(1), Alloc(2)]);
+        assert_eq!(t.free_intervals(), vec![(1, 1), (1, 2)]);
+    }
+
+    /* #[test]
     fn test_length() {
         let mut t = Trace::new();
         t.extend(vec![Alloc(1), Alloc(2), Free(1)]);
         assert_eq!(t.length(), 3);
     }
-
-   /* #[test]
-    fn test_length_2() {
-        let mut t = Trace::new();
-        t.extend(vec![Alloc(3), Free(3), Alloc(3), Free(3)]);
-        assert_eq!(t.length(), 4);
-    } */
 
     #[test]
     fn test_obj_count() {
@@ -142,13 +181,6 @@ mod tests {
         t.extend(vec![Alloc(1), Alloc(2), Alloc(4), Free(1)]);
         assert_eq!(t.object_count(), 3);
     }
-
-   /*  #[test]
-    fn test_obj_count_2() {
-        let mut t = Trace::new();
-        t.extend(vec![Alloc(3), Free(3), Alloc(3), Free(3)]);
-        assert_eq!(t.object_count(), 1);
-    } */
 
     #[test]
     fn test_valid() {
@@ -178,5 +210,6 @@ mod tests {
                       Alloc(1), Alloc(2), Alloc(3), Free(3), Free(2), Free(1),
                       Alloc(1), Alloc(2), Alloc(3)]);
         assert_eq!(t.free_intervals(), vec![(5, 6), (4, 7), (3, 8), (11, 12), (10, 13), (9, 14)]);
-    }
+    } */
 }
+
