@@ -47,6 +47,14 @@ impl DescriptorNode {
     }
 }
 
+impl Default for DescriptorNode {
+    fn default() -> Self {
+        Self {
+            desc: None
+        }
+    }
+}
+
 
 /// This is a super block descriptor
 /// needs to be cache aligned

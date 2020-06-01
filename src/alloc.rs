@@ -1,20 +1,105 @@
-use crate::allocation_data::{ProcHeap, Descriptor};
+use crate::allocation_data::{ProcHeap, Descriptor, DescriptorNode, get_heaps, Anchor, SuperBlockState};
 use crate::thread_cache::ThreadCacheBin;
 use crate::page_map::{PageInfo, S_PAGE_MAP};
 use crate::mem_info::PAGE_MASK;
 use std::ptr::null_mut;
 use crate::size_classes::SIZE_CLASSES;
+use std::sync::atomic::Ordering;
 
-pub fn heap_push_partial(desc: &mut Descriptor) {
 
+
+pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
+    let list = &heap.partial_list;
+    let ptr = list.load(Ordering::Acquire);
+    let old_head = unsafe {
+
+        & *ptr
+    };
+    let mut new_head: *mut DescriptorNode;
+    loop {
+        let old_desc = old_head.get_desc();
+        if old_desc.is_none() {
+            return None;
+        }
+        let old_desc = old_desc.unwrap();
+
+        new_head = old_desc.next_partial.load(Ordering::Acquire);
+        let desc = old_head.get_desc();
+        let counter = old_head.get_counter().expect("Counter doesn't exist");
+        unsafe { (*new_head).set(desc.unwrap(), counter); }
+
+
+        if list.compare_exchange_weak(ptr, new_head, Ordering::Acquire, Ordering::Release).is_ok() {
+            break;
+        }
+    }
+
+    old_head.get_desc()
 }
 
-pub fn heap_pop_partial(heap: &mut ProcHeap) -> & mut Descriptor {
+pub fn list_push_partial(desc: &'static mut Descriptor) {
+    let heap = desc.proc_heap;
+    let list = unsafe { & (*heap).partial_list };
 
+    let old_head = unsafe {&mut *list.load(Ordering::Acquire) };
+    let mut new_head = DescriptorNode::default();
+
+    loop {
+        new_head.set(desc, old_head.get_counter().expect("Old heap should exist") + 1);
+        // debug_assert_ne!(old_head.get_desc(), new_head.get_desc());
+        match new_head.get_desc() {
+            None => { panic!("A descriptor should exist")},
+            Some(desc) => {
+                desc.next_partial.store(old_head as *mut DescriptorNode, Ordering::SeqCst)
+            },
+        }
+
+        if list.compare_exchange_weak(old_head as *mut DescriptorNode, &mut new_head as *mut DescriptorNode, Ordering::Acquire, Ordering::Release).is_ok() {
+            break;
+        }
+    }
+}
+
+pub fn heap_push_partial(desc: &'static mut Descriptor) {
+    list_push_partial(desc)
+}
+
+pub fn heap_pop_partial(heap: &mut ProcHeap) -> Option<& mut Descriptor> {
+    list_pop_partial(heap)
 }
 
 pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, block_num: &usize) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let desc = heap_pop_partial(heap);
 
+    match desc {
+        None => { return; },
+        Some(desc) => {
+
+            let old_anchor = desc.anchor;
+            let new_anchor: Anchor;
+
+            let max_count = desc.max_count;
+            let block_size = desc.block_size;
+
+            let super_block = desc.super_block;
+
+            loop {
+
+                if old_anchor.get_stat() == SuperBlockState::EMPTY {
+                    todo!("retire_desc()");
+                    return malloc_from_partial(size_class_index, cache, block_num);
+                }
+
+                new_anchor = old_anchor;
+                new_anchor.set_count(0);
+                new_anchor.set_avail(max_count);
+                new_anchor.set_state(SuperBlockState::FULL);
+
+                if desc.anchor
+            }
+        },
+    }
 }
 
 pub fn malloc_from_new_sb(size_class_index: usize, cache: &mut ThreadCacheBin, block_num: &usize) {
@@ -172,8 +257,8 @@ macro_rules! size_classes_match {
 pub fn compute_index(super_block: * mut u8, block: * mut u8, size_class_index: usize) -> u32 {
     let sc = unsafe { &mut SIZE_CLASSES[size_class_index] };
     let _sc_block_size = sc.block_size;
-    assert!(block >= super_block);
-    assert!(block < unsafe { super_block.offset(sc.sb_size as isize )});
+    debug_assert!(block >= super_block);
+    debug_assert!(block < unsafe { super_block.offset(sc.sb_size as isize )});
     let diff = block as u32 - super_block as u32;
     let index = 0;
     let found = size_classes_match![index, diff,
@@ -217,7 +302,8 @@ pub fn compute_index(super_block: * mut u8, block: * mut u8, size_class_index: u
         sc( 37,     13,       11,      2, yes, yes,   3, no),
         sc( 38,     13,       11,      3,  no, yes,   7, no)
     ];
-
+    debug_assert_eq!(diff / _sc_block_size, index);
+    index
 
 }
 
