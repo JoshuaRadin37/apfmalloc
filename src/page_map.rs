@@ -25,6 +25,7 @@ pub const PM_KEY_MASK: u64 = (1u64 << PM_SB as u64) - 1;
 /// implemented with a static array
 pub const SC_MASK: u64 = (1u64 << 6) - 1;
 
+#[derive(Clone)]
 pub struct PageInfo {
     desc: Option<* mut Descriptor>
 }
@@ -44,6 +45,21 @@ impl PageInfo {
     pub fn set(&mut self, desc: &mut Descriptor, sc_idx: usize) {
 
         let ptr = desc as *mut Descriptor;
+
+        if ptr as usize & SC_MASK as usize != 0 ||
+            sc_idx >= MAX_SZ_IDX {
+            self.desc = None;
+            return;
+        }
+
+        let desc =
+            (ptr as usize | sc_idx) as *mut Descriptor;
+        self.desc = Some(desc);
+    }
+
+    pub fn set_ptr(&mut self, desc: *mut Descriptor, sc_idx: usize) {
+
+        let ptr = desc;
 
         if ptr as usize & SC_MASK as usize != 0 ||
             sc_idx >= MAX_SZ_IDX {

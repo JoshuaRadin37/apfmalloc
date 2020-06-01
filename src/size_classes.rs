@@ -74,7 +74,7 @@ pub unsafe fn init_size_class() {
 macro_rules! size_classes {
     () => {
         [
-        SizeClassData { block_size: 0, sb_size: 0, block_num: 0, cache_block_num: 0 },
+        SizeClassData { block_size: 0, sb_size: 0, block_num: 0, cache_block_num: 0, },
         $crate::sc!(  0,      3,        3,      0,  no, yes,   1,  3),
         $crate::sc!(  1,      3,        3,      1,  no, yes,   1,  3),
         $crate::sc!(  2,      3,        3,      2,  no, yes,   3,  3),
@@ -114,9 +114,10 @@ macro_rules! size_classes {
         $crate::sc!( 36,     13,       11,      1,  no, yes,   5, no),
         $crate::sc!( 37,     13,       11,      2, yes, yes,   3, no),
         $crate::sc!( 38,     13,       11,      3,  no, yes,   7, no)]
-
-
     };
+    (internal) => {
+
+    }
 }
 
 pub static mut SIZE_CLASSES: [SizeClassData; MAX_SZ_IDX] = size_classes!();

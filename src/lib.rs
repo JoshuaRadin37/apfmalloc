@@ -1,3 +1,5 @@
+#![allow(non_upper_case_globals)]
+
 
 use std::sync::atomic::AtomicPtr;
 use crate::allocation_data::{DescriptorNode, ProcHeap, get_heaps};
@@ -8,6 +10,8 @@ use crossbeam::atomic::AtomicCell;
 use std::cell::{Cell, RefCell};
 use crate::size_classes::init_size_class;
 use std::process::id;
+use crate::page_map::S_PAGE_MAP;
+use std::borrow::Borrow;
 
 #[macro_use] pub mod macros;
 mod size_classes;
@@ -16,6 +20,7 @@ mod allocation_data;
 mod pages;
 mod page_map;
 mod thread_cache;
+mod alloc;
 
 #[macro_use]
 extern crate bitfield;
@@ -30,13 +35,26 @@ unsafe fn init_malloc() {
     MALLOC_INIT = true;
     init_size_class();
 
-    todo!("sPageMap.init()");
+    S_PAGE_MAP.init();
 
     for idx in 0..MAX_SZ_IDX {
         let heap = get_heaps().get_heap_at_mut(idx);
         heap.size_class_index = idx;
 
     }
+}
+
+unsafe fn thread_local_init_malloc() {
+    /*
+    if thread_cache::thread_init.with(|f| *f.borrow()) {
+
+    }
+
+     */
+    thread_cache::thread_init.with(|f| {
+        let mut ref_mut = f.borrow_mut();
+        *ref_mut = true;
+    })
 }
 
 
