@@ -13,6 +13,9 @@ use std::process::id;
 mod size_classes;
 mod mem_info;
 mod allocation_data;
+mod pages;
+mod page_map;
+mod thread_cache;
 
 #[macro_use]
 extern crate bitfield;
