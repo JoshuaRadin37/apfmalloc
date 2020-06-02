@@ -29,5 +29,5 @@ pub fn align_val<T>(val: &T, align: usize) -> * const T {
 }
 
 pub fn align_addr(addr: usize, align: usize) -> * const usize {
-    align_val(&addr, align)
+    ((addr + align - 1) & (!align + 1)) as * const usize
 }

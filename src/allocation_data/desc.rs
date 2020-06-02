@@ -155,7 +155,8 @@ impl Descriptor {
                         let mut curr_ptr = ptr.offset(descriptor_size);
                         curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
                         first = curr_ptr as * mut MaybeUninit<Descriptor>;
-                        while (curr_ptr as usize + descriptor_size as usize) < ptr as usize + DESCRIPTOR_BLOCK_SZ {
+                        let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
+                        while (curr_ptr as usize + descriptor_size as usize) < max {
                             let mut curr = curr_ptr as * mut MaybeUninit<Descriptor>;
                             if !prev.is_null() {
                                 unsafe {
@@ -176,7 +177,7 @@ impl Descriptor {
                         let mut new_head: DescriptorNode = DescriptorNode::default();
                         loop {
                             prev.next_free.store(old_head, Ordering::Release);
-                            new_head.set(&mut *(first as *mut Descriptor), old_head.get_counter().unwrap() + 1);
+                            new_head.set(&mut *(first as *mut Descriptor), old_head.get_counter().unwrap_or(0) + 1);
 
                             if AVAILABLE_DESC.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Release).is_ok() {
                                 break;

@@ -104,9 +104,9 @@ unsafe fn init_heaps() {
 
 pub fn get_heaps() -> &'static mut Heaps {
     unsafe {
-        if !HEAP_INIT.load(Ordering::Acquire) {
+        if !HEAP_INIT.compare_and_swap(false, true, Ordering::Acquire) {
             init_heaps();
-            HEAP_INIT.store(true, Ordering::Release)
+            //HEAP_INIT.store(true, Ordering::Release)
         }
 
         &mut HEAPS
