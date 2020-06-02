@@ -6,6 +6,7 @@ use crossbeam::atomic::AtomicCell;
 use atomic::{Atomic, Ordering};
 use crate::AVAILABLE_DESC;
 use crate::pages::page_alloc;
+use lazy_static::lazy_static;
 
 #[repr(packed)]
 pub struct DescriptorNode {
@@ -74,17 +75,20 @@ pub struct Descriptor {
     pub max_count: u32
 }
 
+/*
 /// The intitial descriptor holder
 struct DescriptorHolder {}
 
 
 lazy_static! {
-static mut ref DESCRIPTORS_SPACE
+static ref DESCRIPTORS_SPACE
 
 }
 
+ */
+
 impl Descriptor {
-    pub const fn new(next_free: AtomicPtr<DescriptorNode>, next_partial: AtomicPtr<DescriptorNode>, anchor: Anchor, super_block: *mut u8, proc_heap: *mut ProcHeap, block_size: u32, max_count: u32) -> Self {
+    pub fn new(next_free: AtomicPtr<DescriptorNode>, next_partial: AtomicPtr<DescriptorNode>, anchor: Anchor, super_block: *mut u8, proc_heap: *mut ProcHeap, block_size: u32, max_count: u32) -> Self {
         Descriptor { next_free, next_partial, anchor: Atomic::new(anchor), super_block, proc_heap, block_size, max_count }
     }
 
@@ -120,7 +124,7 @@ impl Descriptor {
                     }
                 },
                 None => {
-                    let ptr = page_alloc(DE)
+                    // let ptr = page_alloc(DE)
                 }
             }
         }

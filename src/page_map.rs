@@ -96,7 +96,7 @@ impl PageInfo {
 pub const PM_SZ: u64 = (1u64 << PM_SB as u64) * size_of::<PageInfo>() as u64;
 
 pub struct PageMap<'a> {
-    map: Option<MmapMut>,
+    map: Option<* mut u8>,
     page_map: &'a [AtomicCell<PageInfo>]
 }
 
@@ -106,7 +106,7 @@ impl PageMap<'_> {
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
             Ok(mut map) => {
-                let ptr = map.as_mut_ptr() as * mut AtomicCell<PageInfo>;
+                let ptr = map as * mut AtomicCell<PageInfo>;
                 let slice = unsafe {
                     &mut *slice_from_raw_parts_mut(ptr, (1u64 << PM_SB as u64) as usize)
                 };

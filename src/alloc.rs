@@ -77,7 +77,7 @@ pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, 
         Some(desc) => {
 
             let old_anchor = desc.anchor.load(Ordering::Acquire);
-            let new_anchor: Anchor;
+            let mut new_anchor: Anchor;
 
             let max_count = desc.max_count;
             let block_size = desc.block_size;
@@ -87,7 +87,7 @@ pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, 
             loop {
 
                 if old_anchor.state() == SuperBlockState::EMPTY {
-                    todo!("retire_desc()");
+                    desc.retire();
                     return malloc_from_partial(size_class_index, cache, block_num);
                 }
 
@@ -269,7 +269,7 @@ pub fn compute_index(super_block: * mut u8, block: * mut u8, size_class_index: u
     debug_assert!(block >= super_block);
     debug_assert!(block < unsafe { super_block.offset(sc.sb_size as isize )});
     let diff = block as u32 - super_block as u32;
-    let index = 0;
+    let mut index = 0;
     let found = size_classes_match![index, diff,
         sc(  0,      3,        3,      0,  no, yes,   1,  3),
         sc(  1,      3,        3,      1,  no, yes,   1,  3),
