@@ -6,16 +6,17 @@ use std::ptr::null_mut;
 use crate::size_classes::SIZE_CLASSES;
 use std::sync::atomic::Ordering;
 use std::cmp::max;
+use crate::pages::{page_alloc, page_free};
 
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
     let ptr = list.load(Ordering::Acquire);
-    let old_head = unsafe {
-
-        & *ptr
-    };
-    let mut new_head: *mut DescriptorNode;
+    if ptr.is_none() {
+        return None;
+    }
+    let old_head = ptr.unwrap();
+    let mut new_head: DescriptorNode;
     loop {
         let old_desc = old_head.get_desc();
         if old_desc.is_none() {
@@ -26,10 +27,10 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
         new_head = old_desc.next_partial.load(Ordering::Acquire);
         let desc = old_head.get_desc();
         let counter = old_head.get_counter().expect("Counter doesn't exist");
-        unsafe { (*new_head).set(desc.unwrap(), counter); }
+        new_head.set(desc.unwrap(), counter);
 
 
-        if list.compare_exchange_weak(ptr, new_head, Ordering::Acquire, Ordering::Release).is_ok() {
+        if list.compare_exchange_weak(ptr, Some(new_head), Ordering::Acquire, Ordering::Release).is_ok() {
             break;
         }
     }
@@ -41,7 +42,7 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
     let heap = desc.proc_heap;
     let list = unsafe { & (*heap).partial_list };
 
-    let old_head = unsafe {&mut *list.load(Ordering::Acquire) };
+    let old_head = list.load(Ordering::Acquire).unwrap();
     let mut new_head = DescriptorNode::default();
 
     loop {
@@ -50,11 +51,11 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
         match new_head.get_desc() {
             None => { panic!("A descriptor should exist")},
             Some(desc) => {
-                desc.next_partial.store(old_head as *mut DescriptorNode, Ordering::SeqCst)
+                desc.next_partial.store(old_head, Ordering::SeqCst)
             },
         }
 
-        if list.compare_exchange_weak(old_head as *mut DescriptorNode, &mut new_head as *mut DescriptorNode, Ordering::Acquire, Ordering::Release).is_ok() {
+        if list.compare_exchange_weak(Some(old_head), Some(new_head), Ordering::Acquire, Ordering::Release).is_ok() {
             break;
         }
     }
@@ -113,19 +114,135 @@ pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, 
     }
 }
 
-pub fn malloc_from_new_sb(size_class_index: usize, cache: &mut ThreadCacheBin, block_num: &usize) {
+pub fn malloc_from_new_sb(size_class_index: usize, cache: &mut ThreadCacheBin, block_num: &mut usize) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
+    let desc = unsafe { &mut *Descriptor::alloc() };
+    // debug_assert!(!desc.is_null());
+
+    let block_size = sc.block_size;
+    let max_count = sc.get_block_num();
+
+    desc.proc_heap = heap;
+    desc.block_size = block_size;
+    desc.max_count = max_count as u32;
+    desc.super_block = page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
+
+    let super_block = desc.super_block;
+    for idx in 0..(max_count - 1) {
+        unsafe {
+            let block = super_block.offset((idx * block_size as usize) as isize);
+            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
+            *(block as * mut * mut u8) = next;
+        }
+    }
+
+    let block = super_block;
+    cache.push_list(block, max_count as u32);
+
+    let mut anchor: Anchor = Anchor::default();
+    anchor.set_avail(max_count as u64);
+    anchor.set_count(0);
+    anchor.set_state(SuperBlockState::FULL);
+
+    desc.anchor.store(anchor, Ordering::SeqCst);
+
+    register_desc(desc);
+    *block_num += max_count;
 }
 
 
 
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
+    let mut block_num = 0;
+    malloc_from_partial(size_class_index, cache, &mut block_num);
+    if block_num == 0 {
+        malloc_from_new_sb(size_class_index, cache, &mut block_num);
+    }
 
-
+    #[cfg(debug_assertions)]
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+    debug_assert!(block_num > 0);
+    debug_assert!(block_num <= sc.cache_block_num as usize);
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
+    let sb_size = sc.sb_size;
+    let block_size = sc.block_size;
+
+    let max_count = sc.get_block_num();
+
+    // There's a to do here in the original program to optimize, which is amusing
+    while cache.get_block_num() > 0 {
+        let head = cache.peek_block();
+        let mut tail = head;
+        let info = get_page_info_for_ptr(head);
+        let desc = unsafe {&mut  *info.get_desc().expect("Could not find descriptor") };
+
+        let super_block = desc.super_block;
+
+        let mut block_count = 1;
+        while cache.get_block_num() > block_count {
+            let ptr = unsafe { *(tail as * mut * mut u8) };
+            if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
+                break;
+            }
+
+            block_count += 1;
+            tail = ptr;
+        }
+
+        cache.pop_list(unsafe { *(tail as * mut * mut u8) }, block_count);
+
+        let index = compute_index(super_block, head, size_class_index);
+
+        let old_anchor = desc.anchor.load(Ordering::Acquire);
+        let mut new_anchor: Anchor;
+        loop {
+
+            unsafe {
+                // update avail
+                let next =
+                    super_block.offset(
+                        (old_anchor.avail() * block_size as u64) as isize
+                    );
+
+                *(tail as * mut * mut u8) = next;
+
+            }
+
+            new_anchor = old_anchor;
+            new_anchor.set_avail(index as u64);
+
+            // state updates
+            // dont set to partial if state is active
+            if old_anchor.state() == SuperBlockState::FULL {
+                new_anchor.set_state(SuperBlockState::PARTIAL);
+            }
+
+            if old_anchor.count() + block_count as u64 == desc.max_count as u64 {
+                new_anchor.set_count(desc.max_count as u64 - 1);
+                new_anchor.set_state(SuperBlockState::EMPTY);
+            } else {
+                new_anchor.set_count(block_count as u64);
+            }
+
+            if desc.anchor.compare_exchange_weak(old_anchor, new_anchor, Ordering::Acquire, Ordering::Release).is_ok() {
+                break;
+            }
+        }
+
+        if new_anchor.state() == SuperBlockState::EMPTY {
+            unregister_desc(Some(heap), super_block);
+            page_free(super_block);
+        } else if old_anchor.state() == SuperBlockState::FULL {
+            heap_push_partial(desc)
+        }
+    }
 
 }
 
@@ -164,8 +281,8 @@ pub fn register_desc(desc: &mut Descriptor) {
     update_page_map(heap, ptr, Some(desc), size_class_index);
 }
 
-pub fn unregister_desc(heap: &mut ProcHeap, super_block: * mut u8) {
-    update_page_map(Some(heap), super_block, None, 0)
+pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: * mut u8) {
+    update_page_map(heap, super_block, None, 0)
 }
 
 pub fn get_page_info_for_ptr<T>(ptr: * const T) -> PageInfo {

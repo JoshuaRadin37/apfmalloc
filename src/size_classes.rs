@@ -10,6 +10,13 @@ pub struct SizeClassData {
     pub cache_block_num: u32,
 }
 
+impl SizeClassData {
+    pub fn get_block_num(&self) -> usize {
+        self.block_num as usize
+    }
+}
+
+
 pub static mut SIZE_CLASS_LOOK_UP: [usize; MAX_SZ + 1] = [0; MAX_SZ + 1];
 #[inline]
 pub fn get_size_class(size: usize) -> usize {

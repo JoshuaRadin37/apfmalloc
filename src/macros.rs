@@ -1,5 +1,4 @@
-
-
+use std::any::type_name;
 #[macro_export]
 macro_rules! size_class_bin_yes {
     ($block:expr, $pages:expr) => {
@@ -22,4 +21,27 @@ macro_rules! sc {
 
 
 
+#[macro_export]
+macro_rules! min_align {
+    () => {std::mem::sizeof::<* const ()>};
+}
 
+/*
+macro_rules! align_val {
+    ($val:expr, $align:expr) => {
+        unsafe {
+            let align = std::mem::align_of_val($expr);
+
+        }
+    };
+}
+ */
+
+macro_rules! page_ceiling {
+    ($s:expr) => {
+    {
+        let page = $crate::mem_info::PAGE;
+        ($s + page - 1) & !(page - 1)
+    }
+    };
+}

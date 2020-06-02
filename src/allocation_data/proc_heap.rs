@@ -1,23 +1,24 @@
 use std::sync::atomic::{AtomicPtr, Ordering, AtomicBool};
 use crate::allocation_data::DescriptorNode;
 use crate::size_classes::{SizeClassData, SIZE_CLASSES};
-use std::ptr::{null_mut, null};
+use std::ptr::{null_mut, null, slice_from_raw_parts_mut};
 use crate::mem_info::MAX_SZ_IDX;
 use std::borrow::{Borrow, BorrowMut};
 use std::ops::{Index, IndexMut};
 use std::mem::MaybeUninit;
 use memmap::MmapMut;
 use bitfield::size_of;
+use atomic::Atomic;
 
 #[repr(align(64))]
 pub struct ProcHeap {
-    pub partial_list: AtomicPtr<DescriptorNode>,
+    pub partial_list: Atomic<Option<DescriptorNode>>,
     pub size_class_index: usize
 }
 
 impl ProcHeap {
-    pub const fn new(partial_list: *mut DescriptorNode, size_class_index: usize) -> Self {
-        let ptr = AtomicPtr::new(partial_list);
+    pub fn new(partial_list: DescriptorNode, size_class_index: usize) -> Self {
+        let ptr = Atomic::new(Some(partial_list));
         ProcHeap { partial_list: ptr, size_class_index }
     }
 
@@ -29,11 +30,12 @@ impl ProcHeap {
         unsafe { &mut SIZE_CLASSES[self.size_class_index] }
     }
 
-    pub const fn default() -> Self {
-        Self::new(
-            null_mut(),
-            0
-        )
+    pub fn default() -> Self {
+
+        Self {
+            partial_list: Atomic::new(None),
+            size_class_index: 0
+        }
     }
 }
 
@@ -90,8 +92,14 @@ static mut HEAPS: Heaps = Heaps::uninit();
 static mut HEAP_INIT: AtomicBool = AtomicBool::new(false);
 
 unsafe fn init_heaps() {
-    let map = MmapMut::map_anon(size_of::<ProcHeap>() * MAX_SZ_IDX).expect("Should be able to get the map");
+    let mut map = MmapMut::map_anon(size_of::<ProcHeap>() * MAX_SZ_IDX).expect("Should be able to get the map");
+    let ptr = map.as_mut_ptr() as * mut MaybeUninit<ProcHeap>;
+    let slice = &mut *slice_from_raw_parts_mut(ptr, MAX_SZ_IDX);
+    for proc in slice.into_iter() {
+        *proc = MaybeUninit::new(ProcHeap::default())
+    }
     HEAPS = Heaps(MaybeUninit::new(map))
+
 }
 
 pub fn get_heaps() -> &'static mut Heaps {

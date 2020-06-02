@@ -21,3 +21,13 @@ pub const CACHE_LINE_MASK: usize = CACHE_LINE - 1;
 pub const PAGE_MASK: usize = (PAGE - 1);
 
 pub const MIN_ALIGN: usize = LG_PTR;
+
+pub const DESCRIPTOR_BLOCK_SZ: usize = 16 * PAGE;
+
+pub fn align_val<T>(val: &T, align: usize) -> * const T {
+    (((val as * const T as usize) + align - 1) & (!align + 1)) as * const T
+}
+
+pub fn align_addr(addr: usize, align: usize) -> * const usize {
+    align_val(&addr, align)
+}
