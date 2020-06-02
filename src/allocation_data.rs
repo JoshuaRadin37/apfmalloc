@@ -49,7 +49,31 @@ bitfield! {
     pub count, set_count: 63, 32;
 }
 
+impl Clone for Anchor {
+    fn clone(&self) -> Self {
+        let Anchor(inner) = self;
+        Self(*inner)
+    }
+}
 
+impl Copy for Anchor {}
+
+impl PartialEq for Anchor {
+    fn eq(&self, other: &Self) -> bool {
+        if self.state() != other.state() {
+            return false;
+        }
+        if self.avail() != other.avail() {
+            return false;
+        }
+        if self.count() != other.count() {
+            return false;
+        }
+
+
+        true
+    }
+}
 
 
 #[cfg(test)]
@@ -69,5 +93,14 @@ mod test {
         anchor.set_state(EMPTY);
         anchor.set_avail(4);
         assert_eq!(anchor.state(), EMPTY, "{:?} ",anchor);
+    }
+
+    #[test]
+    fn anchor_copy_equality() {
+        let mut anchor = Anchor::default();
+        anchor.set_state(EMPTY);
+        anchor.set_avail(4);
+        let other = anchor.clone();
+        assert_eq!(other, anchor);
     }
 }

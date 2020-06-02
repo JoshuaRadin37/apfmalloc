@@ -10,6 +10,9 @@ pub fn page_addr2base<T>(a : &T) -> * mut c_void {
     }
 }
 
+struct PageInfoHolder {
+
+}
 
 /// Returns a set of continuous pages, totaling to size bytes
 pub fn page_alloc(size: usize) -> Result<MmapMut, ()> {

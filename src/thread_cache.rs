@@ -9,7 +9,7 @@ impl ThreadCacheBin {
 
     /// Common and Fast
     #[inline]
-    fn push_block(&mut self, block: * mut u8) {
+    pub fn push_block(&mut self, block: * mut u8) {
         unsafe {
             *(block as * mut * mut u8) = self.block;
         };
@@ -22,7 +22,7 @@ impl ThreadCacheBin {
     /// # Panic
     /// Panics if cache isn't empty
     #[inline]
-    fn push_list(&mut self, block: * mut u8, length: u32) {
+    pub fn push_list(&mut self, block: * mut u8, length: u32) {
         if self.block_num > 0 {
             panic!("Attempting to push a block list while cache is not empty");
         } else {
@@ -36,7 +36,7 @@ impl ThreadCacheBin {
     /// # Panic
     /// Panics if the cache is empty
     #[inline]
-    fn pop_block(&mut self) -> *mut u8 {
+    pub fn pop_block(&mut self) -> *mut u8 {
         if self.block_num == 0 {
             panic!("Attempting to pop a block from cache while cache is empty")
         } else {
@@ -56,7 +56,7 @@ impl ThreadCacheBin {
     /// # Panic
     /// Panics if the `self.block_num < length`
     #[inline]
-    fn pop_list(&mut self, block: * mut u8, length: u32) {
+    pub fn pop_list(&mut self, block: * mut u8, length: u32) {
         if self.block_num < length {
             panic!("The block_num must be greater than or equal to the provided length");
         } else {
@@ -66,12 +66,12 @@ impl ThreadCacheBin {
     }
 
     #[inline]
-    fn peek_block(&self) -> *mut u8 {
+    pub fn peek_block(&self) -> *mut u8 {
         self.block
     }
 
     #[inline]
-    fn get_block_num(&self) -> u32 {
+    pub fn get_block_num(&self) -> u32 {
         self.block_num
     }
 }

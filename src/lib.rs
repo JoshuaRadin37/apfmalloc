@@ -12,6 +12,7 @@ use crate::size_classes::init_size_class;
 use std::process::id;
 use crate::page_map::S_PAGE_MAP;
 use std::borrow::Borrow;
+use memmap::MmapMut;
 
 #[macro_use] pub mod macros;
 mod size_classes;

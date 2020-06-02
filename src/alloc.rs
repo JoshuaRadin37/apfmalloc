@@ -5,7 +5,7 @@ use crate::mem_info::PAGE_MASK;
 use std::ptr::null_mut;
 use crate::size_classes::SIZE_CLASSES;
 use std::sync::atomic::Ordering;
-
+use std::cmp::max;
 
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
@@ -68,7 +68,7 @@ pub fn heap_pop_partial(heap: &mut ProcHeap) -> Option<& mut Descriptor> {
     list_pop_partial(heap)
 }
 
-pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, block_num: &usize) {
+pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, block_num: &mut usize) {
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let desc = heap_pop_partial(heap);
 
@@ -76,7 +76,7 @@ pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, 
         None => { return; },
         Some(desc) => {
 
-            let old_anchor = desc.anchor;
+            let old_anchor = desc.anchor.load(Ordering::Acquire);
             let new_anchor: Anchor;
 
             let max_count = desc.max_count;
@@ -86,18 +86,29 @@ pub fn malloc_from_partial(size_class_index: usize, cache: &mut ThreadCacheBin, 
 
             loop {
 
-                if old_anchor.get_stat() == SuperBlockState::EMPTY {
+                if old_anchor.state() == SuperBlockState::EMPTY {
                     todo!("retire_desc()");
                     return malloc_from_partial(size_class_index, cache, block_num);
                 }
 
                 new_anchor = old_anchor;
                 new_anchor.set_count(0);
-                new_anchor.set_avail(max_count);
+                new_anchor.set_avail(max_count as u64);
                 new_anchor.set_state(SuperBlockState::FULL);
 
-                if desc.anchor
+                if desc.anchor.compare_exchange(new_anchor, old_anchor, Ordering::Acquire, Ordering::Release).is_ok() {
+                    break;
+                }
             }
+
+            let blocks_taken = old_anchor.count() as isize;
+            let avail = old_anchor.avail() as isize;
+
+            debug_assert!(avail < max_count as isize);
+            let block = unsafe {super_block.offset(avail * block_size as isize) };
+            debug_assert_eq!(cache.get_block_num(), 0);
+            cache.push_list(block, blocks_taken as u32);
+            *block_num +=1;
         },
     }
 }
@@ -106,9 +117,7 @@ pub fn malloc_from_new_sb(size_class_index: usize, cache: &mut ThreadCacheBin, b
 
 }
 
-pub fn desc_alloc() -> * mut Descriptor {
 
-}
 
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 

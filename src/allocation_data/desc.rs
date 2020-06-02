@@ -2,6 +2,10 @@ use crate::mem_info::{CACHE_LINE, CACHE_LINE_MASK};
 use std::sync::atomic::AtomicPtr;
 use super::Anchor;
 use crate::allocation_data::proc_heap::ProcHeap;
+use crossbeam::atomic::AtomicCell;
+use atomic::{Atomic, Ordering};
+use crate::AVAILABLE_DESC;
+use crate::pages::page_alloc;
 
 #[repr(packed)]
 pub struct DescriptorNode {
@@ -63,17 +67,69 @@ impl Default for DescriptorNode {
 pub struct Descriptor {
     pub next_free: AtomicPtr<DescriptorNode>,
     pub next_partial: AtomicPtr<DescriptorNode>,
-    pub anchor: Anchor,
+    pub anchor: Atomic<Anchor>,
     pub super_block: *mut u8,
     pub proc_heap: *mut ProcHeap,
     pub block_size: u32,
     pub max_count: u32
 }
 
+/// The intitial descriptor holder
+struct DescriptorHolder {}
+
+
+lazy_static! {
+static mut ref DESCRIPTORS_SPACE
+
+}
+
 impl Descriptor {
     pub const fn new(next_free: AtomicPtr<DescriptorNode>, next_partial: AtomicPtr<DescriptorNode>, anchor: Anchor, super_block: *mut u8, proc_heap: *mut ProcHeap, block_size: u32, max_count: u32) -> Self {
-        Descriptor { next_free, next_partial, anchor, super_block, proc_heap, block_size, max_count }
+        Descriptor { next_free, next_partial, anchor: Atomic::new(anchor), super_block, proc_heap, block_size, max_count }
     }
+
+    pub fn retire(&'static mut self) {
+        self.block_size = 0;
+        let old_head = unsafe {AVAILABLE_DESC.load(Ordering::Acquire) };
+        let mut new_head: DescriptorNode = DescriptorNode::default();
+        loop {
+            self.next_free.store(old_head, Ordering::Release);
+
+            new_head.set(self, unsafe {(*old_head).get_counter() }.expect("Counter Should exist") + 1);
+            if unsafe {AVAILABLE_DESC.compare_exchange_weak(
+                old_head,
+                &mut new_head,
+                Ordering::Acquire,
+                Ordering::Release
+            ).is_ok() } {
+                break;
+            }
+        }
+    }
+
+    pub unsafe fn alloc() -> * mut Descriptor {
+        let old_head = AVAILABLE_DESC.load(Ordering::Acquire).as_mut().unwrap();
+        loop {
+            let desc = old_head.get_desc();
+            match desc {
+                Some(desc) => {
+                    let mut new_head = desc.next_free.load(Ordering::Acquire).as_mut().unwrap();
+                    new_head.set(new_head.get_desc().unwrap(), old_head.get_counter().unwrap());
+                    if AVAILABLE_DESC.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Release).is_ok() {
+                        return desc as *mut Descriptor;
+                    }
+                },
+                None => {
+                    let ptr = page_alloc(DE)
+                }
+            }
+        }
+    }
+
+}
+
+pub fn desc_retire(desc: &mut Descriptor) {
+
 }
 
 
