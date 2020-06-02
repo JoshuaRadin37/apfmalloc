@@ -53,11 +53,12 @@ impl PageInfoHolder {
 
     pub fn init(&mut self) {
         let capacity = 1024;
-        let mmap_mut = MmapMut::map_anon(Self::size_for_capacity(capacity)).expect("Memory map must be created");
+        let mem_size = Self::size_for_capacity(capacity);
+        let mmap_mut = MmapMut::map_anon(mem_size).expect("Memory map must be created");
         *self = Self { internals: Some(mmap_mut), count: 0, capacity: 0, head: AtomicPtr::new(null_mut()) };
         let ptr = self.internals.as_mut().unwrap().as_mut_ptr();
         unsafe {
-            let head = &mut *slice_from_raw_parts_mut(ptr, capacity);
+            let head = &mut *slice_from_raw_parts_mut(ptr, mem_size);
             self.initialize_slice(head);
         }
         self.capacity = capacity
@@ -206,7 +207,7 @@ pub fn page_free(ptr: *const u8) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::pages::{page_alloc, PAGE_HOLDER, MapOrFreePointer};
+    use crate::pages::{page_alloc, PAGE_HOLDER, MapOrFreePointer, PageInfoHolder};
     use atomic::Ordering;
     use crate::pages::MapOrFreePointer::Pointer;
     use std::ptr::null_mut;
@@ -238,6 +239,17 @@ mod test {
             // uncommenting this causes a fault
             // *ptr = 0xdeadbeaf;
         }
+    }
+
+    #[test]
+    fn grows() {
+        let mut allocator = PageInfoHolder::new();
+        allocator.init();
+        for i in 0..2048 {
+            allocator.alloc(8);
+        }
+        assert_eq!(allocator.count, 2048);
+        assert!(allocator.capacity > 1028)
     }
 
 
