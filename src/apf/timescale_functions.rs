@@ -204,13 +204,13 @@ fn reuse(t: &Trace) -> HashMap<usize, f32> {
 		let k = i+1;
 
 		x[i] = x[i-1] + start_indices_min_sums[i] - start_index_n_k[i];
-		y[i] = y[i-1] + end_index_k_1[i] + end_indices_max_sums[i];
+		y[i] = y[i-1] + end_index_k_1[i-1] + end_indices_max_sums[i];
 		z[i] = z[i-1] + len_l_k[i-1] + k * len_counts[i];
 		println!("{}: {}, {}, {}", i, x[i], y[i], z[i]);
 	}
 
 	let mut result = HashMap::<usize, f32>::new();
-	for k in 1..n { result.insert(k, (x[k-1] + z[k-1] - y[k-1]) as f32 / (n-k+1) as f32 ); }
+	for k in 1..n+1 { result.insert(k, (x[k-1] + z[k-1] - y[k-1]) as f32 / (n-k+1) as f32 ); }
 
 	result
 }
@@ -258,5 +258,26 @@ mod test {
 		let mut t = Trace::new();
 		t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
 		assert_eq!(*reuse(&t).get(&3).unwrap(), 7.0/4.0);
+	}
+
+	#[test]
+	fn test_reuse_function_4() {
+		let mut t = Trace::new();
+		t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
+		assert_eq!(*reuse(&t).get(&4).unwrap(), 7.0/3.0);
+	}
+
+	#[test]
+	fn test_reuse_function_5() {
+		let mut t = Trace::new();
+		t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
+		assert_eq!(*reuse(&t).get(&5).unwrap(), 5.0/2.0);
+	}
+
+	#[test]
+	fn test_reuse_function_6() {
+		let mut t = Trace::new();
+		t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
+		assert_eq!(*reuse(&t).get(&6).unwrap(), 3.0);
 	}
 }
