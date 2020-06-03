@@ -1,7 +1,7 @@
 extern crate libc;
 
 
-use std::io;
+use std::{io, fmt};
 use std::ffi::{c_void, NulError};
 
 #[cfg(windows)] use winapi::{
@@ -10,13 +10,19 @@ use std::ffi::{c_void, NulError};
         winerror::S_OK
     },
     um::{
-        heapapi::{GetProcessHeap, HeapAlloc, HeapFree, HeapSummary, HEAP_SUMMARY, LPHEAP_SUMMARY},
+        heapapi::{GetProcessHeap, HeapAlloc, HeapFree, HeapSummary, HeapCreate, HEAP_SUMMARY, LPHEAP_SUMMARY},
         winnt::HEAP_ZERO_MEMORY
     }
 };
 use std::io::ErrorKind;
-use std::fmt::Error;
+use std::fmt::{Error, Display};
 use crate::no_heap_mutex::NoHeapMutex;
+use winapi::um::heapapi::HeapDestroy;
+use winapi::_core::fmt::Formatter;
+use winapi::um::memoryapi::{VirtualAlloc, VirtualFree};
+use winapi::_core::ptr::null_mut;
+use winapi::um::winnt::{MEM_RESERVE, PAGE_READWRITE, MEM_RELEASE};
+use winapi::shared::minwindef::LPVOID;
 
 #[derive(Debug)]
 pub struct Segment {
@@ -49,6 +55,25 @@ impl Segment {
 
 pub struct SegmentAllocator;
 
+#[derive(Debug)]
+pub enum AllocationError {
+    NoHeap,
+    HeapNotCreated,
+    AllocationFailed
+}
+
+impl Display for AllocationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for AllocationError {
+
+}
+
+
+
 pub static SEGMENT_ALLOCATOR: SegmentAllocator = SegmentAllocator;
 
 /// This trait allows for multiple implementations for the SegmentAllocator, instead of needing different structs and statics for different
@@ -58,10 +83,10 @@ pub trait SegAllocator {
 
     /// Must guarantee that a segment is returned safetly, or results in an error.
     /// It must no panic when called
-    fn allocate(&self, size: usize) -> Result<Segment, io::Error>;
+    fn allocate(&self, size: usize) -> Result<Segment, AllocationError>;
 
     /// Allocates a MASSIVE amount of space
-    fn allocate_massive(&self, size: usize) -> Result<Segment, io::Error>;
+    fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError>;
 
     /// De-allocates a segment. Depending on the platform, this may not do anything
     fn deallocate(&self, segment: Segment) -> bool;
@@ -72,12 +97,15 @@ pub trait SegAllocator {
 impl SegAllocator for SegmentAllocator {
 
 
-    fn allocate(&self, size: usize) -> Result<Segment, io::Error> {
+    fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
         static allocation_mutex: NoHeapMutex<()> = NoHeapMutex::new(());
         let _mutex = allocation_mutex.lock();
         unsafe {
 
             let heap: HANDLE = GetProcessHeap();
+            if heap.is_null() {
+                return Err(AllocationError::NoHeap)
+            }
 
 
             let alloc = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);
@@ -106,7 +134,7 @@ impl SegAllocator for SegmentAllocator {
                     }
                 }
             if alloc.is_null() {
-                Err(io::Error::new(ErrorKind::AddrNotAvailable, Error))
+                Err(AllocationError::AllocationFailed)
             } else {
                 let seg = Segment::new(
                     alloc,
@@ -118,44 +146,28 @@ impl SegAllocator for SegmentAllocator {
         }
     }
 
-    fn allocate_massive(&self, size: usize) -> Result<Segment, Error> {
+    fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
         static allocation_mutex: NoHeapMutex<()> = NoHeapMutex::new(());
         let _mutex = allocation_mutex.lock();
 
         unsafe {
 
-            let heap: HANDLE =
+            let alloc = VirtualAlloc(null_mut(), size, MEM_RESERVE, PAGE_READWRITE);
 
+            /*
+            let heap: HANDLE = HeapCreate(0, 0, 0);
+            if heap.is_null() {
+                return Err(AllocationError::HeapNotCreated);
+            }
 
-            let alloc = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);
-            #[cfg(debug_assertions)]
-                #[allow(non_snake_case)]
-                if !alloc.is_null() {
-                    let mut heap_summary: HEAP_SUMMARY = HEAP_SUMMARY {
-                        cb: 0,
-                        cbAllocated: 0,
-                        cbCommitted: 0,
-                        cbReserved: 0,
-                        cbMaxReserve: 0
-                    };
-                    match HeapSummary(heap, 0, &mut heap_summary as LPHEAP_SUMMARY) {
-                        S_OK => {
-                            let HEAP_SUMMARY { cb: _, cbAllocated, cbCommitted, cbReserved, cbMaxReserve } = heap_summary;
-                            println!("HEAP SUMMARY");
-                            println!("\tAllocated: {:?}", cbAllocated);
-                            println!("\tCommitted: {:?}", cbCommitted);
-                            println!("\tReserved: {:?}", cbReserved);
-                            println!("\tMax Reserve: {:?}", cbMaxReserve);
-                        }
-                        _ => {
-                            panic!("Unable to get the heap summary")
-                        }
-                    }
-                }
+            let alloc = HeapAlloc(heap, 0, size);
+
+             */
             if alloc.is_null() {
-                Err(io::Error::new(ErrorKind::AddrNotAvailable, Error))
+                Err(AllocationError::AllocationFailed)
             } else {
                 let seg = Segment::new(
+                    alloc,
                     alloc,
                     size
                 );
@@ -167,12 +179,13 @@ impl SegAllocator for SegmentAllocator {
 
     fn deallocate(&self, segment: Segment) -> bool {
         unsafe {
-            let heap: HANDLE = GetProcessHeap();
-            if HeapFree(heap, 0, segment.ptr) != 0 {
-                true
+            let heap: HANDLE = segment.heap;
+            if heap != GetProcessHeap() {
+                VirtualFree(heap as LPVOID, segment.length, MEM_RELEASE) != 0
             } else {
-                false
+                HeapFree(heap, 0, segment.ptr) != 0
             }
+
         }
     }
 }
@@ -232,7 +245,7 @@ mod test {
     #[test]
     pub fn allocate_page_table_size() {
         let size = PM_SZ;
-        let seg = SEGMENT_ALLOCATOR.allocate_massive(size as usize).expect("Must be able to create for this to function");
+        let seg = SEGMENT_ALLOCATOR.allocate_massive(size as usize).expect("Must be able to create a massive page for allocator to function");
         SEGMENT_ALLOCATOR.deallocate(seg);
     }
 
