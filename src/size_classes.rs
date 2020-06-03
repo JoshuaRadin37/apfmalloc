@@ -24,8 +24,8 @@ pub fn get_size_class(size: usize) -> usize {
 
 pub unsafe fn init_size_class() {
     // Get the number of blocks in the superblocks to be correct
-    for scIdx in 1..MAX_SZ_IDX {
-        let sc = &mut SIZE_CLASSES[scIdx];
+    for sc_index in 1..MAX_SZ_IDX {
+        let sc = &mut SIZE_CLASSES[sc_index];
         let block_size = sc.block_size;
         let mut sb_size = sc.sb_size;
         if sb_size > block_size && sb_size % block_size == 0 {
@@ -41,8 +41,8 @@ pub unsafe fn init_size_class() {
     }
 
     // increase super block size if needed
-    for scIdx in 1..MAX_SZ_IDX {
-        let sc = &mut SIZE_CLASSES[scIdx];
+    for sc_index in 1..MAX_SZ_IDX {
+        let sc = &mut SIZE_CLASSES[sc_index];
         let mut sb_size = sc.sb_size;
         while sb_size < (PAGE * PAGE) as u32 {
             sb_size += sc.sb_size;
@@ -52,8 +52,8 @@ pub unsafe fn init_size_class() {
     }
 
     // fill in missing fields
-    for scIdx in 1..MAX_SZ_IDX {
-        let sc = &mut SIZE_CLASSES[scIdx];
+    for sc_index in 1..MAX_SZ_IDX {
+        let sc = &mut SIZE_CLASSES[sc_index];
 
         sc.block_num = sc.sb_size / sc.block_size;
         sc.cache_block_num = sc.block_num;
@@ -63,11 +63,11 @@ pub unsafe fn init_size_class() {
 
     // first size reserved
     let mut lookup_idx = 0;
-    for scIdx in 1..(MAX_SZ_IDX as u32) {
-        let sc = &SIZE_CLASSES[scIdx as usize];
+    for sc_index in 1..(MAX_SZ_IDX as u32) {
+        let sc = &SIZE_CLASSES[sc_index as usize];
         let block_size = sc.block_size;
         while lookup_idx <= block_size {
-            SIZE_CLASS_LOOK_UP[lookup_idx as usize] = scIdx as usize;
+            SIZE_CLASS_LOOK_UP[lookup_idx as usize] = sc_index as usize;
             lookup_idx += 1;
         }
     }

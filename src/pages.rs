@@ -15,26 +15,26 @@ mod external_mem_reservation;
 
 #[inline]
 pub fn page_addr2base<T>(a: &T) -> *mut c_void {
-    unsafe { (a as *const T as usize & !PAGE_MASK) as *mut c_void }
+    (a as *const T as usize & !PAGE_MASK) as *mut c_void
 }
 
 struct PageInfoHolder {
     internals: Option<MmapMut>,
     count: usize,
     capacity: usize,
-    head: AtomicPtr<MapOrFreePointer>,
+    head: AtomicPtr<MemoryOrFreePointer>,
     lock: AtomicBool,
 }
 
 #[derive(Debug)]
-enum MapOrFreePointer {
+enum MemoryOrFreePointer {
     Map(MmapMut),
-    Pointer(*mut MapOrFreePointer),
+    Pointer(*mut MemoryOrFreePointer),
 }
 
-impl PartialEq for MapOrFreePointer {
+impl PartialEq for MemoryOrFreePointer {
     fn eq(&self, other: &Self) -> bool {
-        use MapOrFreePointer::*;
+        use MemoryOrFreePointer::*;
         match (self, other) {
             (Map(map1), Map(map2)) => map1.as_ptr() == map2.as_ptr(),
             (Pointer(ptr1), Pointer(ptr2)) => ptr1 == ptr2,
@@ -87,7 +87,7 @@ impl PageInfoHolder {
     }
 
     fn size_for_capacity(capacity: usize) -> usize {
-        capacity * size_of::<MapOrFreePointer>()
+        capacity * size_of::<MemoryOrFreePointer>()
     }
 
     fn get_capacity(&self) -> &usize {
@@ -95,13 +95,13 @@ impl PageInfoHolder {
     }
 
     fn get_space_within(slice: &mut [u8]) -> usize {
-        slice.len() / size_of::<MapOrFreePointer>()
+        slice.len() / size_of::<MemoryOrFreePointer>()
     }
 
-    fn get_maps(&mut self) -> &mut [MapOrFreePointer] {
+    fn get_maps(&mut self) -> &mut [MemoryOrFreePointer] {
         unsafe {
             slice_from_raw_parts_mut(
-                self.internals.as_mut().unwrap().as_mut_ptr() as *mut MapOrFreePointer,
+                self.internals.as_mut().unwrap().as_mut_ptr() as *mut MemoryOrFreePointer,
                 *self.get_capacity(),
             )
             .as_mut()
@@ -117,20 +117,20 @@ impl PageInfoHolder {
         };
         let size = Self::get_space_within(slice);
         let slice = &mut *slice_from_raw_parts_mut(
-            slice.as_mut_ptr() as *mut MaybeUninit<MapOrFreePointer>,
+            slice.as_mut_ptr() as *mut MaybeUninit<MemoryOrFreePointer>,
             size,
         );
         for map_or_pointer in slice.into_iter().rev() {
             //std::mem::swap(map_or_pointer,&mut ;
             //*map_or_pointer =
-            *map_or_pointer = MaybeUninit::new(MapOrFreePointer::Pointer(prev));
-            let ptr = map_or_pointer as *mut MaybeUninit<MapOrFreePointer>;
-            let ptr = ptr as *mut MapOrFreePointer;
+            *map_or_pointer = MaybeUninit::new(MemoryOrFreePointer::Pointer(prev));
+            let ptr = map_or_pointer as *mut MaybeUninit<MemoryOrFreePointer>;
+            let ptr = ptr as *mut MemoryOrFreePointer;
             //map_or_pointer.write();
             prev = ptr;
         }
         let slice =
-            &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MapOrFreePointer, size);
+            &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MemoryOrFreePointer, size);
         // println!("{:?}", slice);
         let first = &mut slice[0];
         self.head.store(first, Ordering::SeqCst);
@@ -166,10 +166,10 @@ impl PageInfoHolder {
 
         let mut map = MmapOptions::new().len(size).map_anon()?;
         let ptr = map.as_mut_ptr();
-        let combo = MapOrFreePointer::Map(map);
+        let combo = MemoryOrFreePointer::Map(map);
         unsafe {
             let head = &mut *self.head.load(Ordering::SeqCst);
-            if let MapOrFreePointer::Pointer(prev_pointer) = head {
+            if let MemoryOrFreePointer::Pointer(prev_pointer) = head {
                 if prev_pointer.is_null() {
                     panic!("Previous pointer should not be null");
                 }
@@ -193,14 +193,14 @@ impl PageInfoHolder {
             for page in self.get_maps() {
                 let mut is_map = false;
                 match &page {
-                    MapOrFreePointer::Map(map) => {
+                    MemoryOrFreePointer::Map(map) => {
                         if map.as_ptr() == page_ptr {
                             is_map = true;
-                            found_map = Some(page as *mut MapOrFreePointer);
+                            found_map = Some(page as *mut MemoryOrFreePointer);
                             break;
                         }
                     }
-                    MapOrFreePointer::Pointer(_) => {}
+                    MemoryOrFreePointer::Pointer(_) => {}
                 }
             }
         }
@@ -210,9 +210,9 @@ impl PageInfoHolder {
                 self.grab();
                 println!("De-allocating a page");
                 let prev = self.head.load(Ordering::Acquire);
-                unsafe { *page = MapOrFreePointer::Pointer(prev) };
+                unsafe { *page = MemoryOrFreePointer::Pointer(prev) };
                 self.head
-                    .store(page as *mut MapOrFreePointer, Ordering::Release);
+                    .store(page as *mut MemoryOrFreePointer, Ordering::Release);
                 self.count -= 1;
                 self.release();
                 true
@@ -231,7 +231,7 @@ impl Debug for PageInfoHolder {
             self.capacity,
             unsafe {
                 &*slice_from_raw_parts(
-                    self.internals.as_ref().unwrap().as_ptr() as *const MapOrFreePointer,
+                    self.internals.as_ref().unwrap().as_ptr() as *const MemoryOrFreePointer,
                     self.capacity,
                 )
             }

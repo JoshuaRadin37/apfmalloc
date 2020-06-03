@@ -24,6 +24,7 @@ mod page_map;
 mod pages;
 mod size_classes;
 mod thread_cache;
+mod no_heap_mutex;
 
 #[macro_use]
 extern crate bitfield;
