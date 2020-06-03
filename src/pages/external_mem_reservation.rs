@@ -10,18 +10,16 @@ use std::ffi::{c_void, NulError};
         winerror::S_OK
     },
     um::{
-        heapapi::{GetProcessHeap, HeapAlloc, HeapFree, HeapSummary, HeapCreate, HEAP_SUMMARY, LPHEAP_SUMMARY},
-        winnt::HEAP_ZERO_MEMORY
+        heapapi::{GetProcessHeap, HeapAlloc, HeapFree, HeapSummary, HeapCreate, HeapDestroy, HEAP_SUMMARY, LPHEAP_SUMMARY},
+        memoryapi::{VirtualAlloc, VirtualFree},
+        winnt::{HEAP_ZERO_MEMORY, MEM_RESERVE, PAGE_READWRITE, MEM_RELEASE, MEM_COMMIT}
     }
 };
 use std::io::ErrorKind;
 use std::fmt::{Error, Display};
 use crate::no_heap_mutex::NoHeapMutex;
-use winapi::um::heapapi::HeapDestroy;
-use winapi::_core::fmt::Formatter;
-use winapi::um::memoryapi::{VirtualAlloc, VirtualFree};
-use winapi::_core::ptr::null_mut;
-use winapi::um::winnt::{MEM_RESERVE, PAGE_READWRITE, MEM_RELEASE};
+use std::fmt::Formatter;
+use std::ptr::null_mut;
 use winapi::shared::minwindef::LPVOID;
 
 #[derive(Debug)]

@@ -216,7 +216,7 @@ impl PageInfoHolder {
         }
 
         let (memory, ptr) = {
-                let segment = SEGMENT_ALLOCATOR.allocate(size).expect("Should be able to allocate a space");
+                let segment = SEGMENT_ALLOCATOR.allocate_massive(size).expect("Should be able to allocate a space");
                 let ptr = segment.get_ptr() as *mut u8;
                 let combo = MemoryOrFreePointer::Segment(segment);
 

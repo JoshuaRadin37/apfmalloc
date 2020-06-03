@@ -1,11 +1,18 @@
 use crate::allocation_data::Descriptor;
-use crate::mem_info::{LG_PAGE, MAX_SZ_IDX};
+use crate::mem_info::{LG_PAGE, MAX_SZ_IDX, PAGE, PAGE_MASK};
 use bitfield::size_of;
 
 use crossbeam::atomic::AtomicCell;
 use std::ptr::slice_from_raw_parts_mut;
 
 use crate::pages::page_alloc_over_commit;
+use std::mem::MaybeUninit;
+use atomic::Atomic;
+use atomic::Ordering;
+#[cfg(windows)] use winapi::shared::minwindef::LPVOID;
+use winapi::um::memoryapi::VirtualAlloc;
+use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
+use winapi::ctypes::c_void;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -25,7 +32,7 @@ pub const PM_KEY_MASK: u64 = (1u64 << PM_SB as u64) - 1;
 /// implemented with a static array
 pub const SC_MASK: u64 = (1u64 << 6) - 1;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct PageInfo {
     desc: Option<*mut Descriptor>,
 }
@@ -85,8 +92,8 @@ impl PageInfo {
 pub const PM_SZ: u64 = (1u64 << PM_SB as u64)  * size_of::<PageInfo>() as u64;
 
 pub struct PageMap<'a> {
-    map: Option<*mut u8>,
-    page_map: &'a [AtomicCell<PageInfo>],
+    mem_location: Option<*mut u8>,
+    page_map: &'a [Atomic<PageInfo>],
 }
 
 impl PageMap<'_> {
@@ -99,39 +106,114 @@ impl PageMap<'_> {
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
             Ok(map) => {
-                let ptr = map as *mut AtomicCell<PageInfo>;
+                let ptr = map as *mut MaybeUninit<Atomic<PageInfo>>;
+                let slice_before =
+                    unsafe {
+                        let length = (1u64 << PM_SB as u64);
+                        &mut *slice_from_raw_parts_mut(ptr, length as usize)
+                    };
+                for place in slice_before.into_iter() {
+                    if cfg!(windows) {
+                        unsafe {
+                            self.unsafe_set_page_info(ptr, place as * mut MaybeUninit <Atomic<PageInfo>>, PageInfo::default());
+                        }
+                    }
+                    // *place = MaybeUninit::new(Atomic::new(PageInfo::default()));
+                }
                 let slice =
-                    unsafe { &mut *slice_from_raw_parts_mut(ptr, (1u64 << PM_SB as u64) as usize) };
+                    unsafe {
+                        &mut *slice_from_raw_parts_mut(ptr as *mut Atomic<PageInfo>, (1u64 << PM_SB as u64) as usize)
+                    };
+
                 self.page_map = slice;
 
-                self.map = Some(map);
+                self.mem_location = Some(map);
             }
             Err(e) => panic!("Error creating memory map: {:?}", e),
         }
     }
 
+    unsafe fn unsafe_set_page_info(&self, base_ptr : *mut MaybeUninit<Atomic<PageInfo>>, ptr: *mut MaybeUninit<Atomic<PageInfo>>, info:PageInfo) {
+        let key = self.unsafe_addr_to_key(base_ptr, ptr);
+        if cfg!(windows) {
+            let x = unsafe {  self.commit_page(base_ptr as *mut u8, key) };
+            #[cfg(debug_assertions)]
+            println!("Page allocating to: {:?}, Pointer: {:?}", x, ptr);
+        }
+        *ptr = MaybeUninit::new(Atomic::new(info));
+
+        //ptr.store(info, Ordering::Release);
+    }
+
     #[inline]
-    pub fn get_page_info<T>(&self, ptr: *const T) -> &PageInfo {
+    fn unsafe_addr_to_key<T>(&self, base_ptr: *const MaybeUninit<Atomic<PageInfo>>, ptr: *const T) -> usize {
+        println!("ptr: {:x?}", ptr);
+        let i = (ptr as usize >> PM_KEY_SHIFT);
+        println!("i: {:x?}", i);
+        println!("KEY_MASK: {:x?}", PM_KEY_MASK);
+        let key = (i - (base_ptr as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
+        println!("key: {:?}", key);
+        key
+    }
+
+    #[inline]
+    pub fn get_page_info<T>(&self, ptr: *const T) -> PageInfo {
         let key = self.addr_to_key(ptr);
+        if cfg!(windows) {
+            unsafe { self.commit_page(self.mem_location.unwrap() as *mut u8, key) };
+        }
         let ptr = &self.page_map[key];
-        unsafe { &*ptr.as_ptr() }
+        ptr.load(Ordering::Acquire)
     }
 
     #[inline]
     pub fn set_page_info<T>(&self, ptr: *const T, info: PageInfo) {
         let key = self.addr_to_key(ptr);
+        if cfg!(windows) {
+            unsafe { self.commit_page(self.mem_location.unwrap() as *mut u8, key) };
+        }
         let ptr = &self.page_map[key];
-        ptr.store(info);
+        ptr.store(info, Ordering::Release);
     }
 
     #[inline]
     fn addr_to_key<T>(&self, ptr: *const T) -> usize {
-        let key = (ptr as usize >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
+        println!("ptr: {:x?}", ptr);
+        let i = (ptr as usize >> PM_KEY_SHIFT);
+        println!("i: {:x?}", i);
+        println!("KEY_MASK: {:x?}", PM_KEY_MASK);
+        let key = (i - (self.mem_location.unwrap() as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
+        println!("key: {:?}", key);
         key
+    }
+
+    #[cfg(windows)]
+    unsafe fn get_page(&self, start_location: *mut u8, key: usize) -> LPVOID {
+        /*
+        let offset: isize = (key * size_of::<Atomic<PageInfo>>()) as isize;
+        let offset_ptr = start_location.offset(offset) as usize;
+        let mask = (PM_KEY_MASK as usize) << PM_KEY_SHIFT;
+        let masked = offset_ptr & mask;
+        println!("PAGE_MASK: {:x?}", mask);
+        let page = masked as LPVOID;
+
+         */
+        let page = start_location.offset((key * PAGE) as isize) as LPVOID;
+        page
+    }
+
+    #[cfg(windows)]
+    unsafe fn commit_page(&self, start_location: *mut u8, key: usize) -> *mut c_void {
+        let page = self.get_page(start_location, key);
+        let alloc = VirtualAlloc(page, PAGE, MEM_COMMIT, PAGE_READWRITE);
+        if alloc.is_null() {
+            panic!("Couldn't commit page")
+        }
+        alloc
     }
 }
 
 pub static mut S_PAGE_MAP: PageMap = PageMap {
-    map: None,
+    mem_location: None,
     page_map: &[],
 };
