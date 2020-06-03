@@ -13,6 +13,8 @@ use atomic::Ordering;
 use winapi::um::memoryapi::VirtualAlloc;
 use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
 use winapi::ctypes::c_void;
+use std::borrow::BorrowMut;
+use winapi::um::winuser::OffsetRect;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -37,12 +39,51 @@ pub struct PageInfo {
     desc: Option<*mut Descriptor>,
 }
 
+
+
+
 unsafe impl Send for PageInfo {}
 unsafe impl Sync for PageInfo {}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+union _PageInfo {
+    _unused: [usize; 2],
+    info: PageInfo
+}
+
+impl From<&mut _PageInfo> for PageInfo {
+    fn from(p: &mut _PageInfo) -> Self {
+        unsafe {
+            let internals = p._unused;
+            if let [0, 0] = internals {
+                p.info = PageInfo::default();
+            }
+
+            p.info
+        }
+    }
+}
+
+impl From<Atomic<_PageInfo>> for PageInfo {
+    fn from(a: Atomic<_PageInfo>) -> Self {
+        let mut temp = a.load(Ordering::Acquire);
+        let copy = temp.clone();
+        let output = PageInfo::from(&mut output);
+        a.compare_exchange(copy, temp, Ordering::Acquire, Ordering::Release);
+        output
+    }
+}
 
 impl Default for PageInfo {
     fn default() -> Self {
         Self { desc: None }
+    }
+}
+
+impl From<PageInfo> for _PageInfo {
+    fn from(p: PageInfo) -> Self {
+        _PageInfo { info: p }
     }
 }
 
@@ -217,3 +258,15 @@ pub static mut S_PAGE_MAP: PageMap = PageMap {
     mem_location: None,
     page_map: &[],
 };
+
+#[cfg(test)]
+mod test {
+    use crate::page_map::{_PageInfo, PageInfo};
+
+    #[test]
+    fn page_info_union_behavior() {
+        let mut un = _PageInfo { _unused : [0, 0]};
+        let changed = PageInfo::from(&mut un);
+
+    }
+}
