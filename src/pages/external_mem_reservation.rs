@@ -16,14 +16,23 @@ use std::ffi::{c_void, NulError};
 };
 use std::io::ErrorKind;
 use std::fmt::Error;
+use crate::no_heap_mutex::NoHeapMutex;
 
-
+#[derive(Debug)]
 pub struct Segment {
     ptr: * mut c_void,
+    #[cfg(windows)]
+    heap: HANDLE,
     length: usize
 }
 
 impl Segment {
+    #[cfg(windows)]
+    pub fn new(ptr: *mut c_void, heap: HANDLE, length: usize) -> Self {
+        Segment { ptr, heap, length }
+    }
+
+    #[cfg(unix)]
     pub fn new(ptr: *mut c_void, length: usize) -> Self {
         Segment { ptr, length }
     }
@@ -50,6 +59,10 @@ pub trait SegAllocator {
     /// Must guarantee that a segment is returned safetly, or results in an error.
     /// It must no panic when called
     fn allocate(&self, size: usize) -> Result<Segment, io::Error>;
+
+    /// Allocates a MASSIVE amount of space
+    fn allocate_massive(&self, size: usize) -> Result<Segment, io::Error>;
+
     /// De-allocates a segment. Depending on the platform, this may not do anything
     fn deallocate(&self, segment: Segment) -> bool;
 
@@ -60,6 +73,8 @@ impl SegAllocator for SegmentAllocator {
 
 
     fn allocate(&self, size: usize) -> Result<Segment, io::Error> {
+        static allocation_mutex: NoHeapMutex<()> = NoHeapMutex::new(());
+        let _mutex = allocation_mutex.lock();
         unsafe {
 
             let heap: HANDLE = GetProcessHeap();
@@ -68,7 +83,54 @@ impl SegAllocator for SegmentAllocator {
             let alloc = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);
             #[cfg(debug_assertions)]
                 #[allow(non_snake_case)]
-                {
+                if !alloc.is_null() {
+                    let mut heap_summary: HEAP_SUMMARY = HEAP_SUMMARY {
+                        cb: 0,
+                        cbAllocated: 0,
+                        cbCommitted: 0,
+                        cbReserved: 0,
+                        cbMaxReserve: 0
+                    };
+                    match HeapSummary(heap, 0, &mut heap_summary as LPHEAP_SUMMARY) {
+                        S_OK => {
+                            let HEAP_SUMMARY { cb: _, cbAllocated, cbCommitted, cbReserved, cbMaxReserve } = heap_summary;
+                            println!("HEAP SUMMARY");
+                            println!("\tAllocated: {:?}", cbAllocated);
+                            println!("\tCommitted: {:?}", cbCommitted);
+                            println!("\tReserved: {:?}", cbReserved);
+                            println!("\tMax Reserve: {:?}", cbMaxReserve);
+                        }
+                        _ => {
+                            panic!("Unable to get the heap summary")
+                        }
+                    }
+                }
+            if alloc.is_null() {
+                Err(io::Error::new(ErrorKind::AddrNotAvailable, Error))
+            } else {
+                let seg = Segment::new(
+                    alloc,
+                    heap,
+                    size
+                );
+                Ok(seg)
+            }
+        }
+    }
+
+    fn allocate_massive(&self, size: usize) -> Result<Segment, Error> {
+        static allocation_mutex: NoHeapMutex<()> = NoHeapMutex::new(());
+        let _mutex = allocation_mutex.lock();
+
+        unsafe {
+
+            let heap: HANDLE =
+
+
+            let alloc = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);
+            #[cfg(debug_assertions)]
+                #[allow(non_snake_case)]
+                if !alloc.is_null() {
                     let mut heap_summary: HEAP_SUMMARY = HEAP_SUMMARY {
                         cb: 0,
                         cbAllocated: 0,
@@ -102,6 +164,7 @@ impl SegAllocator for SegmentAllocator {
         }
     }
 
+
     fn deallocate(&self, segment: Segment) -> bool {
         unsafe {
             let heap: HANDLE = GetProcessHeap();
@@ -120,6 +183,11 @@ impl SegAllocator for SegmentAllocator {
         unimplemented!()
     }
 
+    fn allocate_massive(&self, size: usize) -> Result<Segment, Error> {
+        unimplemented!()
+    }
+
+
     fn deallocate(&self, segment: Segment) -> bool {
         unimplemented!()
     }
@@ -131,6 +199,7 @@ mod test {
     use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
     use crate::mem_info::PAGE;
     use std::ffi::c_void;
+    use crate::page_map::PM_SZ;
 
     #[test]
     pub fn get_segment() {
@@ -158,6 +227,13 @@ mod test {
 
             assert_eq!(*ptr1, *ptr2)
         }
+    }
+
+    #[test]
+    pub fn allocate_page_table_size() {
+        let size = PM_SZ;
+        let seg = SEGMENT_ALLOCATOR.allocate_massive(size as usize).expect("Must be able to create for this to function");
+        SEGMENT_ALLOCATOR.deallocate(seg);
     }
 
 

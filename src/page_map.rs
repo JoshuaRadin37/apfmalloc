@@ -82,7 +82,7 @@ impl PageInfo {
     }
 }
 
-pub const PM_SZ: u64 = (1u64 << PM_SB as u64) * size_of::<PageInfo>() as u64;
+pub const PM_SZ: u64 = (1u64 << PM_SB as u64)  * size_of::<PageInfo>() as u64;
 
 pub struct PageMap<'a> {
     map: Option<*mut u8>,
@@ -94,6 +94,7 @@ impl PageMap<'_> {
         println!("PM_NLS = {:?}", PM_NLS);
         println!("PM_NHS = {:?}", PM_NHS);
         println!("PM_SB = {:?}", PM_SB);
+        println!("PageInfo size = {:?}", size_of::<PageInfo>());
         println!("PM_SZ = {:?}", PM_SZ);
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
