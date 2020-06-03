@@ -12,6 +12,8 @@ use std::mem::MaybeUninit;
 use bitfield::fmt::{Debug, Formatter, Display};
 use std::{fmt, io};
 
+mod external_mem_reservation;
+
 #[inline]
 pub fn page_addr2base<T>(a : &T) -> * mut c_void {
     unsafe {

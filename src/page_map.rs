@@ -103,6 +103,10 @@ pub struct PageMap<'a> {
 impl PageMap<'_> {
 
     pub fn init(&mut self) {
+        println!("PM_NLS = {:?}", PM_NLS);
+        println!("PM_NHS = {:?}", PM_NHS);
+        println!("PM_SB = {:?}", PM_SB);
+        println!("PM_SZ = {:?}", PM_SZ);
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
             Ok(mut map) => {
@@ -117,8 +121,8 @@ impl PageMap<'_> {
 
 
             },
-            Err(_) => {
-                panic!("Error creating memory map")
+            Err(e) => {
+                panic!("Error creating memory map: {:?}", e)
             },
         }
     }
