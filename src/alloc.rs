@@ -5,7 +5,7 @@ use crate::mem_info::PAGE_MASK;
 use std::ptr::null_mut;
 use crate::size_classes::SIZE_CLASSES;
 use std::sync::atomic::Ordering;
-use std::cmp::max;
+
 use crate::pages::{page_alloc, page_free};
 
 
@@ -174,7 +174,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let sb_size = sc.sb_size;
     let block_size = sc.block_size;
 
-    let max_count = sc.get_block_num();
+    let _max_count = sc.get_block_num();
 
     // There's a to do here in the original program to optimize, which is amusing
     while cache.get_block_num() > 0 {
@@ -331,6 +331,7 @@ macro_rules! size_classes_match {
 
     ($name:ident, $diff:ident, sc($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:expr, $pgs:tt, $lg_delta_lookup:tt)) => {
 
+        #[allow(irrefutible)]
         size_classes_match!(@ true, $name, $diff, found, (let mut found = false;), sc($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup))
 
     };
@@ -343,18 +344,20 @@ macro_rules! size_classes_match {
     (@ true, $name:ident, $diff:ident, $found:ident, ($($output:tt)*), sc ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:tt, $pgs:expr, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
         size_classes_match!(@ false, $name, $diff, $found, (
              $($output)*
-             if let (index_g, block_size) = size_classes_match!(@ sc ($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup)){
-                if $name == index_g {
-                    $name = $diff / block_size;
-                    $found = true;
-                }
-             }
+             {
+                 let (index_g, block_size) = size_classes_match!(@ sc ($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup));
+                 if $name == index_g {
+                        $name = $diff / block_size;
+                        $found = true;
+                 }
+            }
         ) $(, sc($($args),*))* )
     };
     (@ false, $name:ident, $diff:ident, $found:ident, ($($output:tt)*), sc ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:tt, $pgs:expr, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
         size_classes_match!(@ false, $name, $diff, $found, (
              $($output)*
-             else if let (index_g, block_size) = size_classes_match!(@ sc ($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup)){
+             if !$found {
+             let (index_g, block_size) = size_classes_match!(@ sc ($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup));
                 if $name == index_g {
                     $name = $diff / block_size;
                     $found = true;
@@ -387,7 +390,7 @@ pub fn compute_index(super_block: * mut u8, block: * mut u8, size_class_index: u
     debug_assert!(block < unsafe { super_block.offset(sc.sb_size as isize )});
     let diff = block as u32 - super_block as u32;
     let mut index = 0;
-    let found = size_classes_match![index, diff,
+    let _found = size_classes_match![index, diff,
         sc(  0,      3,        3,      0,  no, yes,   1,  3),
         sc(  1,      3,        3,      1,  no, yes,   1,  3),
         sc(  2,      3,        3,      2,  no, yes,   3,  3),
@@ -432,6 +435,3 @@ pub fn compute_index(super_block: * mut u8, block: * mut u8, size_class_index: u
     index
 
 }
-
-
-

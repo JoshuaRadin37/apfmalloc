@@ -1,10 +1,10 @@
-use std::sync::atomic::{AtomicPtr, Ordering, AtomicBool};
+use std::sync::atomic::{Ordering, AtomicBool};
 use crate::allocation_data::DescriptorNode;
 use crate::size_classes::{SizeClassData, SIZE_CLASSES};
-use std::ptr::{null_mut, null, slice_from_raw_parts_mut};
+use std::ptr::{slice_from_raw_parts_mut};
 use crate::mem_info::MAX_SZ_IDX;
-use std::borrow::{Borrow, BorrowMut};
-use std::ops::{Index, IndexMut};
+
+
 use std::mem::MaybeUninit;
 use memmap::MmapMut;
 use bitfield::size_of;

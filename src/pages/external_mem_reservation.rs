@@ -1,14 +1,14 @@
 extern crate libc;
 
-use std::ffi::c_void;
+
 
 pub trait Allocator {
 
-    fn allocate(&self, size: usize)
+    // fn allocate(&self, size: usize)
 
 }
 
-
+/*
 
 pub fn malloc(size: usize) -> * mut c_void {
     unsafe {
@@ -26,22 +26,12 @@ pub fn free<T>(ptr: * mut T){
     }
 }
 
+*/
 
 
 #[cfg(test)]
 mod test {
-    use bitfield::size_of;
-    use std::ffi::c_void;
-    use crate::pages::external_mem_reservation::{malloc_type, free};
-
-    #[test]
-    fn extern_functions() {
-        unsafe {
-            let allocated = malloc_type::<usize>(); //unsafe { &mut *(__malloc(size_of::<usize>()) as * mut usize) };
-            *allocated = 0xdeadbeaf;
-            unsafe {
-                free(allocated)
-            }
-        }
-    }
+    
+    
+    
 }

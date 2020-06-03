@@ -1,10 +1,10 @@
 use crate::mem_info::{LG_PAGE, MAX_SZ_IDX};
 use crate::allocation_data::Descriptor;
 use bitfield::size_of;
-use std::sync::atomic::{AtomicPtr, Ordering};
-use std::ptr::{null_mut, slice_from_raw_parts_mut};
+
+use std::ptr::{slice_from_raw_parts_mut};
 use crossbeam::atomic::AtomicCell;
-use memmap::MmapMut;
+
 use crate::pages::page_alloc_over_commit;
 
 /// Assuming x84-64, which has 48 bits for addressing
@@ -109,7 +109,7 @@ impl PageMap<'_> {
         println!("PM_SZ = {:?}", PM_SZ);
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
-            Ok(mut map) => {
+            Ok(map) => {
                 let ptr = map as * mut AtomicCell<PageInfo>;
                 let slice = unsafe {
                     &mut *slice_from_raw_parts_mut(ptr, (1u64 << PM_SB as u64) as usize)

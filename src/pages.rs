@@ -1,13 +1,13 @@
 use std::os::raw::c_void;
 use crate::mem_info::PAGE_MASK;
 use memmap::{MmapMut, MmapOptions};
-use std::io::{ErrorKind, Error};
+use std::io::{ErrorKind};
 use bitfield::size_of;
-use std::iter::Map;
-use std::ops::Mul;
+
+
 use std::sync::atomic::{AtomicPtr, AtomicBool};
 use std::ptr::{slice_from_raw_parts_mut, null_mut, replace, slice_from_raw_parts, null};
-use atomic::{Ordering, Atomic};
+use atomic::{Ordering};
 use std::mem::MaybeUninit;
 use bitfield::fmt::{Debug, Formatter, Display};
 use std::{fmt, io};
@@ -106,7 +106,7 @@ impl PageInfoHolder {
             self.head.load(Ordering::Acquire)
         };
         let size = Self::get_space_within(slice);
-        let mut slice = &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MaybeUninit<MapOrFreePointer>, size);
+        let slice = &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MaybeUninit<MapOrFreePointer>, size);
         for map_or_pointer in slice.into_iter().rev() {
 
             //std::mem::swap(map_or_pointer,&mut ;
@@ -128,9 +128,9 @@ impl PageInfoHolder {
         let new_capacity = *self.get_capacity() * 2;
         let size = Self::size_for_capacity(new_capacity);
         let mut map = MmapMut::map_anon(size).expect("Should create");
-        let mut slice = &mut map.as_mut()[..Self::size_for_capacity(*self.get_capacity())];
+        let slice = &mut map.as_mut()[..Self::size_for_capacity(*self.get_capacity())];
         slice.copy_from_slice(& *self.internals.as_mut().unwrap());
-        let mut uninit = &mut map.as_mut()[Self::size_for_capacity(*self.get_capacity())..];
+        let uninit = &mut map.as_mut()[Self::size_for_capacity(*self.get_capacity())..];
         unsafe {
             self.initialize_slice(uninit);
         }
@@ -275,12 +275,12 @@ pub fn page_free(ptr: *const u8) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::pages::{page_alloc, PAGE_HOLDER, MapOrFreePointer, PageInfoHolder};
-    use atomic::Ordering;
-    use crate::pages::MapOrFreePointer::Pointer;
-    use std::ptr::null_mut;
-    use super::*;
-    use crate::mem_info::PAGE;
+    use crate::pages::{page_alloc, PAGE_HOLDER};
+    
+    
+    
+    
+    
 
     #[test]
     fn get_page() {
@@ -314,7 +314,7 @@ mod test {
     #[test]
     fn grows() {
         unsafe {
-            for i in 0..256 {
+            for _i in 0..256 {
                 page_alloc(4096).unwrap();
             };
 

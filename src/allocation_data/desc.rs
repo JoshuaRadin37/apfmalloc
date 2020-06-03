@@ -1,12 +1,12 @@
 use crate::mem_info::{CACHE_LINE, CACHE_LINE_MASK, DESCRIPTOR_BLOCK_SZ, align_addr};
-use std::sync::atomic::AtomicPtr;
+
 use super::Anchor;
 use crate::allocation_data::proc_heap::ProcHeap;
-use crossbeam::atomic::AtomicCell;
+
 use atomic::{Atomic, Ordering};
 use crate::AVAILABLE_DESC;
 use crate::pages::page_alloc;
-use lazy_static::lazy_static;
+
 use std::ptr::null_mut;
 use std::mem::MaybeUninit;
 
@@ -157,10 +157,10 @@ impl Descriptor {
                         first = curr_ptr as * mut MaybeUninit<Descriptor>;
                         let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
                         while (curr_ptr as usize + descriptor_size as usize) < max {
-                            let mut curr = curr_ptr as * mut MaybeUninit<Descriptor>;
+                            let curr = curr_ptr as * mut MaybeUninit<Descriptor>;
                             if !prev.is_null() {
                                 unsafe {
-                                    let mut prev_init = &mut *(*prev).as_mut_ptr();
+                                    let prev_init = &mut *(*prev).as_mut_ptr();
                                     prev_init.next_free.store(DescriptorNode::from(curr_ptr as * mut Descriptor), Ordering::Release);
                                 }
                             }
@@ -170,7 +170,7 @@ impl Descriptor {
                             curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
                         }
 
-                        let mut prev = (&mut *(*prev).as_mut_ptr());
+                        let prev = &mut *(*prev).as_mut_ptr();
                         prev.next_free.store(DescriptorNode::default(), Ordering::Release);
 
                         let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
@@ -193,7 +193,7 @@ impl Descriptor {
 
 }
 
-pub fn desc_retire(desc: &mut Descriptor) {
+pub fn desc_retire(_desc: &mut Descriptor) {
 
 }
 

@@ -1,18 +1,18 @@
 #![allow(non_upper_case_globals)]
 
 
-use std::sync::atomic::AtomicPtr;
-use crate::allocation_data::{DescriptorNode, ProcHeap, get_heaps, Descriptor, SuperBlockState, Anchor};
+
+use crate::allocation_data::{DescriptorNode, get_heaps, Descriptor, SuperBlockState, Anchor};
 use std::ptr::null_mut;
 use crate::mem_info::{MAX_SZ_IDX, MAX_SZ};
 use lazy_static::lazy_static;
-use crossbeam::atomic::AtomicCell;
-use std::cell::{Cell, RefCell};
+
+
 use crate::size_classes::{init_size_class, get_size_class, SIZE_CLASSES};
-use std::process::id;
+
 use crate::page_map::S_PAGE_MAP;
-use std::borrow::Borrow;
-use memmap::MmapMut;
+
+
 use atomic::{Ordering, Atomic};
 use crate::pages::{page_alloc, page_free};
 use crate::alloc::{register_desc, fill_cache, get_page_info_for_ptr, unregister_desc, flush_cache};
@@ -65,7 +65,7 @@ unsafe fn thread_local_init_malloc() {
         *ref_mut = true;
     });
 
-    thread_cache::thread_cache.with(|f| {
+    thread_cache::thread_cache.with(|_f| {
 
     });
 }
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn heaps_valid() {
         let heap = get_heaps();
-        let p_heap = heap.get_heap_at_mut(0);
+        let _p_heap = heap.get_heap_at_mut(0);
 
     }
 

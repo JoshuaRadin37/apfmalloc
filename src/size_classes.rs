@@ -1,6 +1,6 @@
 
-use crate::sc;
-use std::mem::size_of;
+
+
 use crate::mem_info::{MAX_SZ, MAX_SZ_IDX, PAGE};
 
 pub struct SizeClassData {

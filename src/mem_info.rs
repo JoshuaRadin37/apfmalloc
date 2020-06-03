@@ -18,7 +18,7 @@ pub const HUGE_PAGE: usize = 1 << LG_HUGE_PAGE;
 
 pub const PTR_MASK: usize = PTR_SIZE - 1;
 pub const CACHE_LINE_MASK: usize = CACHE_LINE - 1;
-pub const PAGE_MASK: usize = (PAGE - 1);
+pub const PAGE_MASK: usize = PAGE - 1;
 
 pub const MIN_ALIGN: usize = LG_PTR;
 
