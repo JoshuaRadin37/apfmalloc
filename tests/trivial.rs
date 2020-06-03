@@ -1,5 +1,5 @@
-use lralloc_rs::{do_malloc, do_free};
 use bitfield::size_of;
+use lralloc_rs::{do_free, do_malloc};
 use std::mem::MaybeUninit;
 
 #[test]

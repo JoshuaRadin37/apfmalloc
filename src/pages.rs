@@ -1,24 +1,21 @@
-use std::os::raw::c_void;
 use crate::mem_info::PAGE_MASK;
-use memmap::{MmapMut, MmapOptions};
-use std::io::{ErrorKind};
 use bitfield::size_of;
+use memmap::{MmapMut, MmapOptions};
+use std::io::ErrorKind;
+use std::os::raw::c_void;
 
-
-use std::sync::atomic::{AtomicPtr, AtomicBool};
-use std::ptr::{slice_from_raw_parts_mut, null_mut, replace, slice_from_raw_parts, null};
-use atomic::{Ordering};
+use atomic::Ordering;
+use bitfield::fmt::{Debug, Display, Formatter};
 use std::mem::MaybeUninit;
-use bitfield::fmt::{Debug, Formatter, Display};
+use std::ptr::{null, null_mut, replace, slice_from_raw_parts, slice_from_raw_parts_mut};
+use std::sync::atomic::{AtomicBool, AtomicPtr};
 use std::{fmt, io};
 
 mod external_mem_reservation;
 
 #[inline]
-pub fn page_addr2base<T>(a : &T) -> * mut c_void {
-    unsafe {
-        (a as * const T as usize & !PAGE_MASK) as *mut c_void
-    }
+pub fn page_addr2base<T>(a: &T) -> *mut c_void {
+    unsafe { (a as *const T as usize & !PAGE_MASK) as *mut c_void }
 }
 
 struct PageInfoHolder {
@@ -26,26 +23,22 @@ struct PageInfoHolder {
     count: usize,
     capacity: usize,
     head: AtomicPtr<MapOrFreePointer>,
-    lock: AtomicBool
+    lock: AtomicBool,
 }
 
 #[derive(Debug)]
 enum MapOrFreePointer {
     Map(MmapMut),
-    Pointer(* mut MapOrFreePointer)
+    Pointer(*mut MapOrFreePointer),
 }
 
 impl PartialEq for MapOrFreePointer {
     fn eq(&self, other: &Self) -> bool {
         use MapOrFreePointer::*;
         match (self, other) {
-            (Map(map1), Map(map2)) => {
-                map1.as_ptr() == map2.as_ptr()
-            },
-            (Pointer(ptr1), Pointer(ptr2)) => {
-                ptr1 == ptr2
-            },
-            _ => false
+            (Map(map1), Map(map2)) => map1.as_ptr() == map2.as_ptr(),
+            (Pointer(ptr1), Pointer(ptr2)) => ptr1 == ptr2,
+            _ => false,
         }
     }
 }
@@ -53,9 +46,14 @@ impl PartialEq for MapOrFreePointer {
 pub const INITIAL_PAGES: usize = 256;
 
 impl PageInfoHolder {
-
     pub const fn new() -> Self {
-        Self { internals: None, count: 0, capacity: 0, head: AtomicPtr::new(null_mut()), lock: AtomicBool::new(false) }
+        Self {
+            internals: None,
+            count: 0,
+            capacity: 0,
+            head: AtomicPtr::new(null_mut()),
+            lock: AtomicBool::new(false),
+        }
     }
 
     fn grab(&mut self) {
@@ -71,7 +69,13 @@ impl PageInfoHolder {
         let capacity = INITIAL_PAGES;
         let mem_size = Self::size_for_capacity(capacity);
         let mmap_mut = MmapMut::map_anon(mem_size).expect("Memory map must be created");
-        *self = Self { internals: Some(mmap_mut), count: 0, capacity: 0, head: AtomicPtr::new(null_mut()), lock: AtomicBool::new(false) };
+        *self = Self {
+            internals: Some(mmap_mut),
+            count: 0,
+            capacity: 0,
+            head: AtomicPtr::new(null_mut()),
+            lock: AtomicBool::new(false),
+        };
         let ptr = self.internals.as_mut().unwrap().as_mut_ptr();
         unsafe {
             let head = &mut *slice_from_raw_parts_mut(ptr, mem_size);
@@ -80,7 +84,6 @@ impl PageInfoHolder {
         self.capacity = capacity;
         //println!("PageInfoHolder initialized to {:?}", self);
         self.release();
-
     }
 
     fn size_for_capacity(capacity: usize) -> usize {
@@ -96,7 +99,14 @@ impl PageInfoHolder {
     }
 
     fn get_maps(&mut self) -> &mut [MapOrFreePointer] {
-        unsafe { slice_from_raw_parts_mut(self.internals.as_mut().unwrap().as_mut_ptr() as *mut MapOrFreePointer, *self.get_capacity()).as_mut().unwrap() }
+        unsafe {
+            slice_from_raw_parts_mut(
+                self.internals.as_mut().unwrap().as_mut_ptr() as *mut MapOrFreePointer,
+                *self.get_capacity(),
+            )
+            .as_mut()
+            .unwrap()
+        }
     }
 
     unsafe fn initialize_slice(&mut self, slice: &mut [u8]) {
@@ -106,9 +116,11 @@ impl PageInfoHolder {
             self.head.load(Ordering::Acquire)
         };
         let size = Self::get_space_within(slice);
-        let slice = &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MaybeUninit<MapOrFreePointer>, size);
+        let slice = &mut *slice_from_raw_parts_mut(
+            slice.as_mut_ptr() as *mut MaybeUninit<MapOrFreePointer>,
+            size,
+        );
         for map_or_pointer in slice.into_iter().rev() {
-
             //std::mem::swap(map_or_pointer,&mut ;
             //*map_or_pointer =
             *map_or_pointer = MaybeUninit::new(MapOrFreePointer::Pointer(prev));
@@ -117,7 +129,8 @@ impl PageInfoHolder {
             //map_or_pointer.write();
             prev = ptr;
         }
-        let slice = &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MapOrFreePointer, size);
+        let slice =
+            &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MapOrFreePointer, size);
         // println!("{:?}", slice);
         let first = &mut slice[0];
         self.head.store(first, Ordering::SeqCst);
@@ -129,7 +142,7 @@ impl PageInfoHolder {
         let size = Self::size_for_capacity(new_capacity);
         let mut map = MmapMut::map_anon(size).expect("Should create");
         let slice = &mut map.as_mut()[..Self::size_for_capacity(*self.get_capacity())];
-        slice.copy_from_slice(& *self.internals.as_mut().unwrap());
+        slice.copy_from_slice(&*self.internals.as_mut().unwrap());
         let uninit = &mut map.as_mut()[Self::size_for_capacity(*self.get_capacity())..];
         unsafe {
             self.initialize_slice(uninit);
@@ -139,8 +152,7 @@ impl PageInfoHolder {
         self.release();
     }
 
-    pub fn alloc(&mut self, size: usize) -> Result<* mut u8, io::Error> {
-
+    pub fn alloc(&mut self, size: usize) -> Result<*mut u8, io::Error> {
         if self.count == self.capacity - 1 {
             println!("Growing Page Holder");
             self.grow();
@@ -187,34 +199,43 @@ impl PageInfoHolder {
                             found_map = Some(page as *mut MapOrFreePointer);
                             break;
                         }
-                    },
-                    MapOrFreePointer::Pointer(_) => {},
+                    }
+                    MapOrFreePointer::Pointer(_) => {}
                 }
             }
         }
         match found_map {
-            None => {
-                false
-            },
+            None => false,
             Some(page) => {
                 self.grab();
                 println!("De-allocating a page");
                 let prev = self.head.load(Ordering::Acquire);
                 unsafe { *page = MapOrFreePointer::Pointer(prev) };
-                self.head.store(page as *mut MapOrFreePointer, Ordering::Release);
+                self.head
+                    .store(page as *mut MapOrFreePointer, Ordering::Release);
                 self.count -= 1;
                 self.release();
                 true
-
-            },
+            }
         }
     }
-
 }
 
 impl Debug for PageInfoHolder {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Head: {:?}, Use: {}/{} Pages: {:?}", self.head, self.count, self.capacity, unsafe {& *slice_from_raw_parts(self.internals.as_ref().unwrap().as_ptr() as *const MapOrFreePointer, self.capacity) })
+        write!(
+            f,
+            "Head: {:?}, Use: {}/{} Pages: {:?}",
+            self.head,
+            self.count,
+            self.capacity,
+            unsafe {
+                &*slice_from_raw_parts(
+                    self.internals.as_ref().unwrap().as_ptr() as *const MapOrFreePointer,
+                    self.capacity,
+                )
+            }
+        )
     }
 }
 
@@ -224,9 +245,7 @@ static mut PAGE_HOLDER: PageInfoHolder = PageInfoHolder::new();
 #[derive(Debug)]
 pub struct PageMaskError;
 
-impl std::error::Error for PageMaskError {
-
-}
+impl std::error::Error for PageMaskError {}
 
 impl Display for PageMaskError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -237,7 +256,7 @@ impl Display for PageMaskError {
 /// Returns a set of continuous pages, totaling to size bytes
 pub fn page_alloc(size: usize) -> Result<*mut u8, io::Error> {
     if size & PAGE_MASK != 0 {
-        return Err(io::Error::new(ErrorKind::InvalidData, PageMaskError))
+        return Err(io::Error::new(ErrorKind::InvalidData, PageMaskError));
     }
 
     unsafe {
@@ -268,19 +287,12 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, io::Error> {
 /// Altered version of the lralloc free, which uses the drop method
 /// of MMapMut struct
 pub fn page_free(ptr: *const u8) -> bool {
-    unsafe {
-        PAGE_HOLDER.dealloc(ptr)
-    }
+    unsafe { PAGE_HOLDER.dealloc(ptr) }
 }
 
 #[cfg(test)]
 mod test {
     use crate::pages::{page_alloc, PAGE_HOLDER};
-    
-    
-    
-    
-    
 
     #[test]
     fn get_page() {
@@ -294,7 +306,7 @@ mod test {
 
     #[test]
     fn can_write_to_page() {
-        let ptr = page_alloc(4096).expect("Couldn't get page") as * mut usize;
+        let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
         unsafe {
             *ptr = 0xdeadbeaf; // if this fails it means the test fails
         }
@@ -302,7 +314,7 @@ mod test {
 
     #[test]
     fn deallocate() {
-        let ptr = page_alloc(4096).expect("Couldn't get page") as * mut usize;
+        let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
         unsafe {
             *ptr = 0xdeadbeaf;
             assert!(PAGE_HOLDER.dealloc(ptr as *const u8));
@@ -316,14 +328,10 @@ mod test {
         unsafe {
             for _i in 0..256 {
                 page_alloc(4096).unwrap();
-            };
-
+            }
 
             assert_eq!(PAGE_HOLDER.count, 256);
             assert!(PAGE_HOLDER.capacity > 256)
         }
-
     }
-
-
 }

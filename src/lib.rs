@@ -1,30 +1,29 @@
 #![allow(non_upper_case_globals)]
 
-
-
-use crate::allocation_data::{DescriptorNode, get_heaps, Descriptor, SuperBlockState, Anchor};
-use std::ptr::null_mut;
-use crate::mem_info::{MAX_SZ_IDX, MAX_SZ};
+use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
+use crate::mem_info::{MAX_SZ, MAX_SZ_IDX};
 use lazy_static::lazy_static;
+use std::ptr::null_mut;
 
-
-use crate::size_classes::{init_size_class, get_size_class, SIZE_CLASSES};
+use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 
 use crate::page_map::S_PAGE_MAP;
 
-
-use atomic::{Ordering, Atomic};
+use crate::alloc::{
+    fill_cache, flush_cache, get_page_info_for_ptr, register_desc, unregister_desc,
+};
 use crate::pages::{page_alloc, page_free};
-use crate::alloc::{register_desc, fill_cache, get_page_info_for_ptr, unregister_desc, flush_cache};
+use atomic::{Atomic, Ordering};
 
-#[macro_use] pub mod macros;
-mod size_classes;
-mod mem_info;
-mod allocation_data;
-mod pages;
-mod page_map;
-mod thread_cache;
+#[macro_use]
+pub mod macros;
 mod alloc;
+mod allocation_data;
+mod mem_info;
+mod page_map;
+mod pages;
+mod size_classes;
+mod thread_cache;
 
 #[macro_use]
 extern crate bitfield;
@@ -33,8 +32,6 @@ lazy_static! {
     static ref AVAILABLE_DESC: Atomic<DescriptorNode> = Atomic::new(DescriptorNode::new());
 }
 static mut MALLOC_INIT: bool = false;
-
-
 
 unsafe fn init_malloc() {
     MALLOC_INIT = true;
@@ -45,11 +42,8 @@ unsafe fn init_malloc() {
     for idx in 0..MAX_SZ_IDX {
         let heap = get_heaps().get_heap_at_mut(idx);
 
-        heap.partial_list.store(
-            None, Ordering::Release
-        );
+        heap.partial_list.store(None, Ordering::Release);
         heap.size_class_index = idx;
-
     }
 }
 
@@ -65,18 +59,15 @@ unsafe fn thread_local_init_malloc() {
         *ref_mut = true;
     });
 
-    thread_cache::thread_cache.with(|_f| {
-
-    });
+    thread_cache::thread_cache.with(|_f| {});
 }
 
-pub fn do_malloc(size: usize) -> *mut u8{
+pub fn do_malloc(size: usize) -> *mut u8 {
     unsafe {
         if !MALLOC_INIT {
             init_malloc();
         }
     }
-
 
     if size > MAX_SZ {
         let pages = page_ceiling!(size);
@@ -99,30 +90,22 @@ pub fn do_malloc(size: usize) -> *mut u8{
 
     let size_class_index = get_size_class(size);
 
-    thread_cache::thread_cache.with(
-        |tcache| {
-            let cache = &mut tcache.borrow_mut()[size_class_index];
-            if cache.get_block_num() == 0 {
-                fill_cache(size_class_index, cache);
-            }
-
-            cache.pop_block()
+    thread_cache::thread_cache.with(|tcache| {
+        let cache = &mut tcache.borrow_mut()[size_class_index];
+        if cache.get_block_num() == 0 {
+            fill_cache(size_class_index, cache);
         }
-    )
 
-
+        cache.pop_block()
+    })
 }
 
 fn is_power_of_two(x: usize) -> bool {
     // https://stackoverflow.com/questions/3638431/determine-if-an-int-is-a-power-of-2-or-not-in-a-single-line
-    (if x != 0 { true } else { false }) && (if (!(x & (x -1))) != 0 {
-        true
-    } else {
-        false
-    })
+    (if x != 0 { true } else { false }) && (if (!(x & (x - 1))) != 0 { true } else { false })
 }
 
-pub fn do_free<T>(ptr: * const T) {
+pub fn do_free<T>(ptr: *const T) {
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe { &mut *info.get_desc().expect("descriptor should exist here") };
 
@@ -134,8 +117,8 @@ pub fn do_free<T>(ptr: * const T) {
             unregister_desc(None, super_block);
 
             // if large allocation
-            if ptr as * const u8 != super_block as * const u8 {
-                unregister_desc(None, ptr as * mut u8)
+            if ptr as *const u8 != super_block as *const u8 {
+                unregister_desc(None, ptr as *mut u8)
             }
 
             // free the super block
@@ -143,25 +126,19 @@ pub fn do_free<T>(ptr: * const T) {
 
             // retire the descriptor
             desc.retire();
-        },
-        Some(size_class_index) => {
-            thread_cache::thread_cache.with(
-                |tcache| {
-                    let cache = &mut tcache.borrow_mut()[size_class_index];
-                    let sc = unsafe {& SIZE_CLASSES[size_class_index]};
+        }
+        Some(size_class_index) => thread_cache::thread_cache.with(|tcache| {
+            let cache = &mut tcache.borrow_mut()[size_class_index];
+            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
-                    if cache.get_block_num() >= sc.cache_block_num {
-                        flush_cache(size_class_index, cache);
-                    }
+            if cache.get_block_num() >= sc.cache_block_num {
+                flush_cache(size_class_index, cache);
+            }
 
-                    cache.push_block(ptr as * mut u8);
-                }
-            )
-        },
+            cache.push_block(ptr as *mut u8);
+        }),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -173,14 +150,13 @@ mod tests {
     fn heaps_valid() {
         let heap = get_heaps();
         let _p_heap = heap.get_heap_at_mut(0);
-
     }
 
     #[test]
     fn malloc_and_free() {
-        let ptr = unsafe { &mut *(super::do_malloc(size_of::<usize>()) as *mut usize)};
+        let ptr = unsafe { &mut *(super::do_malloc(size_of::<usize>()) as *mut usize) };
         *ptr = 8;
         assert_eq!(ptr, &8); // should be trivial
-        do_free(ptr as * mut usize);
+        do_free(ptr as *mut usize);
     }
 }

@@ -1,11 +1,7 @@
 extern crate libc;
 
-
-
 pub trait Allocator {
-
     // fn allocate(&self, size: usize)
-
 }
 
 /*
@@ -28,10 +24,5 @@ pub fn free<T>(ptr: * mut T){
 
 */
 
-
 #[cfg(test)]
-mod test {
-    
-    
-    
-}
+mod test {}

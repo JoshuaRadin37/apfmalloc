@@ -1,9 +1,9 @@
-use crate::mem_info::{LG_PAGE, MAX_SZ_IDX};
 use crate::allocation_data::Descriptor;
+use crate::mem_info::{LG_PAGE, MAX_SZ_IDX};
 use bitfield::size_of;
 
-use std::ptr::{slice_from_raw_parts_mut};
 use crossbeam::atomic::AtomicCell;
+use std::ptr::slice_from_raw_parts_mut;
 
 use crate::pages::page_alloc_over_commit;
 
@@ -27,12 +27,11 @@ pub const SC_MASK: u64 = (1u64 << 6) - 1;
 
 #[derive(Clone)]
 pub struct PageInfo {
-    desc: Option<* mut Descriptor>
+    desc: Option<*mut Descriptor>,
 }
 
 unsafe impl Send for PageInfo {}
 unsafe impl Sync for PageInfo {}
-
 
 impl Default for PageInfo {
     fn default() -> Self {
@@ -41,67 +40,56 @@ impl Default for PageInfo {
 }
 
 impl PageInfo {
-
     pub fn set(&mut self, desc: &mut Descriptor, sc_idx: usize) {
-
         let ptr = desc as *mut Descriptor;
 
-        if ptr as usize & SC_MASK as usize != 0 ||
-            sc_idx >= MAX_SZ_IDX {
+        if ptr as usize & SC_MASK as usize != 0 || sc_idx >= MAX_SZ_IDX {
             self.desc = None;
             return;
         }
 
-        let desc =
-            (ptr as usize | sc_idx) as *mut Descriptor;
+        let desc = (ptr as usize | sc_idx) as *mut Descriptor;
         self.desc = Some(desc);
     }
 
     pub fn set_ptr(&mut self, desc: *mut Descriptor, sc_idx: usize) {
-
         let ptr = desc;
 
-        if ptr as usize & SC_MASK as usize != 0 ||
-            sc_idx >= MAX_SZ_IDX {
+        if ptr as usize & SC_MASK as usize != 0 || sc_idx >= MAX_SZ_IDX {
             self.desc = None;
             return;
         }
 
-        let desc =
-            (ptr as usize | sc_idx) as *mut Descriptor;
+        let desc = (ptr as usize | sc_idx) as *mut Descriptor;
         self.desc = Some(desc);
     }
 
     pub fn get_desc(&self) -> Option<*mut Descriptor> {
         match &self.desc {
-            None => { None },
+            None => None,
             Some(ptr) => {
                 let desc = *ptr as u64 | !SC_MASK;
                 Some(desc as *mut Descriptor)
-            },
+            }
         }
     }
 
     pub fn get_size_class_index(&self) -> Option<usize> {
         match &self.desc {
             None => None,
-            Some(desc) => {
-                Some(*desc as usize & !SC_MASK as usize)
-            }
+            Some(desc) => Some(*desc as usize & !SC_MASK as usize),
         }
-
     }
 }
 
 pub const PM_SZ: u64 = (1u64 << PM_SB as u64) * size_of::<PageInfo>() as u64;
 
 pub struct PageMap<'a> {
-    map: Option<* mut u8>,
-    page_map: &'a [AtomicCell<PageInfo>]
+    map: Option<*mut u8>,
+    page_map: &'a [AtomicCell<PageInfo>],
 }
 
 impl PageMap<'_> {
-
     pub fn init(&mut self) {
         println!("PM_NLS = {:?}", PM_NLS);
         println!("PM_NHS = {:?}", PM_NHS);
@@ -110,50 +98,39 @@ impl PageMap<'_> {
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
             Ok(map) => {
-                let ptr = map as * mut AtomicCell<PageInfo>;
-                let slice = unsafe {
-                    &mut *slice_from_raw_parts_mut(ptr, (1u64 << PM_SB as u64) as usize)
-                };
+                let ptr = map as *mut AtomicCell<PageInfo>;
+                let slice =
+                    unsafe { &mut *slice_from_raw_parts_mut(ptr, (1u64 << PM_SB as u64) as usize) };
                 self.page_map = slice;
 
                 self.map = Some(map);
-
-
-
-            },
-            Err(e) => {
-                panic!("Error creating memory map: {:?}", e)
-            },
+            }
+            Err(e) => panic!("Error creating memory map: {:?}", e),
         }
     }
 
     #[inline]
-    pub fn get_page_info<T>(&self, ptr: * const T) -> &PageInfo {
+    pub fn get_page_info<T>(&self, ptr: *const T) -> &PageInfo {
         let key = self.addr_to_key(ptr);
         let ptr = &self.page_map[key];
-        unsafe {& *ptr.as_ptr()}
+        unsafe { &*ptr.as_ptr() }
     }
 
     #[inline]
-    pub fn set_page_info<T>(&self, ptr: * const T, info: PageInfo) {
+    pub fn set_page_info<T>(&self, ptr: *const T, info: PageInfo) {
         let key = self.addr_to_key(ptr);
         let ptr = &self.page_map[key];
         ptr.store(info);
     }
 
     #[inline]
-    fn addr_to_key<T>(&self, ptr: * const T) -> usize {
+    fn addr_to_key<T>(&self, ptr: *const T) -> usize {
         let key = (ptr as usize >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
         key
     }
-
-
 }
 
 pub static mut S_PAGE_MAP: PageMap = PageMap {
     map: None,
-    page_map: &[]
+    page_map: &[],
 };
-
-
-

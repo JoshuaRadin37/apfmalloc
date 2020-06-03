@@ -1,17 +1,15 @@
-
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
-    block: * mut u8,
-    block_num: u32
+    block: *mut u8,
+    block_num: u32,
 }
 
 impl ThreadCacheBin {
-
     /// Common and Fast
     #[inline]
-    pub fn push_block(&mut self, block: * mut u8) {
+    pub fn push_block(&mut self, block: *mut u8) {
         unsafe {
-            *(block as * mut * mut u8) = self.block;
+            *(block as *mut *mut u8) = self.block;
         };
         self.block = block;
         self.block_num += 1;
@@ -22,7 +20,7 @@ impl ThreadCacheBin {
     /// # Panic
     /// Panics if cache isn't empty
     #[inline]
-    pub fn push_list(&mut self, block: * mut u8, length: u32) {
+    pub fn push_list(&mut self, block: *mut u8, length: u32) {
         if self.block_num > 0 {
             panic!("Attempting to push a block list while cache is not empty");
         } else {
@@ -41,7 +39,7 @@ impl ThreadCacheBin {
             panic!("Attempting to pop a block from cache while cache is empty")
         } else {
             let ret = self.block;
-            self.block = unsafe { *(self.block as * mut * mut u8) };
+            self.block = unsafe { *(self.block as *mut *mut u8) };
             self.block = unsafe { self.block.offset(-1) };
             ret
         }
@@ -56,7 +54,7 @@ impl ThreadCacheBin {
     /// # Panic
     /// Panics if the `self.block_num < length`
     #[inline]
-    pub fn pop_list(&mut self, block: * mut u8, length: u32) {
+    pub fn pop_list(&mut self, block: *mut u8, length: u32) {
         if self.block_num < length {
             panic!("The block_num must be greater than or equal to the provided length");
         } else {
@@ -76,12 +74,9 @@ impl ThreadCacheBin {
     }
 }
 
-
-
-
 use crate::mem_info::MAX_SZ_IDX;
-use std::ptr::null_mut;
 use std::cell::RefCell;
+use std::ptr::null_mut;
 thread_local! {
     pub static thread_cache: RefCell<[ThreadCacheBin; MAX_SZ_IDX]> = RefCell::new([ThreadCacheBin {
         block: null_mut(),
