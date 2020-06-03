@@ -34,7 +34,7 @@ pub const PM_KEY_MASK: u64 = (1u64 << PM_SB as u64) - 1;
 /// implemented with a static array
 pub const SC_MASK: u64 = (1u64 << 6) - 1;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct PageInfo {
     desc: Option<*mut Descriptor>,
 }
@@ -56,7 +56,7 @@ impl From<&mut _PageInfo> for PageInfo {
     fn from(p: &mut _PageInfo) -> Self {
         unsafe {
             let internals = p._unused;
-            if let [0, 0] = internals {
+            if let [0, _] = internals {
                 p.info = PageInfo::default();
             }
 
@@ -65,11 +65,11 @@ impl From<&mut _PageInfo> for PageInfo {
     }
 }
 
-impl From<Atomic<_PageInfo>> for PageInfo {
-    fn from(a: Atomic<_PageInfo>) -> Self {
+impl From<&Atomic<_PageInfo>> for PageInfo {
+    fn from(a: &Atomic<_PageInfo>) -> Self {
         let mut temp = a.load(Ordering::Acquire);
         let copy = temp.clone();
-        let output = PageInfo::from(&mut output);
+        let output = PageInfo::from(&mut temp);
         a.compare_exchange(copy, temp, Ordering::Acquire, Ordering::Release);
         output
     }
@@ -134,20 +134,23 @@ pub const PM_SZ: u64 = (1u64 << PM_SB as u64)  * size_of::<PageInfo>() as u64;
 
 pub struct PageMap<'a> {
     mem_location: Option<*mut u8>,
-    page_map: &'a [Atomic<PageInfo>],
+    page_map: &'a [Atomic<_PageInfo>],
 }
+
 
 impl PageMap<'_> {
     pub fn init(&mut self) {
         println!("PM_NLS = {:?}", PM_NLS);
         println!("PM_NHS = {:?}", PM_NHS);
         println!("PM_SB = {:?}", PM_SB);
+        assert_eq!(size_of::<_PageInfo>(), size_of::<PageInfo>());
         println!("PageInfo size = {:?}", size_of::<PageInfo>());
         println!("PM_SZ = {:?}", PM_SZ);
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
             Ok(map) => {
-                let ptr = map as *mut MaybeUninit<Atomic<PageInfo>>;
+                let ptr = map as *mut Atomic<_PageInfo>;
+                /*
                 let slice_before =
                     unsafe {
                         let length = (1u64 << PM_SB as u64);
@@ -161,9 +164,11 @@ impl PageMap<'_> {
                     }
                     // *place = MaybeUninit::new(Atomic::new(PageInfo::default()));
                 }
+
+                 */
                 let slice =
                     unsafe {
-                        &mut *slice_from_raw_parts_mut(ptr as *mut Atomic<PageInfo>, (1u64 << PM_SB as u64) as usize)
+                        &mut *slice_from_raw_parts_mut(ptr as *mut Atomic<_PageInfo>, (1u64 << PM_SB as u64) as usize)
                     };
 
                 self.page_map = slice;
@@ -204,7 +209,8 @@ impl PageMap<'_> {
             unsafe { self.commit_page(self.mem_location.unwrap() as *mut u8, key) };
         }
         let ptr = &self.page_map[key];
-        ptr.load(Ordering::Acquire)
+        let info: PageInfo = ptr.into();
+        info
     }
 
     #[inline]
@@ -214,7 +220,7 @@ impl PageMap<'_> {
             unsafe { self.commit_page(self.mem_location.unwrap() as *mut u8, key) };
         }
         let ptr = &self.page_map[key];
-        ptr.store(info, Ordering::Release);
+        ptr.store(info.into(), Ordering::Release);
     }
 
     #[inline]
@@ -223,7 +229,8 @@ impl PageMap<'_> {
         let i = (ptr as usize >> PM_KEY_SHIFT);
         println!("i: {:x?}", i);
         println!("KEY_MASK: {:x?}", PM_KEY_MASK);
-        let key = (i - (self.mem_location.unwrap() as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
+        let mem_loc = self.mem_location.unwrap();
+        let key = (i - (mem_loc as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
         println!("key: {:?}", key);
         key
     }
@@ -262,11 +269,15 @@ pub static mut S_PAGE_MAP: PageMap = PageMap {
 #[cfg(test)]
 mod test {
     use crate::page_map::{_PageInfo, PageInfo};
+    use atomic::Atomic;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn page_info_union_behavior() {
-        let mut un = _PageInfo { _unused : [0, 0]};
-        let changed = PageInfo::from(&mut un);
-
+        let mut un = Atomic::new(_PageInfo { _unused : [0, 0]});
+        let changed = PageInfo::from(&un);
+        unsafe {
+            assert_eq!(changed, un.load(Ordering::Acquire).info)
+        }
     }
 }

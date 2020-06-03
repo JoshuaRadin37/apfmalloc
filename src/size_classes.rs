@@ -24,11 +24,12 @@ pub fn get_size_class(size: usize) -> usize {
 
 pub unsafe fn init_size_class() {
     // Get the number of blocks in the superblocks to be correct
-    for sc_index in 1..MAX_SZ_IDX {
+    let i = MAX_SZ_IDX;
+    for sc_index in 1..i {
         let sc = &mut SIZE_CLASSES[sc_index];
         let block_size = sc.block_size;
         let mut sb_size = sc.sb_size;
-        if sb_size > block_size && sb_size % block_size == 0 {
+        if sb_size > block_size && (sb_size % block_size == 0) {
             continue;
         }
 
@@ -123,7 +124,6 @@ macro_rules! size_classes {
             $crate::sc!(38, 13, 11, 3, no, yes, 7, no),
         ]
     };
-    (internal) => {};
 }
 
 pub static mut SIZE_CLASSES: [SizeClassData; MAX_SZ_IDX] = size_classes!();

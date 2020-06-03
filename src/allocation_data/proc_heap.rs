@@ -24,6 +24,14 @@ impl ProcHeap {
         }
     }
 
+    pub fn new_none(size_class_index: usize) -> Self {
+        let ptr = Atomic::new(None);
+        ProcHeap {
+            partial_list: ptr,
+            size_class_index,
+        }
+    }
+
     pub fn get_size_class_index(&self) -> usize {
         self.size_class_index
     }
@@ -96,8 +104,9 @@ unsafe fn init_heaps() {
         .expect("Should be able to get the map");
     let ptr = map.as_mut_ptr() as *mut MaybeUninit<ProcHeap>;
     let slice = &mut *slice_from_raw_parts_mut(ptr, MAX_SZ_IDX);
-    for proc in slice.into_iter() {
-        *proc = MaybeUninit::new(ProcHeap::default())
+
+    for (index, proc) in slice.into_iter().enumerate() {
+        *proc = MaybeUninit::new(ProcHeap::new_none( index))
     }
     HEAPS = Heaps(MaybeUninit::new(map))
 }
