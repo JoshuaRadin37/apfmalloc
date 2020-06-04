@@ -49,7 +49,7 @@ impl PartialEq for MemoryOrFreePointer {
     }
 }
 
-pub const INITIAL_PAGES: usize = 128;
+pub const INITIAL_PAGES: usize = 8;
 const MIN_MAP_ALLOCATION_SIZE: usize = 1 << 14;
 
 impl PageInfoHolder {
@@ -426,7 +426,7 @@ impl Debug for PageInfoHolder {
                         self.internals.as_ref().unwrap().as_ptr() as *const MemoryOrFreePointer,
                         self.capacity,
                     )).iter()
-                        .map(|mem| format!("{:?}: {:?}", self.get_index_from_pointer(mem as *const MemoryOrFreePointer).unwrap(), mem))
+                        .map(|mem| format!("{:?}: {:?}", self.get_index_from_pointer(mem as *const MemoryOrFreePointer), mem))
                         .collect::<Vec<String>>()
                         .join(", ")
                 }
@@ -458,16 +458,16 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, io::Error> {
     }
 
     unsafe {
-        println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
+        //println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
         if PAGE_HOLDER_INIT.compare_and_swap(false, true, Ordering::AcqRel) == false {
-            println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
-            print!("page alloc initializing the page holder...");
+            // println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
+            //print!("page alloc initializing the page holder...");
             PAGE_HOLDER.init();
-            println!(" done");
+            //println!(" done");
         }
 
         while PAGE_HOLDER.capacity == 0 {
-            println!("Waiting for PAGE_HOLDER...")
+            //println!("Waiting for PAGE_HOLDER...")
         }
         PAGE_HOLDER.alloc(size)
     }
@@ -546,12 +546,12 @@ mod test {
         }
 
         #[test]
-        #[ignore]
+        //#[ignore]
         fn grows() {
             // get_page();
 
             unsafe {
-                for _i in 0..(INITIAL_PAGES * 2) {
+                for _i in 0..(INITIAL_PAGES * 2).max(128) {
                     println!("{:?}", PAGE_HOLDER);
                     println!("Allocating page {:?}", _i);
                     page_alloc(4096).unwrap();

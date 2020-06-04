@@ -1,7 +1,7 @@
 use crate::allocation_data::{
     get_heaps, Anchor, Descriptor, DescriptorNode, ProcHeap, SuperBlockState,
 };
-use crate::mem_info::PAGE_MASK;
+use crate::mem_info::{PAGE_MASK, PAGE};
 use crate::page_map::{PageInfo, S_PAGE_MAP};
 use crate::size_classes::SIZE_CLASSES;
 use crate::thread_cache::ThreadCacheBin;
@@ -316,8 +316,8 @@ pub fn update_page_map(
         0,
         "sb_size must be a multiple of a page"
     );
-    for index in 0..sb_size {
-        unsafe { S_PAGE_MAP.set_page_info(ptr.offset(index as isize), info.clone()) }
+    for index in 0..(sb_size / PAGE as u32) {
+        unsafe { S_PAGE_MAP.set_page_info(ptr.offset((index * PAGE as u32) as isize), info.clone()) }
     }
 }
 

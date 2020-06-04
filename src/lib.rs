@@ -146,6 +146,7 @@ mod tests {
     use super::*;
     use crate::allocation_data::get_heaps;
     use bitfield::size_of;
+    use winapi::_core::mem::MaybeUninit;
 
     #[test]
     fn heaps_valid() {
@@ -155,9 +156,9 @@ mod tests {
 
     #[test]
     fn malloc_and_free() {
-        let ptr = unsafe { &mut *(super::do_malloc(size_of::<usize>()) as *mut usize) };
-        *ptr = 8;
-        assert_eq!(ptr, &8); // should be trivial
-        do_free(ptr as *mut usize);
+        let ptr = unsafe { &mut *(super::do_malloc(size_of::<usize>()) as *mut MaybeUninit<usize>) };
+        *ptr = MaybeUninit::new(8);
+        assert_eq!(& unsafe { *(ptr as * const MaybeUninit<usize> as * const u8) }, &8); // should be trivial
+        do_free(ptr as *mut MaybeUninit<usize>);
     }
 }

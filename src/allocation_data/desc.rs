@@ -167,6 +167,7 @@ impl Descriptor {
                     }
                      */
                     *avail = new_head;
+                    return desc;
                 }
                 None => {
                     let ptr = page_alloc(DESCRIPTOR_BLOCK_SZ)
