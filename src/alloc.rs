@@ -47,7 +47,20 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
     let heap = desc.proc_heap;
     let list = unsafe { &(*heap).partial_list };
 
-    let old_head = list.load(Ordering::Acquire).unwrap();
+    let mut replace: bool = false;
+    let old_head = match list.load(Ordering::Acquire) {
+        None => {
+            let mut node = DescriptorNode::new();
+            node.set(desc, 0);
+            replace = true;
+            node
+        },
+        Some(list) => {
+            list
+        },
+    };
+
+    // let old_head = list.load(Ordering::Acquire).unwrap();
     let mut new_head = DescriptorNode::default();
 
     loop {
@@ -61,7 +74,10 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
             Some(desc) => desc.next_partial.store(old_head, Ordering::SeqCst),
         }
 
-        if list
+        if replace {
+            list.store(Some(new_head), Ordering::Acquire);
+            break;
+        }else if list
             .compare_exchange_weak(
                 Some(old_head),
                 Some(new_head),
@@ -192,6 +208,7 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
+    println!("Flushing Cache");
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
@@ -206,6 +223,8 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let mut tail = head;
         let info = get_page_info_for_ptr(head);
         let desc = unsafe { &mut *info.get_desc().expect("Could not find descriptor") };
+        println!("Descriptor: {:?}", desc);
+        println!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
         let super_block = desc.super_block;
 

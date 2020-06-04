@@ -11,7 +11,7 @@ use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 
 #[repr(packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct DescriptorNode {
     desc: Option<*mut Descriptor>,
 }
@@ -72,6 +72,7 @@ impl From<*mut Descriptor> for DescriptorNode {
 /// needs to be cache aligned
 /// Descriptors are never freed, and should be statically allocated
 #[repr(align(64))]
+#[derive(Debug)]
 pub struct Descriptor {
     pub next_free: Atomic<DescriptorNode>,
     pub next_partial: Atomic<DescriptorNode>,
