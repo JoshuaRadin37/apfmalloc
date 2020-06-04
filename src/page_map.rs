@@ -158,12 +158,12 @@ pub struct PageMap<'a> {
 
 impl PageMap<'_> {
     pub fn init(&mut self) {
-        println!("PM_NLS = {:?}", PM_NLS);
-        println!("PM_NHS = {:?}", PM_NHS);
-        println!("PM_SB = {:?}", PM_SB);
+        //println!("PM_NLS = {:?}", PM_NLS);
+        // println!("PM_NHS = {:?}", PM_NHS);
+        // println!("PM_SB = {:?}", PM_SB);
         assert_eq!(size_of::<_PageInfo>(), size_of::<PageInfo>());
-        println!("PageInfo size = {:?}", size_of::<PageInfo>());
-        println!("PM_SZ = {:?}", PM_SZ);
+        // println!("PageInfo size = {:?}", size_of::<PageInfo>());
+        // println!("PM_SZ = {:?}", PM_SZ);
         let map = page_alloc_over_commit(PM_SZ as usize);
         match map {
             Ok(map) => {

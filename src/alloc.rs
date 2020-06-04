@@ -208,7 +208,7 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
-    println!("Flushing Cache");
+    // println!("Flushing Cache");
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
@@ -223,8 +223,8 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let mut tail = head;
         let info = get_page_info_for_ptr(head);
         let desc = unsafe { &mut *info.get_desc().expect("Could not find descriptor") };
-        println!("Descriptor: {:?}", desc);
-        println!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
+        // println!("Descriptor: {:?}", desc);
+        // println!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
         let super_block = desc.super_block;
 

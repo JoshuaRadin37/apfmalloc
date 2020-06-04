@@ -32,7 +32,7 @@ extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-static mut MALLOC_INIT: bool = false;
+pub static mut MALLOC_INIT: bool = false;
 
 unsafe fn init_malloc() {
     MALLOC_INIT = true;

@@ -4,15 +4,17 @@ use memmap::{MmapMut, MmapOptions};
 use std::io::ErrorKind;
 use std::os::raw::c_void;
 
-use atomic::Ordering;
+use atomic::{Ordering, Atomic};
 use bitfield::fmt::{Debug, Display, Formatter};
 use std::mem::MaybeUninit;
 use std::ptr::{null, null_mut, replace, slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::{AtomicBool, AtomicPtr};
 use std::{fmt, io};
 use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
-use crate::pages::MemoryOrFreePointer::Pointer;
+use crate::pages::MemoryOrFreePointer::Free;
 use std::ops::Deref;
+use crate::alloc::get_page_info_for_ptr;
+use spin::MutexGuard;
 
 mod external_mem_reservation;
 
@@ -25,7 +27,7 @@ struct PageInfoHolder {
     internals: Option<MmapMut>,
     count: usize,
     capacity: usize,
-    head: AtomicPtr<MemoryOrFreePointer>,
+    head: Option<usize>,
     lock: AtomicBool,
 }
 
@@ -33,7 +35,7 @@ struct PageInfoHolder {
 enum MemoryOrFreePointer {
     Map(MmapMut),
     Segment(Segment),
-    Pointer(*mut MemoryOrFreePointer),
+    Free { next: Option<usize> },
 }
 
 impl PartialEq for MemoryOrFreePointer {
@@ -41,13 +43,13 @@ impl PartialEq for MemoryOrFreePointer {
         use MemoryOrFreePointer::*;
         match (self, other) {
             (Map(map1), Map(map2)) => map1.as_ptr() == map2.as_ptr(),
-            (Pointer(ptr1), Pointer(ptr2)) => ptr1 == ptr2,
+            (Free { next: ptr1 }, Free { next: ptr2 }) => ptr1 == ptr2,
             _ => false,
         }
     }
 }
 
-pub const INITIAL_PAGES: usize = 16;
+pub const INITIAL_PAGES: usize = 128;
 const MIN_MAP_ALLOCATION_SIZE: usize = 1 << 14;
 
 impl PageInfoHolder {
@@ -56,13 +58,15 @@ impl PageInfoHolder {
             internals: None,
             count: 0,
             capacity: 0,
-            head: AtomicPtr::new(null_mut()),
+            head: None,
             lock: AtomicBool::new(false),
         }
     }
 
     fn grab(&mut self) {
-        while !self.lock.compare_and_swap(false, true, Ordering::Acquire) {}
+        while self.lock.compare_and_swap(false, true, Ordering::Acquire) {
+
+        }
     }
 
     fn release(&mut self) {
@@ -78,7 +82,7 @@ impl PageInfoHolder {
             internals: Some(mmap_mut),
             count: 0,
             capacity: 0,
-            head: AtomicPtr::new(null_mut()),
+            head: None,
             lock: AtomicBool::new(false),
         };
         let ptr = self.internals.as_mut().unwrap().as_mut_ptr();
@@ -87,6 +91,7 @@ impl PageInfoHolder {
             self.initialize_slice(head);
         }
         self.capacity = capacity;
+
         //println!("PageInfoHolder initialized to {:?}", self);
         self.release();
     }
@@ -115,69 +120,91 @@ impl PageInfoHolder {
     }
 
     unsafe fn initialize_slice(&mut self, slice: &mut [u8]) {
-        let mut prev = if self.capacity == 0 {
-            null_mut()
-        } else {
-            self.head.load(Ordering::Acquire)
-        };
+        let mut prev = self.head;
         let size = Self::get_space_within(slice);
         let slice = &mut *slice_from_raw_parts_mut(
             slice.as_mut_ptr() as *mut MaybeUninit<MemoryOrFreePointer>,
             size,
         );
-        for map_or_pointer in slice.into_iter().rev() {
+        let mut first = true;
+        // let mut first_index = None;
+        for (index, map_or_pointer) in slice.into_iter().enumerate().rev() {
             //std::mem::swap(map_or_pointer,&mut ;
             //*map_or_pointer =
-            *map_or_pointer = MaybeUninit::new(MemoryOrFreePointer::Pointer(prev));
+            *map_or_pointer = MaybeUninit::new(MemoryOrFreePointer::Free { next: prev });
             let ptr = map_or_pointer as *mut MaybeUninit<MemoryOrFreePointer>;
             let ptr = ptr as *mut MemoryOrFreePointer;
             //map_or_pointer.write();
-            prev = ptr;
+            if first {
+                prev = Some(index + self.capacity);
+                first = false;
+                // first_index = Some(index + self.capacity);
+            } else {
+                prev = Some(prev.unwrap() - 1);
+            }
         }
         let slice =
             &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut MemoryOrFreePointer, size);
         // println!("{:?}", slice);
 
         {
-            if let Pointer(next_ptr) = slice.last_mut().unwrap() {
-                let old_head = self.head.load(Ordering::Acquire);
+            if let Free { next: next_ptr } = slice.last_mut().unwrap() {
+                let old_head = self.head;
                 *next_ptr = old_head;
             }
         }
         let first = &mut slice[0];
 
-        self.head.store(first, Ordering::SeqCst);
+        self.head = Some(self.capacity);
+    }
+
+    pub fn get_index_from_pointer(&self, ptr: * const MemoryOrFreePointer) -> Option<usize> {
+        match &self.internals {
+            None => { None },
+            Some(map) => {
+                let base_ptr = & map[0] as *const u8 as usize;
+                if (ptr as usize) < base_ptr {
+                    None
+                } else {
+                    let i = (ptr as usize - base_ptr) / std::mem::size_of::<MemoryOrFreePointer>();
+                    if i < self.capacity {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                }
+            },
+        }
     }
 
     fn grow(&mut self) {
-        self.grab();
+        // self.grab();
         let new_capacity = *self.get_capacity() * 2;
         let size = Self::size_for_capacity(new_capacity);
         let mut map = MmapMut::map_anon(size).expect("Should create");
-        let prev_index = (self.head.load(Ordering::Acquire) as usize
-            - (&self.internals.as_ref().unwrap()[0] as * const u8) as usize) / std::mem::size_of::<MemoryOrFreePointer>();
+        let prev_index = self.head.unwrap();
         let slice = &mut map.as_mut()[..Self::size_for_capacity(*self.get_capacity())];
         slice.copy_from_slice(&*self.internals.as_mut().unwrap());
-        self.head.store(unsafe { (&mut map[0] as *mut u8 as * mut MemoryOrFreePointer).offset(prev_index as isize)}, Ordering::Release);
+        self.head = Some(prev_index); //self.get_index_from_pointer(unsafe { (&mut map[0] as *mut u8 as * mut MemoryOrFreePointer).offset(prev_index as isize)}) ;
         let uninit = &mut map.as_mut()[Self::size_for_capacity(*self.get_capacity())..];
         unsafe {
             self.initialize_slice(uninit);
         }
         self.internals = Some(map);
         self.capacity = new_capacity;
-        self.release();
+        // self.release();
     }
 
     pub fn alloc(&mut self, size: usize) -> Result<*mut u8, io::Error> {
+        self.grab();
         if self.count == self.capacity - 1 {
-            println!("Growing Page Holder");
+            // println!("Growing Page Holder");
             self.grow();
         }
-        self.grab();
-        println!("Beginning Alloc Page");
-        println!("Before: {:?}", self);
-        if self.head.load(Ordering::Acquire).is_null() {
-            panic!("Head is null when it shouldn't be");
+        // println!("Beginning Alloc Page");
+        // println!("Before: {:?}", self);
+        if self.head.is_none() {
+            // panic!("Head is none when it shouldn't be");
         }
 
         let (memory, ptr) = {
@@ -198,37 +225,55 @@ impl PageInfoHolder {
             }
         };
         unsafe {
-            let head = &mut *self.head.load(Ordering::SeqCst);
-            if let MemoryOrFreePointer::Pointer(prev_pointer) = head {
-                if prev_pointer.is_null() {
+            let head = self.head;
+            if let MemoryOrFreePointer::Free { next: prev_pointer } = self.get_at_index(head.unwrap()).unwrap() {
+                if prev_pointer.is_none() {
                     panic!("Previous pointer should not be null");
                 }
-                println!("Previous pointer: {:x?}", *prev_pointer);
-                self.head.store(*prev_pointer, Ordering::SeqCst);
+                // println!("Previous pointer: {:x?}", *prev_pointer);
+                self.head = *prev_pointer;
+                // self.head.store(*prev_pointer, Ordering::SeqCst);
             } else {
-                eprintln!("Head is {:?}", head);
+                // eprintln!("Head is {:?}", head);
                 panic!("No more space in page container")
             }
-            *head = memory;
-            assert_ne!(&mut *self.head.load(Ordering::Acquire), head, "Head should not be the same");
+            *self.get_at_index(head.unwrap()).unwrap() = memory;
+            assert_ne!(self.head, head, "Head should not be the same");
             self.count += 1;
         }
 
-        println!("After: {:?}", self);
-        println!("Finished Alloc Page");
+        // println!("After: {:?}", self);
+        // println!("Finished Alloc Page");
         self.release();
         Ok(ptr)
     }
 
+    fn get_at_index(&self, index: usize) -> Option<& mut MemoryOrFreePointer> {
+        match &self.internals {
+            None => { None },
+            Some(map) => {
+                let ptr = &map[0] as * const u8 as * mut MemoryOrFreePointer;
+                if index >= self.capacity {
+                    None
+                } else {
+                    unsafe {
+                        Some(&mut *ptr.offset(index as isize))
+                    }
+                }
+            },
+        }
+    }
+
     pub fn alloc_overcommit(&mut self, size: usize) -> Result<*mut u8, io::Error> {
+        self.grab();
         if self.count == self.capacity - 1 {
-            println!("Growing Page Holder");
+            // println!("Growing Page Holder");
             self.grow();
         }
-        self.grab();
-        println!("Beginning Alloc Page");
-        println!("Before: {:?}", self);
-        if self.head.load(Ordering::SeqCst).is_null() {
+
+        // println!("Beginning Alloc Page");
+        // println!("Before: {:?}", self);
+        if self.head.is_none() {
             panic!("Head is null when it shouldn't be");
         }
 
@@ -240,21 +285,23 @@ impl PageInfoHolder {
             (combo, ptr)
         };
         unsafe {
-            let head = &mut *self.head.load(Ordering::SeqCst);
-            if let MemoryOrFreePointer::Pointer(prev_pointer) = head {
-                if prev_pointer.is_null() {
+            let head = self.head.unwrap();
+            if let MemoryOrFreePointer::Free { next: prev_pointer } = self.get_at_index(head).unwrap() {
+                if prev_pointer.is_none() {
                     panic!("Previous pointer should not be null");
                 }
-                self.head.store(*prev_pointer, Ordering::SeqCst);
+                self.head = *prev_pointer;
+                // self.head.store(*prev_pointer, Ordering::SeqCst);
             } else {
                 panic!("No more space in page container")
             }
-            *head = memory;
+            *self.get_at_index(head).unwrap() = memory;
+            //*head = memory;
             self.count += 1;
         }
 
-        println!("After: {:?}", self);
-        println!("Finished Alloc Page");
+        // println!("After: {:?}", self);
+        // println!("Finished Alloc Page");
         self.release();
         Ok(ptr)
     }
@@ -262,7 +309,7 @@ impl PageInfoHolder {
     pub fn dealloc(&mut self, page_ptr: *const u8) -> bool {
         self.grab();
         let prev = {
-            self.head.load(Ordering::Acquire).clone()
+            self.head.clone()
         };
         let mut found_mem = None;
         let new_head =
@@ -282,18 +329,20 @@ impl PageInfoHolder {
                                 break;
                             }
                         },
-                        MemoryOrFreePointer::Pointer(_) => {}
+                        MemoryOrFreePointer::Free { next: _ } => {
+
+                        }
                     }
                 }
 
                 let output = match found_mem {
                     None => return false,
                     Some(page) => {
-                        println!("De-allocating a page");
+                        // println!("De-allocating a page");
 
                         unsafe {
                             // Now will definitely drop the map
-                            let mem = std::ptr::replace(page, MemoryOrFreePointer::Pointer(prev));
+                            let mem = std::ptr::replace(page, MemoryOrFreePointer::Free { next: prev });
                             if let MemoryOrFreePointer::Segment(segment) = mem {
                                 // deallocate the segment
                                 SEGMENT_ALLOCATOR.deallocate(segment);
@@ -306,31 +355,31 @@ impl PageInfoHolder {
                 };
                 output
             };
-        self.head.store(new_head, Ordering::Release);
+        self.head = self.get_index_from_pointer(new_head);
         self.count -= 1;
-        println!("{:?}", self);
+        // println!("{:?}", self);
         self.release();
         true
     }
 
     #[cfg(test)]
     pub fn show_free_list(&self) {
-        let head = self.head.load(Ordering::Acquire);
+        let head = self.head;
         unsafe {
-            println!("Head: {:?}", head);
+            // println!("Head: {:?}", head);
             let mut ptr = head;
             loop {
 
 
-                if ptr.is_null() {
-                    println!("done");
+                if ptr.is_none() {
+                    // println!("done");
                     break;
                 } else {
-                    println!("{:?} ->", ptr);
+                    // println!("{:?} ->", ptr);
                 }
 
-                if let Pointer(next) = *ptr {
-                    ptr = next;
+                if let Some(Free { next: next }) = self.get_at_index(ptr.unwrap()) {
+                    ptr = *next;
                 } /*else {
                     panic!("Free list inconsistent")
                 } */
@@ -339,20 +388,20 @@ impl PageInfoHolder {
         }
     }
 
-    pub fn get_free_list(&self) -> Vec<* mut MemoryOrFreePointer>{
+    pub fn get_free_list(&self) -> Vec<Option<usize>>{
         let mut output = vec![];
-        let head = self.head.load(Ordering::Acquire);
+        let head = self.head;
 
         unsafe {
             let mut ptr = head;
             loop {
                 output.push(ptr);
-                if ptr.is_null() {
+                if ptr.is_none() {
                     break;
                 }
 
-                if let Pointer(next) = *ptr {
-                    ptr = next;
+                if let Some(Free { next: next }) = self.get_at_index(ptr.unwrap()) {
+                    ptr = *next;
                 } else {
                     panic!("Free list inconsistent")
                 }
@@ -377,7 +426,7 @@ impl Debug for PageInfoHolder {
                         self.internals.as_ref().unwrap().as_ptr() as *const MemoryOrFreePointer,
                         self.capacity,
                     )).iter()
-                        .map(|mem| format!("{:?}: {:?}", mem as *const MemoryOrFreePointer, mem))
+                        .map(|mem| format!("{:?}: {:?}", self.get_index_from_pointer(mem as *const MemoryOrFreePointer).unwrap(), mem))
                         .collect::<Vec<String>>()
                         .join(", ")
                 }
@@ -433,16 +482,16 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, io::Error> {
     }
 
     unsafe {
-        println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
+        // println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
         if PAGE_HOLDER_INIT.compare_and_swap(false, true, Ordering::AcqRel) == false {
-            println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
-            print!("page alloc initializing the page holder...");
+            // println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
+            // print!("page alloc initializing the page holder...");
             PAGE_HOLDER.init();
-            println!(" done");
+            // println!(" done");
         }
 
         while PAGE_HOLDER.capacity == 0 {
-            println!("Waiting for PAGE_HOLDER...")
+            // println!("Waiting for PAGE_HOLDER...")
         }
         PAGE_HOLDER.alloc_overcommit(size)
     }
@@ -477,37 +526,41 @@ mod test {
         }
     }
 
-    #[test]
-    fn deallocate() {
+    mod safety {
+        use super::*;
 
-        for _ in 0..8 {
-            let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
-            page_alloc(4096).expect("Couldn't get page") as *mut usize; // double it up
-            unsafe {
-                *ptr = 0xdeadbeaf;
-                PAGE_HOLDER.show_free_list();
-                assert!(PAGE_HOLDER.dealloc(ptr as *const u8));
-                // uncommenting this causes a fault
-                // *ptr = 0xdeadbeaf;
-                PAGE_HOLDER.show_free_list();
+        #[test]
+        fn deallocate() {
+            for _ in 0..8 {
+                let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
+                page_alloc(4096).expect("Couldn't get page") as *mut usize; // double it up
+                unsafe {
+                    *ptr = 0xdeadbeaf;
+                    PAGE_HOLDER.show_free_list();
+                    assert!(PAGE_HOLDER.dealloc(ptr as *const u8));
+                    // uncommenting this causes a fault
+                    // *ptr = 0xdeadbeaf;
+                    PAGE_HOLDER.show_free_list();
+                }
             }
-
         }
-    }
 
-    #[test]
-    fn grows() {
-        // get_page();
+        #[test]
+        #[ignore]
+        fn grows() {
+            // get_page();
 
-        unsafe {
-            for _i in 0..(INITIAL_PAGES * 2) {
-                println!("{:?}", PAGE_HOLDER);
-                println!("Allocating page {:?}", _i);
-                page_alloc(4096).unwrap();
+            unsafe {
+                for _i in 0..(INITIAL_PAGES * 2) {
+                    println!("{:?}", PAGE_HOLDER);
+                    println!("Allocating page {:?}", _i);
+                    page_alloc(4096).unwrap();
+                    PAGE_HOLDER.show_free_list();
+                }
+
+                assert!(PAGE_HOLDER.count >= INITIAL_PAGES * 2);
+                assert!(unsafe { PAGE_HOLDER.capacity } > INITIAL_PAGES * 2)
             }
-
-            assert!(PAGE_HOLDER.count >= INITIAL_PAGES * 2);
-            assert!(unsafe { PAGE_HOLDER.capacity } > INITIAL_PAGES * 2)
         }
     }
 }
