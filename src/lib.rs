@@ -100,7 +100,12 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 
     if !*thread_localized.lock() && use_bootstrap() {
         unsafe {
-            bootstrap_cache.as_mut_ptr()
+            let cache = &mut bootstrap_cache[size_class_index];
+            if cache.get_block_num() == 0 {
+                fill_cache(size_class_index, cache);
+            }
+
+            cache.pop_block()
         }
     } else {
         set_use_bootstrap(true);
@@ -149,7 +154,19 @@ pub fn do_free<T>(ptr: *const T) {
             desc.retire();
         }
         Some(size_class_index) => {
-             thread_cache::thread_cache.with(|tcache| {
+            if use_bootstrap() {
+                unsafe {
+                    let cache = &mut bootstrap_cache[size_class_index];
+                    let sc = &SIZE_CLASSES[size_class_index];
+
+                    if cache.get_block_num() >= sc.cache_block_num {
+                        flush_cache(size_class_index, cache);
+                    }
+
+                    cache.push_block(ptr as *mut u8);
+                }
+            } else {
+                thread_cache::thread_cache.with(|tcache| {
                     let cache = &mut tcache.borrow_mut()[size_class_index];
                     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
@@ -159,7 +176,7 @@ pub fn do_free<T>(ptr: *const T) {
 
                     cache.push_block(ptr as *mut u8);
                 })
-
+            }
         },
     }
 }
