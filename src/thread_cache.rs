@@ -1,7 +1,7 @@
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
-    block: *mut u8,
-    block_num: u32,
+    pub(crate) block: *mut u8,
+    pub(crate) block_num: u32,
 }
 
 impl ThreadCacheBin {

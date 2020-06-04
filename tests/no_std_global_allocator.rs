@@ -1,7 +1,12 @@
-use std::alloc::GlobalAlloc;
-use std::alloc::Layout;
+#![no_std]
+
+
+use core::alloc::{GlobalAlloc, Layout};
 use lralloc_rs::{do_malloc, do_free};
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 
 struct Dummy;
 
@@ -19,9 +24,6 @@ unsafe impl GlobalAlloc for Dummy {
 }
 
 #[test]
-fn global_allocator() {
-
-    let _vec = vec![1, 2, 3, 4];
-
-
+fn no_std_global_allocator() {
+    let _vec = Vec::<usize>::with_capacity(8);
 }

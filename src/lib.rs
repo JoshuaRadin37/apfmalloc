@@ -15,6 +15,8 @@ use crate::alloc::{
 use crate::pages::{page_alloc, page_free};
 use atomic::{Atomic, Ordering};
 use spin::Mutex;
+use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache};
+use std::cell::RefCell;
 
 #[macro_use]
 pub mod macros;
@@ -26,6 +28,7 @@ mod pages;
 mod size_classes;
 mod thread_cache;
 mod no_heap_mutex;
+mod bootstrap;
 
 #[macro_use]
 extern crate bitfield;
@@ -64,6 +67,8 @@ unsafe fn thread_local_init_malloc() {
 }
 
 pub fn do_malloc(size: usize) -> *mut u8 {
+    static thread_localized: Mutex<bool> = Mutex::new(false);
+    static do_thread_bootstrap: Mutex<bool> = Mutex::new(false);
     unsafe {
         if !MALLOC_INIT {
             init_malloc();
@@ -91,14 +96,29 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-    thread_cache::thread_cache.with(|tcache| {
-        let cache = &mut tcache.borrow_mut()[size_class_index];
-        if cache.get_block_num() == 0 {
-            fill_cache(size_class_index, cache);
-        }
+    //thread_cache::thread_init.
 
-        cache.pop_block()
-    })
+    if !*thread_localized.lock() && use_bootstrap() {
+        unsafe {
+            bootstrap_cache.as_mut_ptr()
+        }
+    } else {
+        set_use_bootstrap(true);
+        thread_cache::thread_cache.with(|tcache| {
+            *thread_localized.lock() = true;
+            let cache = &mut tcache.borrow_mut()[size_class_index];
+            if cache.get_block_num() == 0 {
+                fill_cache(size_class_index, cache);
+            }
+
+
+            if use_bootstrap() {
+                set_use_bootstrap(false);
+            }
+
+            cache.pop_block()
+        })
+    }
 }
 
 fn is_power_of_two(x: usize) -> bool {
@@ -128,16 +148,19 @@ pub fn do_free<T>(ptr: *const T) {
             // retire the descriptor
             desc.retire();
         }
-        Some(size_class_index) => thread_cache::thread_cache.with(|tcache| {
-            let cache = &mut tcache.borrow_mut()[size_class_index];
-            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+        Some(size_class_index) => {
+             thread_cache::thread_cache.with(|tcache| {
+                    let cache = &mut tcache.borrow_mut()[size_class_index];
+                    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
-            if cache.get_block_num() >= sc.cache_block_num {
-                flush_cache(size_class_index, cache);
-            }
+                    if cache.get_block_num() >= sc.cache_block_num {
+                        flush_cache(size_class_index, cache);
+                    }
 
-            cache.push_block(ptr as *mut u8);
-        }),
+                    cache.push_block(ptr as *mut u8);
+                })
+
+        },
     }
 }
 

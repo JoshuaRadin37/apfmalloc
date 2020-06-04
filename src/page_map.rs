@@ -243,7 +243,7 @@ impl PageMap<'_> {
     #[inline]
     pub fn get_page_info<T>(&self, ptr: *const T) -> PageInfo {
         let key = self.addr_to_key(ptr);
-        println!("GET KEY: {:?}", key);
+        //println!("GET KEY: {:?}", key);
         let ptr = &self.page_map[key];
         #[cfg(windows)] {
             unsafe {
@@ -258,7 +258,7 @@ impl PageMap<'_> {
     #[inline]
     pub fn set_page_info<T>(&self, ptr: *const T, info: PageInfo) {
         let key = self.addr_to_key(ptr);
-        println!("SET KEY: {:?}", key);
+        //println!("SET KEY: {:?}", key);
         let ptr = &self.page_map[key];
         #[cfg(windows)] {
             unsafe {
