@@ -10,11 +10,11 @@ use std::mem::MaybeUninit;
 use atomic::Atomic;
 use atomic::Ordering;
 #[cfg(windows)] use winapi::shared::minwindef::LPVOID;
-use winapi::um::memoryapi::VirtualAlloc;
-use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
-use winapi::ctypes::c_void;
+#[cfg(windows)] use winapi::um::memoryapi::VirtualAlloc;
+#[cfg(windows)] use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
+#[cfg(windows)] use winapi::ctypes::c_void;
 use std::borrow::BorrowMut;
-use winapi::um::winuser::OffsetRect;
+#[cfg(windows)] use winapi::um::winuser::OffsetRect;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -181,7 +181,7 @@ impl PageMap<'_> {
 
     unsafe fn unsafe_set_page_info(&self, base_ptr : *mut MaybeUninit<Atomic<PageInfo>>, ptr: *mut MaybeUninit<Atomic<PageInfo>>, info:PageInfo) {
         let key = self.unsafe_addr_to_key(base_ptr, ptr);
-        if cfg!(windows) {
+        #[cfg(windows)] {
             let x = unsafe {  self.commit_page(base_ptr as *mut u8, key) };
             #[cfg(debug_assertions)]
             println!("Page allocating to: {:?}, Pointer: {:?}", x, ptr);
@@ -205,7 +205,7 @@ impl PageMap<'_> {
     #[inline]
     pub fn get_page_info<T>(&self, ptr: *const T) -> PageInfo {
         let key = self.addr_to_key(ptr);
-        if cfg!(windows) {
+        #[cfg(windows)] {
             unsafe { self.commit_page(self.mem_location.unwrap() as *mut u8, key) };
         }
         let ptr = &self.page_map[key];
@@ -216,7 +216,7 @@ impl PageMap<'_> {
     #[inline]
     pub fn set_page_info<T>(&self, ptr: *const T, info: PageInfo) {
         let key = self.addr_to_key(ptr);
-        if cfg!(windows) {
+        #[cfg(windows)] {
             unsafe { self.commit_page(self.mem_location.unwrap() as *mut u8, key) };
         }
         let ptr = &self.page_map[key];

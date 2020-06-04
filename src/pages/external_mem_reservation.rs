@@ -20,7 +20,7 @@ use std::fmt::{Error, Display};
 use crate::no_heap_mutex::NoHeapMutex;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
-use winapi::shared::minwindef::LPVOID;
+#[cfg(windows)] use winapi::shared::minwindef::LPVOID;
 
 #[derive(Debug)]
 pub struct Segment {
@@ -190,12 +190,18 @@ impl SegAllocator for SegmentAllocator {
 
 #[cfg(unix)]
 impl SegAllocator for SegmentAllocator {
-    fn allocate(&self, size: usize) -> Result<Segment, io::Error> {
-        unimplemented!()
+    fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
+        let mmap: *mut c_void = unsafe {
+            libc::mmap(null_mut(), size, libc::PROT_WRITE | libc::PROT_READ, libc::MAP_SHARED | libc::MAP_ANONYMOUS, -1, 0)
+        };
+        Ok(Segment::new(mmap, size))
     }
 
-    fn allocate_massive(&self, size: usize) -> Result<Segment, Error> {
-        unimplemented!()
+    fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
+        let mmap: *mut c_void = unsafe {
+            libc::mmap(null_mut(), size, libc::PROT_WRITE | libc::PROT_READ, libc::MAP_SHARED | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE, -1, 0)
+        };
+        Ok(Segment::new(mmap, size))
     }
 
 
