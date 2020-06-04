@@ -206,7 +206,9 @@ impl SegAllocator for SegmentAllocator {
 
 
     fn deallocate(&self, segment: Segment) -> bool {
-        unimplemented!()
+        unsafe {
+            libc::munmap(segment.ptr, segment.length) == 0
+        }
     }
 }
 
