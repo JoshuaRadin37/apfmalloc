@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::vec::Vec;
+use std::fmt;
 
 /*
     Event represents allocation or free operation
@@ -11,12 +12,22 @@ pub enum Event {
     Free(usize)
 }
 
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Alloc(u) => { write!(f, "a{}", u) }
+            Free(u) => { write!(f, "f{}", u) }
+        }
+    }
+}
+
 use crate::apf::trace::Event::*;
 
+#[derive(Debug)]
 pub struct Trace {
     accesses: Vec<Event>,
     length: usize,
-    allocCount: usize
+    alloc_count: usize
 }
 
 /*
@@ -28,7 +39,7 @@ impl Trace {
         Trace {
             accesses: Vec::new(),
             length: 0,
-            allocCount: 0
+            alloc_count: 0
         }
     }
 
@@ -37,14 +48,14 @@ impl Trace {
     }
 
     pub fn alloc_length(&self) -> usize {
-        self.allocCount
+        self.alloc_count
     }
 
     pub fn add(&mut self, add: Event) -> () {
         self.accesses.push(add);
         self.length += 1;
         match add {
-            Alloc(_) => { self.allocCount += 1; },
+            Alloc(_) => { self.alloc_count += 1; },
             Free(_) => {}
         };
     }
@@ -54,7 +65,7 @@ impl Trace {
         self.length += vec.len();
         for i in 0..vec.len() {
             match vec[i] {
-                Alloc(_) => { self.allocCount += 1; },
+                Alloc(_) => { self.alloc_count += 1; },
                 Free(_) => {}
             };
         }

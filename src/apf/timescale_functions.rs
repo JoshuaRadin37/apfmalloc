@@ -111,14 +111,14 @@ impl ReuseCounter {
 		self.n += 1;
 		match &self.trace {
 			Some(trace) => {
-				if self.n > self.burst_length {
+				if self.n >= self.burst_length {
 					self.reuse = Some(reuse(trace));
 					self.n = 0;
 					self.trace = None;
 				}
 			}
 			None => {
-				if self.n > self.hibernation_period {
+				if self.n >= self.hibernation_period {
 					self.n = 0;
 					self.trace = Some(Trace::new());
 				}
@@ -142,9 +142,6 @@ impl ReuseCounter {
 fn reuse(t: &Trace) -> HashMap<usize, f32> {
 	let intervals = t.free_intervals();
 	let n = t.alloc_length();
-	let len = t.length();
-
-	for i in 0..intervals.len() { println!("({}, {})", intervals[i].0, intervals[i].1); }
 
 	// Predicate terms
 	let mut start_index_counts = vec![0; n];			// s_i
@@ -168,10 +165,6 @@ fn reuse(t: &Trace) -> HashMap<usize, f32> {
 		end_indices_max_sums[len-1] += max(len, interval.1);
 	}
 
-	println!("{:?}", start_index_counts);
-	println!("{:?}", end_index_counts);
-	println!("{:?}", len_counts);
-
 	let mut start_index_n_k = vec![0; n];	// I(s_i >= (n-k))
 	let mut end_index_k_1 = vec![0; n];		// I(e_i <= k-1)
 	let mut len_l_k = vec![0; n];			// I(e_i - s_i <= k)
@@ -185,11 +178,6 @@ fn reuse(t: &Trace) -> HashMap<usize, f32> {
 		end_index_k_1[i] = end_index_k_1[i-1] + end_index_counts[i];
 		len_l_k[i] = len_l_k[i-1] + len_counts[i];
 	}
-
-	println!("{:?}", start_index_n_k);
-	println!("{:?}", end_index_k_1);
-	println!("{:?}", len_l_k);
-
 	let mut x = vec![0; n];	// X(i) = x[i-1]
 	let mut y = vec![0; n];	// Y(i) = y[i-1]
 	let mut z = vec![0; n];	// Z(i) = z[i-1]
@@ -197,8 +185,6 @@ fn reuse(t: &Trace) -> HashMap<usize, f32> {
 	x[0] = start_indices_sums[0];
 	y[0] = end_indices_sums[0];
 	z[0] = len_counts[0];
-
-	println!("{}: {}, {}, {}", 0, x[0], y[0], z[0]);
 
 	for i in 1..n {
 		let k = i+1;
@@ -240,6 +226,17 @@ mod test {
 	}
 
 	#[test]
+	fn test_reuse_counter() {
+		let mut rc = ReuseCounter::new(6, 18);
+		rc.alloc(1); rc.inc_timer(); rc.alloc(2); rc.inc_timer(); rc.free(1); rc.alloc(1); rc.inc_timer(); rc.free(2); rc.alloc(2); rc.inc_timer();
+		rc.free(1); rc.alloc(3); rc.inc_timer(); rc.alloc(1); rc.inc_timer();
+
+		rc.free(1); rc.free(3); rc.alloc(3); rc.inc_timer();
+
+		assert_eq!(rc.reuse(4), Some(7.0/3.0));
+	}
+
+	/* #[test]
 	fn test_reuse_function() {
 		let mut t = Trace::new();
 		t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
@@ -279,5 +276,5 @@ mod test {
 		let mut t = Trace::new();
 		t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
 		assert_eq!(*reuse(&t).get(&6).unwrap(), 3.0);
-	}
+	} */
 }
