@@ -66,7 +66,7 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
                 Some(old_head),
                 Some(new_head),
                 Ordering::Acquire,
-                Ordering::Release,
+                Ordering::Relaxed,
             )
             .is_ok()
         {
@@ -252,7 +252,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 
             if desc
                 .anchor
-                .compare_exchange_weak(old_anchor, new_anchor, Ordering::Acquire, Ordering::Release)
+                .compare_exchange_weak(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
                 .is_ok()
             {
                 break;
@@ -353,43 +353,43 @@ macro_rules! size_classes_match {
  */
 
 
-    ($name:ident, $diff:ident, sc($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:expr, $pgs:tt, $lg_delta_lookup:tt)) => {
+    ($name:ident, $diff:ident, $sc_index:expr, sc($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:expr, $pgs:tt, $lg_delta_lookup:tt)) => {
 
         #[allow(irrefutible)]
-        size_classes_match!(@ true, $name, $diff, found, (let mut found = false;), sc($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup))
+        size_classes_match!(@ true, $name, $diff, $sc_index, found, (let mut found = false;), sc($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup))
 
     };
-    ($name:ident, $diff:ident, sc($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:expr, $pgs:tt, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
+    ($name:ident, $diff:ident, $sc_index:expr, sc($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:expr, $pgs:tt, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
 
-        size_classes_match!(@ true, $name, $diff, found, (let mut found = false;), sc($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup) $(, sc($($args),*))*)
+        size_classes_match!(@ true, $name, $diff, $sc_index, found, (let mut found = false;), sc($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup) $(, sc($($args),*))*)
 
     };
 
-    (@ true, $name:ident, $diff:ident, $found:ident, ($($output:tt)*), sc ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:tt, $pgs:expr, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
-        size_classes_match!(@ false, $name, $diff, $found, (
+    (@ true, $name:ident, $diff:ident, $sc_index:expr, $found:ident, ($($output:tt)*), sc ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:tt, $pgs:expr, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
+        size_classes_match!(@ false, $name, $diff, $sc_index, $found, (
              $($output)*
              {
                  let (index_g, block_size) = size_classes_match!(@ sc ($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup));
-                 if $name == index_g {
+                 if $sc_index == index_g {
                         $name = $diff / block_size;
                         $found = true;
                  }
             }
         ) $(, sc($($args),*))* )
     };
-    (@ false, $name:ident, $diff:ident, $found:ident, ($($output:tt)*), sc ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:tt, $pgs:expr, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
-        size_classes_match!(@ false, $name, $diff, $found, (
+    (@ false, $name:ident, $diff:ident, $sc_index:expr, $found:ident, ($($output:tt)*), sc ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:tt, $bin:tt, $pgs:expr, $lg_delta_lookup:tt) $(, sc($($args:tt),*))*) => {
+        size_classes_match!(@ false, $name, $diff, $sc_index, $found, (
              $($output)*
              if !$found {
              let (index_g, block_size) = size_classes_match!(@ sc ($index, $lg_grp, $lg_delta, $ndelta, $psz, $bin, $pgs, $lg_delta_lookup));
-                if $name == index_g {
+                if $sc_index == index_g {
                     $name = $diff / block_size;
                     $found = true;
                 }
              }
         ) $(, sc($($args),*))* )
     };
-    (@ $val:expr, $name: ident, $diff: ident, $found:ident, ($($arms:tt)*)) => {
+    (@ $val:expr, $name: ident, $diff: ident, $sc_index:expr, $found:ident, ($($arms:tt)*)) => {
         {
             $($arms)*
             if !$found {
@@ -417,6 +417,7 @@ pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usi
     let _found = size_classes_match![
         index,
         diff,
+        size_class_index,
         sc(0, 3, 3, 0, no, yes, 1, 3),
         sc(1, 3, 3, 1, no, yes, 1, 3),
         sc(2, 3, 3, 2, no, yes, 3, 3),

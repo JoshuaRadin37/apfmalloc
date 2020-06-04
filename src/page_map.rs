@@ -15,6 +15,7 @@ use atomic::Ordering;
 #[cfg(windows)] use winapi::ctypes::c_void;
 use std::borrow::BorrowMut;
 #[cfg(windows)] use winapi::um::winuser::OffsetRect;
+use crate::size_classes::get_size_class;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -116,16 +117,33 @@ impl PageInfo {
         match &self.desc {
             None => None,
             Some(ptr) => {
-                let desc = *ptr as u64 | !SC_MASK;
+                let desc = *ptr as u64 & !SC_MASK;
                 Some(desc as *mut Descriptor)
             }
         }
     }
 
     pub fn get_size_class_index(&self) -> Option<usize> {
+
+
+
+
         match &self.desc {
             None => None,
-            Some(desc) => Some(*desc as usize & !SC_MASK as usize),
+            Some(desc) => Some({
+
+                /*
+                let x = *desc;
+                x as usize & SC_MASK as usize
+
+                 */
+                unsafe {
+                    let d = & **desc;
+                    let ret = get_size_class(d.block_size as usize);
+                    ret
+                }
+            }
+            ),
         }
     }
 }
@@ -193,12 +211,16 @@ impl PageMap<'_> {
 
     #[inline]
     fn unsafe_addr_to_key<T>(&self, base_ptr: *const MaybeUninit<Atomic<PageInfo>>, ptr: *const T) -> usize {
+        /*
         println!("ptr: {:x?}", ptr);
         let i = (ptr as usize >> PM_KEY_SHIFT);
         println!("i: {:x?}", i);
         println!("KEY_MASK: {:x?}", PM_KEY_MASK);
         let key = (i - (base_ptr as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
         println!("key: {:?}", key);
+
+         */
+        let key = ((ptr as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
         key
     }
 
@@ -225,6 +247,7 @@ impl PageMap<'_> {
 
     #[inline]
     fn addr_to_key<T>(&self, ptr: *const T) -> usize {
+        /*
         println!("ptr: {:x?}", ptr);
         let i = (ptr as usize >> PM_KEY_SHIFT);
         println!("i: {:x?}", i);
@@ -232,6 +255,9 @@ impl PageMap<'_> {
         let mem_loc = self.mem_location.unwrap();
         let key = (i - (mem_loc as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
         println!("key: {:?}", key);
+
+         */
+        let key = ((ptr as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
         key
     }
 

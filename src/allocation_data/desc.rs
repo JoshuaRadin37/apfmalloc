@@ -117,15 +117,17 @@ impl Descriptor {
 
     pub fn retire(&'static mut self) {
         self.block_size = 0;
-        let old_head = AVAILABLE_DESC.load(Ordering::Acquire);
+        let mut avail = AVAILABLE_DESC.lock();
+        let old_head = *avail;
         let mut new_head: DescriptorNode = DescriptorNode::default();
-        loop {
             self.next_free.store(old_head, Ordering::Release);
 
             new_head.set(
                 self,
                 old_head.get_counter().expect("Counter Should exist") + 1,
             );
+        *avail = new_head;
+        /*
             if {
                 AVAILABLE_DESC
                     .compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Release)
@@ -133,11 +135,14 @@ impl Descriptor {
             } {
                 break;
             }
-        }
+
+         */
+
     }
 
     pub unsafe fn alloc() -> *mut Descriptor {
-        let old_head = AVAILABLE_DESC.load(Ordering::Acquire);
+        let mut avail = AVAILABLE_DESC.lock();
+        let old_head = *avail; //AVAILABLE_DESC.load(Ordering::Acquire);
         loop {
             let desc = old_head.get_desc();
             match desc {
@@ -147,6 +152,7 @@ impl Descriptor {
                         new_head.get_desc().unwrap(),
                         old_head.get_counter().unwrap(),
                     );
+                    /*
                     if AVAILABLE_DESC
                         .compare_exchange_weak(
                             old_head,
@@ -158,6 +164,8 @@ impl Descriptor {
                     {
                         return desc as *mut Descriptor;
                     }
+                     */
+                    *avail = new_head;
                 }
                 None => {
                     let ptr = page_alloc(DESCRIPTOR_BLOCK_SZ)
@@ -195,15 +203,15 @@ impl Descriptor {
                     prev.next_free
                         .store(DescriptorNode::default(), Ordering::Release);
 
-                    let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
+                    // let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
                     let mut new_head: DescriptorNode = DescriptorNode::default();
-                    loop {
+                    // loop {
                         prev.next_free.store(old_head, Ordering::Release);
                         new_head.set(
                             &mut *(first as *mut Descriptor),
                             old_head.get_counter().unwrap_or(0) + 1,
                         );
-
+                        /*
                         if AVAILABLE_DESC
                             .compare_exchange_weak(
                                 old_head,
@@ -215,7 +223,10 @@ impl Descriptor {
                         {
                             break;
                         }
-                    }
+
+                         */
+                        *avail = new_head;
+                    // }
 
 
                     return ret as *mut Descriptor;

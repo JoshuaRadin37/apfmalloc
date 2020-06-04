@@ -14,6 +14,7 @@ use crate::alloc::{
 };
 use crate::pages::{page_alloc, page_free};
 use atomic::{Atomic, Ordering};
+use spin::Mutex;
 
 #[macro_use]
 pub mod macros;
@@ -29,9 +30,8 @@ mod no_heap_mutex;
 #[macro_use]
 extern crate bitfield;
 
-lazy_static! {
-    static ref AVAILABLE_DESC: Atomic<DescriptorNode> = Atomic::new(DescriptorNode::new());
-}
+static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
+
 static mut MALLOC_INIT: bool = false;
 
 unsafe fn init_malloc() {
