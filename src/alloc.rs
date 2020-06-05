@@ -133,7 +133,7 @@ pub fn malloc_from_partial(
 
                 if desc
                     .anchor
-                    .compare_exchange(new_anchor, old_anchor, Ordering::Acquire, Ordering::Release)
+                    .compare_exchange(new_anchor, old_anchor, Ordering::Acquire, Ordering::Relaxed)
                     .is_ok()
                 {
                     break;

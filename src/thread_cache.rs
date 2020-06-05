@@ -79,9 +79,10 @@ use crate::mem_info::MAX_SZ_IDX;
 use std::cell::RefCell;
 use std::ptr::null_mut;
 use std::collections::HashMap;
+use std::cell::UnsafeCell;
 
 thread_local! {
-    pub static thread_cache: RefCell<[ThreadCacheBin; MAX_SZ_IDX]> = RefCell::new([ThreadCacheBin {
+    pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin {
         block: null_mut(),
         block_num: 0
     }; MAX_SZ_IDX]);
