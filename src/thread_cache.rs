@@ -90,7 +90,7 @@ thread_local! {
 #[cfg(test)]
 mod test {
     use crate::thread_cache::ThreadCacheBin;
-    use winapi::_core::ptr::null_mut;
+    use core::ptr::null_mut;
 
     #[test]
     fn check_bin_consistency() {

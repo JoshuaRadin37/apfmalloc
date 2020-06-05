@@ -209,20 +209,22 @@ impl PageInfoHolder {
 
         let (memory, ptr) = {
 
-            if size > MIN_MAP_ALLOCATION_SIZE {
+            /*if size > MIN_MAP_ALLOCATION_SIZE {
                 let mut map = MmapOptions::new().len(size).map_anon()?;
                 let ptr = map.as_mut_ptr();
                 let combo = MemoryOrFreePointer::Map(map);
 
                 (combo, ptr)
-            } else {
+            } else
+            {
+             */
                 let segment = SEGMENT_ALLOCATOR.allocate(size).expect("Should be able to allocate a space");
                 let ptr = segment.get_ptr() as *mut u8;
                 let combo = MemoryOrFreePointer::Segment(segment);
                 //self.release();
                 //return Ok(ptr)
                 (combo, ptr)
-            }
+            // }
         };
         unsafe {
             let head = self.head;

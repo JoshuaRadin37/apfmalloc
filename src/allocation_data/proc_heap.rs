@@ -72,7 +72,7 @@ impl Heaps {
 
     fn as_heaps_mut(&mut self) -> &mut [ProcHeap] {
         unsafe {
-            let map = self.0.as_mut_ptr();
+            let map = self.0;
             let ptr = map as *mut ProcHeap;
             std::slice::from_raw_parts_mut(ptr, MAX_SZ_IDX)
         }

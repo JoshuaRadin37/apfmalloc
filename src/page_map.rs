@@ -5,7 +5,7 @@ use bitfield::size_of;
 use crossbeam::atomic::AtomicCell;
 use std::ptr::slice_from_raw_parts_mut;
 
-use crate::pages::page_alloc_over_commit;
+use crate::pages::{page_alloc_over_commit, PAGE_HOLDER_INIT};
 use std::mem::MaybeUninit;
 use atomic::Atomic;
 use atomic::Ordering;
