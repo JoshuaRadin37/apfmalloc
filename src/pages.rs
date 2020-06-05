@@ -49,7 +49,7 @@ impl PartialEq for MemoryOrFreePointer {
     }
 }
 
-pub const INITIAL_PAGES: usize = 8;
+pub const INITIAL_PAGES: usize = 128;
 const MIN_MAP_ALLOCATION_SIZE: usize = 1 << 14;
 
 impl PageInfoHolder {
