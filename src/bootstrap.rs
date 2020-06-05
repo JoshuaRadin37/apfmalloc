@@ -18,3 +18,4 @@ pub fn use_bootstrap() -> bool {
 pub fn set_use_bootstrap(val: bool) {
     *_use_bootstrap.lock() = val;
 }
+

@@ -78,6 +78,8 @@ impl ThreadCacheBin {
 use crate::mem_info::MAX_SZ_IDX;
 use std::cell::RefCell;
 use std::ptr::null_mut;
+use std::collections::HashMap;
+
 thread_local! {
     pub static thread_cache: RefCell<[ThreadCacheBin; MAX_SZ_IDX]> = RefCell::new([ThreadCacheBin {
         block: null_mut(),
@@ -86,6 +88,8 @@ thread_local! {
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
 }
+
+
 
 #[cfg(test)]
 mod test {

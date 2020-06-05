@@ -402,7 +402,7 @@ impl PageInfoHolder {
                     break;
                 }
 
-                if let Some(Free { next: next }) = self.get_at_index(ptr.unwrap()) {
+                if let Some(Free { next }) = self.get_at_index(ptr.unwrap()) {
                     ptr = *next;
                 } else {
                     panic!("Free list inconsistent")

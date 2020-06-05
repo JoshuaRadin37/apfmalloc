@@ -15,6 +15,9 @@ use atomic::{Atomic, Ordering};
 use spin::Mutex;
 use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache};
 use std::cell::RefCell;
+use core::mem::MaybeUninit;
+use thread_local::ThreadLocal;
+use crate::thread_cache::ThreadCacheBin;
 
 #[macro_use]
 pub mod macros;
@@ -28,12 +31,15 @@ mod thread_cache;
 mod no_heap_mutex;
 mod bootstrap;
 
+
 #[macro_use]
 extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
 pub static mut MALLOC_INIT: bool = false;
+
+
 
 unsafe fn init_malloc() {
     MALLOC_INIT = true;
@@ -64,9 +70,13 @@ unsafe fn thread_local_init_malloc() {
     thread_cache::thread_cache.with(|_f| {});
 }
 
+
+
 pub fn do_malloc(size: usize) -> *mut u8 {
     static thread_localized: Mutex<bool> = Mutex::new(false);
     static do_thread_bootstrap: Mutex<bool> = Mutex::new(false);
+
+
     unsafe {
         if !MALLOC_INIT {
             init_malloc();
@@ -96,7 +106,8 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 
     //thread_cache::thread_init.
 
-    if !*thread_localized.lock() && use_bootstrap() {
+
+    if !*thread_localized.lock() || use_bootstrap() {
         unsafe {
             let cache = &mut bootstrap_cache[size_class_index];
             if cache.get_block_num() == 0 {
@@ -131,6 +142,7 @@ fn is_power_of_two(x: usize) -> bool {
 
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     static thread_localized: Mutex<bool> = Mutex::new(false);
+
     if !is_power_of_two(align) {
         return null_mut();
     }
@@ -186,9 +198,8 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-    //thread_cache::thread_init.
 
-    if !*thread_localized.lock() && use_bootstrap() {
+    if /* !*thread_localized.lock() && */ use_bootstrap(){
         unsafe {
             let cache = &mut bootstrap_cache[size_class_index];
             if cache.get_block_num() == 0 {
@@ -199,6 +210,16 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         }
     } else {
         set_use_bootstrap(true);
+        thread_cache::thread_init.with(|val| {
+            if !*val.borrow() {
+                thread_cache::thread_cache.with(|tcache| {
+                    let _tcache = tcache;
+                });
+                *val.borrow_mut() = true;
+            }
+            set_use_bootstrap(false)
+        });
+
         thread_cache::thread_cache.with(|tcache| {
             *thread_localized.lock() = true;
             let cache = &mut tcache.borrow_mut()[size_class_index];
@@ -216,22 +237,89 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     }
 }
 
+fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
+    if !is_power_of_two(align) {
+        return null_mut();
+    }
+
+    let mut size = align_val(size, align);
+
+    unsafe {
+        if !MALLOC_INIT {
+            init_malloc();
+        }
+    }
+
+    if size > PAGE {
+
+        size = size.max(MAX_SZ + 1);
+
+        let need_more_pages = align > PAGE;
+        if need_more_pages {
+            size += align;
+        }
+
+        let pages = page_ceiling!(size);
+
+        let desc = unsafe {
+            &mut *Descriptor::alloc()
+        };
+
+        let mut ptr = page_alloc(pages).expect("Error getting pages for aligned allocation");
+
+        desc.proc_heap = null_mut();
+        desc.block_size = pages as u32;
+        desc.max_count = 1;
+        desc.super_block = page_alloc(pages).expect("Should create");
+
+        let mut anchor = Anchor::default();
+        anchor.set_state(SuperBlockState::FULL);
+
+        desc.anchor.store(anchor, Ordering::Release);
+
+
+        register_desc(desc);
+
+
+        if need_more_pages {
+            ptr = align_addr(ptr as usize, align) as *mut u8;
+
+            update_page_map(None, ptr, Some(desc), 0);
+        }
+
+        return ptr;
+    }
+
+
+    let size_class_index = get_size_class(size);
+
+    unsafe {
+        let cache = &mut bootstrap_cache[size_class_index];
+        if cache.get_block_num() == 0 {
+            fill_cache(size_class_index, cache);
+        }
+
+        cache.pop_block()
+    }
+
+}
+
 pub fn do_free<T>(ptr: *const T) {
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe { &mut *match info.get_desc() {
         Some(d) => { d},
         None => {
             #[cfg(debug_assertions)]
-            println!("Free failed at {:?}", ptr);
-            return; // todo: Band-aid fix
+                // println!("Free failed at {:?}", ptr);
+                return; // todo: Band-aid fix
             // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
         }
     }};
 
     #[cfg(debug_assertions)]
-    // println!("Free will succeed at {:?}", ptr);
+        // println!("Free will succeed at {:?}", ptr);
 
-    let size_class_index = info.get_size_class_index();
+        let size_class_index = info.get_size_class_index();
     match size_class_index {
         None => {
             let super_block = desc.super_block;

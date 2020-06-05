@@ -28,4 +28,6 @@ fn main() {
     println!("Box value: {:?}", box_test);
     let box_test2 = Box::new([36; 32]);
     println!("Box value: {:?}", box_test2);
+
+
 }
