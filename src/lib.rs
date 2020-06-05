@@ -186,7 +186,7 @@ mod tests {
     use super::*;
     use crate::allocation_data::get_heaps;
     use bitfield::size_of;
-    use winapi::_core::mem::MaybeUninit;
+    use core::mem::MaybeUninit;
 
     #[test]
     fn heaps_valid() {
