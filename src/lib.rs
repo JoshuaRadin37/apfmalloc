@@ -170,7 +170,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
 
-        desc.anchor.store(anchor, Ordering::Acquire);
+        desc.anchor.store(anchor, Ordering::Release);
 
 
         register_desc(desc);
@@ -220,7 +220,18 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
 pub fn do_free<T>(ptr: *const T) {
     let info = get_page_info_for_ptr(ptr);
-    let desc = unsafe { &mut *info.get_desc().expect("descriptor should exist here") };
+    let desc = unsafe { &mut *match info.get_desc() {
+        Some(d) => { d},
+        None => {
+            #[cfg(debug_assertions)]
+            println!("Free failed at {:?}", ptr);
+            return; // todo: Band-aid fix
+            // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+        }
+    }};
+
+    #[cfg(debug_assertions)]
+    // println!("Free will succeed at {:?}", ptr);
 
     let size_class_index = info.get_size_class_index();
     match size_class_index {
