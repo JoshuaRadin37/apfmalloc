@@ -54,11 +54,11 @@ impl LivenessCounter {
 	}
 
 	// Evaluates liveness for windows of size k
-	pub fn liveness(&self, k: usize) -> usize {
+	pub fn liveness(&self, k: usize) -> f32 {
 		let i = self.n-k+1;
 		let tmp1 = (self.m-self.free_counts.get(&i)) * i + self.free_sum.get(&i);
 		let tmp2 = self.alloc_counts.get(&k) * k + self.alloc_sum.get(&self.n) - self.alloc_sum.get(&k);
-		(tmp1 - tmp2 + self.m * k) / i
+		((tmp1 - tmp2 + self.m * k) as f32) / i as f32
 	}
 }
 
@@ -222,7 +222,7 @@ mod test {
 		lc.free();		// f3
 		// lc.inc_timer();
 
-		assert_eq!(lc.liveness(1), 2);
+		assert_eq!(lc.liveness(1), 2.0);
 	}
 
 	#[test]
