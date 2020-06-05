@@ -59,28 +59,28 @@ impl Default for ProcHeap {
 }
 
 #[repr(transparent)]
-pub struct Heaps(MaybeUninit<MmapMut>);
+pub struct Heaps(Option<MmapMut>);
 
 impl Heaps {
     const fn uninit() -> Self {
-        Heaps(MaybeUninit::uninit())
+        Heaps(None)
     }
 
     fn new(field0: MmapMut) -> Self {
-        Heaps(MaybeUninit::new(field0))
+        Heaps(Some(field0))
     }
 
     fn as_heaps_mut(&mut self) -> &mut [ProcHeap] {
         unsafe {
-            let map = self.0;
-            let ptr = map as *mut ProcHeap;
+            let map = &mut self.0.as_mut().unwrap()[0];
+            let ptr: *mut ProcHeap = (map as *mut u8) as *mut ProcHeap;
             std::slice::from_raw_parts_mut(ptr, MAX_SZ_IDX)
         }
     }
     fn as_heaps(&self) -> &[ProcHeap] {
         unsafe {
-            let map = self.0.as_ptr();
-            let ptr = map as *const ProcHeap;
+            let map = &self.0.as_ref().unwrap()[0];
+            let ptr = map as *const u8 as *const ProcHeap;
             std::slice::from_raw_parts(ptr, MAX_SZ_IDX)
         }
     }
@@ -108,7 +108,7 @@ unsafe fn init_heaps() {
     for (index, proc) in slice.into_iter().enumerate() {
         *proc = MaybeUninit::new(ProcHeap::new_none( index))
     }
-    HEAPS = Heaps(MaybeUninit::new(map))
+    HEAPS = Heaps(Some(map))
 }
 
 pub fn get_heaps() -> &'static mut Heaps {
