@@ -198,6 +198,12 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
+     /*
+
+     The way this works pretty wild
+     There is a global state of use_bootstrap
+
+      */
 
     if /* !*thread_localized.lock() && */ use_bootstrap(){
         unsafe {
@@ -227,10 +233,6 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
                 fill_cache(size_class_index, cache);
             }
 
-
-            if use_bootstrap() {
-                set_use_bootstrap(false);
-            }
 
             cache.pop_block()
         })
