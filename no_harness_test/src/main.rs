@@ -8,6 +8,7 @@ struct Dummy;
 #[global_allocator]
 static allocator: Dummy = Dummy;
 
+
 unsafe impl GlobalAlloc for Dummy {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // do_malloc(layout.size())
