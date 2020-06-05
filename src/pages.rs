@@ -554,8 +554,8 @@ mod test {
 
             unsafe {
                 for _i in 0..(INITIAL_PAGES * 2).max(128) {
-                    println!("{:?}", PAGE_HOLDER);
-                    println!("Allocating page {:?}", _i);
+                    //println!("{:?}", PAGE_HOLDER);
+                    // println!("Allocating page {:?}", _i);
                     page_alloc(4096).unwrap();
                     PAGE_HOLDER.show_free_list();
                 }

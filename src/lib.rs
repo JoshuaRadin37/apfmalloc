@@ -221,9 +221,15 @@ pub fn do_free<T>(ptr: *const T) {
     let desc = unsafe { &mut *match info.get_desc() {
         Some(d) => { d},
         None => {
-            panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+            #[cfg(debug_assertions)]
+            println!("Free failed at {:?}", ptr);
+            return; // todo: Band-aid fix
+            // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
         }
     }};
+
+    #[cfg(debug_assertions)]
+    // println!("Free will succeed at {:?}", ptr);
 
     let size_class_index = info.get_size_class_index();
     match size_class_index {

@@ -24,9 +24,7 @@ unsafe impl GlobalAlloc for Dummy {
 #[test]
 fn global_allocator() {
 
-    let mut vec: Vec<u64> = Vec::with_capacity(8);
-
-    /*(0..100)
+    let mut vec: Vec<_> = (0..100)
         .collect::<Vec<usize>>();
 
 
@@ -41,6 +39,6 @@ fn global_allocator() {
     let _ : Vec<_> =vec.drain(0..100).collect();
     assert_eq!(vec.len(), 0);
 
-    */
+
 
 }
