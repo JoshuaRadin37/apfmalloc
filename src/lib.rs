@@ -1,7 +1,7 @@
 #![allow(non_upper_case_globals)]
 
 use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
-use crate::mem_info::{MAX_SZ, MAX_SZ_IDX};
+use crate::mem_info::{MAX_SZ, MAX_SZ_IDX, align_val, PAGE, align_addr};
 use lazy_static::lazy_static;
 use std::ptr::null_mut;
 
@@ -9,9 +9,7 @@ use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 
 use crate::page_map::S_PAGE_MAP;
 
-use crate::alloc::{
-    fill_cache, flush_cache, get_page_info_for_ptr, register_desc, unregister_desc,
-};
+use crate::alloc::{fill_cache, flush_cache, get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::pages::{page_alloc, page_free};
 use atomic::{Atomic, Ordering};
 use spin::Mutex;
@@ -129,6 +127,93 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 fn is_power_of_two(x: usize) -> bool {
     // https://stackoverflow.com/questions/3638431/determine-if-an-int-is-a-power-of-2-or-not-in-a-single-line
     (if x != 0 { true } else { false }) && (if (!(x & (x - 1))) != 0 { true } else { false })
+}
+
+pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
+    static thread_localized: Mutex<bool> = Mutex::new(false);
+    if !is_power_of_two(align) {
+        return null_mut();
+    }
+
+    let mut size = align_val(size, align);
+
+    unsafe {
+        if !MALLOC_INIT {
+            init_malloc();
+        }
+    }
+
+    if size > PAGE {
+
+        size = size.max(MAX_SZ + 1);
+
+        let need_more_pages = align > PAGE;
+        if need_more_pages {
+            size += align;
+        }
+
+        let pages = page_ceiling!(size);
+
+        let desc = unsafe {
+            &mut *Descriptor::alloc()
+        };
+
+        let mut ptr = page_alloc(pages).expect("Error getting pages for aligned allocation");
+
+        desc.proc_heap = null_mut();
+        desc.block_size = pages as u32;
+        desc.max_count = 1;
+        desc.super_block = page_alloc(pages).expect("Should create");
+
+        let mut anchor = Anchor::default();
+        anchor.set_state(SuperBlockState::FULL);
+
+        desc.anchor.store(anchor, Ordering::Acquire);
+
+
+        register_desc(desc);
+
+
+        if need_more_pages {
+            ptr = align_addr(ptr as usize, align) as *mut u8;
+
+            update_page_map(None, ptr, Some(desc), 0);
+        }
+
+        return ptr;
+    }
+
+
+    let size_class_index = get_size_class(size);
+
+    //thread_cache::thread_init.
+
+    if !*thread_localized.lock() && use_bootstrap() {
+        unsafe {
+            let cache = &mut bootstrap_cache[size_class_index];
+            if cache.get_block_num() == 0 {
+                fill_cache(size_class_index, cache);
+            }
+
+            cache.pop_block()
+        }
+    } else {
+        set_use_bootstrap(true);
+        thread_cache::thread_cache.with(|tcache| {
+            *thread_localized.lock() = true;
+            let cache = &mut tcache.borrow_mut()[size_class_index];
+            if cache.get_block_num() == 0 {
+                fill_cache(size_class_index, cache);
+            }
+
+
+            if use_bootstrap() {
+                set_use_bootstrap(false);
+            }
+
+            cache.pop_block()
+        })
+    }
 }
 
 pub fn do_free<T>(ptr: *const T) {

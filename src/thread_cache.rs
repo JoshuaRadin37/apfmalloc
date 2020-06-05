@@ -86,3 +86,21 @@ thread_local! {
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
 }
+
+#[cfg(test)]
+mod test {
+    use crate::thread_cache::ThreadCacheBin;
+    use winapi::_core::ptr::null_mut;
+
+    #[test]
+    fn check_bin_consistency() {
+
+        let bin = ThreadCacheBin {
+            block: null_mut(),
+            block_num: 0
+        };
+
+    }
+
+
+}
