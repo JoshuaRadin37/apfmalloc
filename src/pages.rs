@@ -16,7 +16,7 @@ use std::ops::Deref;
 use crate::alloc::get_page_info_for_ptr;
 use spin::MutexGuard;
 
-mod external_mem_reservation;
+pub mod external_mem_reservation;
 
 #[inline]
 pub fn page_addr2base<T>(a: &T) -> *mut c_void {

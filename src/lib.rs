@@ -200,7 +200,7 @@ fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
     // own local bin
 
     // todo: remove the true
-    if true || use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
+    if use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
         unsafe {
             // Gets and fills the correct cache from the bootstrap
             let mut bootstrap_cache_guard = bootstrap_cache.lock();
@@ -353,7 +353,7 @@ pub fn do_free<T>(ptr: *const T) {
                 },
             };
             // todo: remove true
-            if true || force_bootstrap {
+            if force_bootstrap {
                 unsafe {
                     let mut bootstrap_cache_guard = bootstrap_cache.lock();
                     let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
