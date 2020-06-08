@@ -42,8 +42,8 @@ fn global_allocator() {
 }
 
 #[test]
-fn mass_stress() {
-    for j in 0..5000 {
+fn mass_stress_no_harness() {
+    for j in 0..500 {
         let mut vec = vec![];
         for i in 0..8 {
             vec.push(thread::spawn(move ||
