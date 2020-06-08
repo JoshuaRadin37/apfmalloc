@@ -2,14 +2,13 @@
 
 use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
 use crate::mem_info::{MAX_SZ, MAX_SZ_IDX, align_val, PAGE, align_addr};
-use lazy_static::lazy_static;
 use std::ptr::null_mut;
 
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 
 use crate::page_map::S_PAGE_MAP;
 
-use crate::alloc::{fill_cache, flush_cache, get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
+use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::pages::{page_alloc, page_free};
 use atomic::{Atomic, Ordering};
 use spin::Mutex;
@@ -17,7 +16,7 @@ use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache};
 use std::cell::RefCell;
 use core::mem::MaybeUninit;
 use thread_local::ThreadLocal;
-use crate::thread_cache::ThreadCacheBin;
+use crate::thread_cache::{ThreadCacheBin, fill_cache, flush_cache};
 use std::thread::AccessError;
 
 #[macro_use]
@@ -31,10 +30,13 @@ mod size_classes;
 mod thread_cache;
 mod no_heap_mutex;
 mod bootstrap;
+pub mod auto_ptr;
 
 
 #[macro_use]
 extern crate bitfield;
+
+
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
@@ -76,7 +78,6 @@ unsafe fn thread_local_init_malloc() {
 pub fn do_malloc(size: usize) -> *mut u8 {
     static thread_localized: Mutex<bool> = Mutex::new(false);
     static do_thread_bootstrap: Mutex<bool> = Mutex::new(false);
-
 
     unsafe {
         if !MALLOC_INIT {
@@ -122,8 +123,8 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         set_use_bootstrap(true);
         thread_cache::thread_cache.with(|tcache| {
             *thread_localized.lock() = true;
-            let cache = &mut unsafe {
-                (*tcache.get())[size_class_index]
+            let cache = unsafe {
+                (*tcache.get()).get_mut(size_class_index).unwrap()
             };
             if cache.get_block_num() == 0 {
                 fill_cache(size_class_index, cache);
@@ -239,8 +240,8 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
         thread_cache::thread_cache.with(|tcache| {
             *thread_localized.lock() = true;
-            let cache = &mut unsafe {
-                (*tcache.get())[size_class_index]
+            let cache = unsafe {
+                (*tcache.get()).get_mut(size_class_index).unwrap()
             };
             if cache.get_block_num() == 0 {
                 fill_cache(size_class_index, cache);
@@ -310,7 +311,7 @@ fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
 
     unsafe {
         let mut bootstrap_cache_guard = bootstrap_cache.lock();
-        let cache = &mut bootstrap_cache_guard[size_class_index];
+        let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
         if cache.get_block_num() == 0 {
             fill_cache(size_class_index, cache);
         }
@@ -325,14 +326,14 @@ pub fn do_free<T>(ptr: *const T) {
     let desc = unsafe { &mut *match info.get_desc() {
         Some(d) => { d},
         None => {
-            #[cfg(debug_assertions)]
+            // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
                 return; // todo: Band-aid fix
             // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
         }
     }};
 
-    #[cfg(debug_assertions)]
+   // #[cfg(debug_assertions)]
         // println!("Free will succeed at {:?}", ptr);
 
         let size_class_index = info.get_size_class_index();
@@ -365,7 +366,7 @@ pub fn do_free<T>(ptr: *const T) {
             if force_bootstrap {
                 unsafe {
                     let mut bootstrap_cache_guard = bootstrap_cache.lock();
-                    let cache = &mut bootstrap_cache_guard[size_class_index];
+                    let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
                     let sc = &SIZE_CLASSES[size_class_index];
 
                     if cache.get_block_num() >= sc.cache_block_num {
@@ -387,8 +388,8 @@ pub fn do_free<T>(ptr: *const T) {
                 });
 
                 thread_cache::thread_cache.try_with(|tcache| {
-                    let cache = &mut unsafe {
-                        (*tcache.get())[size_class_index]
+                    let cache = unsafe {
+                        (*tcache.get()).get_mut(size_class_index).unwrap()
                     };
                     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
@@ -402,6 +403,8 @@ pub fn do_free<T>(ptr: *const T) {
         },
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {
