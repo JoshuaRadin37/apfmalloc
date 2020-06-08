@@ -5,7 +5,7 @@ use std::thread;
 
 fn allocate_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate");
-    for bytes in (8..=18).map(|b| 1 << b) {
+    for bytes in (8..=14).map(|b| 1 << b) {
         group.throughput(Throughput::Bytes(bytes));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),
@@ -21,7 +21,7 @@ fn allocate_one_thread(c: &mut Criterion) {
 
 fn allocate_and_free_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate and free");
-    for bytes in (8..=18).map(|b| 1 << b) {
+    for bytes in (8..=14).map(|b| 1 << b) {
         group.throughput(Throughput::Bytes(bytes));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),
@@ -40,7 +40,7 @@ fn allocate_and_free_one_thread(c: &mut Criterion) {
 
 fn allocate_multi_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate");
-    for bytes in (8..=18).map(|b| 1 << b) {
+    for bytes in (8..=14).map(|b| 1 << b) {
         group.throughput(Throughput::Bytes(bytes * 100));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),

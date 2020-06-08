@@ -26,6 +26,7 @@ impl ThreadCacheBin {
         if self.block_num > 0 {
             panic!("Attempting to push a block list while cache is not empty");
         } else {
+
             self.block = block;
             self.block_num = length;
         }
@@ -81,10 +82,14 @@ impl ThreadCacheBin {
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
 
-
+    let mut used_partial = true;
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
+        used_partial = false;
+    }
+    if block_num == 0 || cache.block_num == 0 {
+        panic!("Didn't allocate any blocks to the cache. USED PARTIAL: {}", used_partial);
     }
 
 

@@ -18,6 +18,7 @@ use core::mem::MaybeUninit;
 use thread_local::ThreadLocal;
 use crate::thread_cache::{ThreadCacheBin, fill_cache, flush_cache};
 use std::thread::AccessError;
+use std::sync::atomic::AtomicBool;
 
 #[macro_use]
 pub mod macros;
@@ -40,12 +41,11 @@ extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-pub static mut MALLOC_INIT: bool = false;
-
+pub static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false);
+pub static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false);
 
 
 unsafe fn init_malloc() {
-    MALLOC_INIT = true;
     init_size_class();
 
     S_PAGE_MAP.init();
@@ -56,6 +56,8 @@ unsafe fn init_malloc() {
         heap.partial_list.store(None, Ordering::Release);
         heap.size_class_index = idx;
     }
+
+    MALLOC_FINISH_INIT.store(true, Ordering::Release);
 }
 
 unsafe fn thread_local_init_malloc() {
@@ -78,9 +80,10 @@ unsafe fn thread_local_init_malloc() {
 pub fn do_malloc(size: usize) -> *mut u8 {
 
     unsafe {
-        if !MALLOC_INIT {
+        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
             init_malloc();
         }
+        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) { }
     }
 
     if size > MAX_SZ {
@@ -124,9 +127,10 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     let mut size = align_val(size, align);
 
     unsafe {
-        if !MALLOC_INIT {
+        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
             init_malloc();
         }
+        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) { }
     }
 
     if size > PAGE {
@@ -195,7 +199,8 @@ fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
     // infinite recursion. As such, we must have a "bootstrap" bin that threads can use to initalize it's
     // own local bin
 
-    if use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
+    // todo: remove the true
+    if true || use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
         unsafe {
             // Gets and fills the correct cache from the bootstrap
             let mut bootstrap_cache_guard = bootstrap_cache.lock();
@@ -227,11 +232,10 @@ fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
 
             if cache.get_block_num() == 0 {
                 fill_cache(size_class_index, cache); // Fills the cache if necessary
+                if cache.block_num == 0 {
+                    panic!("Cache didn't fill");
+                }
             }
-
-
-
-
             cache.pop_block() // Pops the block from the thread cache bin
         })
     }
@@ -245,9 +249,10 @@ fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
     let mut size = align_val(size, align);
 
     unsafe {
-        if !MALLOC_INIT {
+        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
             init_malloc();
         }
+        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) { }
     }
 
     if size > PAGE {
@@ -322,7 +327,7 @@ pub fn do_free<T>(ptr: *const T) {
 
     let size_class_index = info.get_size_class_index();
     match size_class_index {
-        None => {
+        None | Some(0) => {
             let super_block = desc.super_block;
             // unregister
             unregister_desc(None, super_block);
@@ -347,7 +352,8 @@ pub fn do_free<T>(ptr: *const T) {
                     true
                 },
             };
-            if force_bootstrap {
+            // todo: remove true
+            if true || force_bootstrap {
                 unsafe {
                     let mut bootstrap_cache_guard = bootstrap_cache.lock();
                     let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();

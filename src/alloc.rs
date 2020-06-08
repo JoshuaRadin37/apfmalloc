@@ -147,9 +147,9 @@ pub fn malloc_from_partial(
             let blocks_taken = old_anchor.count() as isize;
             let avail = old_anchor.avail() as isize;
 
-            // debug_assert!(avail < max_count as isize);
+            assert!(avail < max_count as isize, "Avail: {}, Max Count {}", avail, max_count);
             let block = unsafe { super_block.offset(avail * block_size as isize) };
-            // debug_assert_eq!(cache.get_block_num(), 0);
+            assert_eq!(cache.get_block_num(), 0);
             cache.push_list(block, blocks_taken as u32);
             *block_num += 1;
         }
