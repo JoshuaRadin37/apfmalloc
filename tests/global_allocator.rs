@@ -34,11 +34,9 @@ fn global_allocator() {
     }
 
 
-
-
-    let _ : Vec<_> =vec.drain(0..100).collect();
+    let v : Vec<_> =vec.drain(0..100).collect();
     assert_eq!(vec.len(), 0);
-
+    assert_eq!(v.len(), 100);
 
 
 }

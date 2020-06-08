@@ -150,8 +150,8 @@ impl Descriptor {
                 Some(desc) => {
                     let mut new_head = desc.next_free.load(Ordering::Acquire);
                     new_head.set(
-                        new_head.get_desc().unwrap(),
-                        old_head.get_counter().unwrap(),
+                        new_head.get_desc().expect("Head should have a descriptor"),
+                        old_head.get_counter().expect("Head should have a counter"),
                     );
                     /*
                     if AVAILABLE_DESC

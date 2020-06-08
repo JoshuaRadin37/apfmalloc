@@ -120,11 +120,11 @@ impl SegAllocator for SegmentAllocator {
                     match HeapSummary(heap, 0, &mut heap_summary as LPHEAP_SUMMARY) {
                         S_OK => {
                             let HEAP_SUMMARY { cb: _, cbAllocated, cbCommitted, cbReserved, cbMaxReserve } = heap_summary;
-                            println!("HEAP SUMMARY");
-                            println!("\tAllocated: {:?}", cbAllocated);
-                            println!("\tCommitted: {:?}", cbCommitted);
-                            println!("\tReserved: {:?}", cbReserved);
-                            println!("\tMax Reserve: {:?}", cbMaxReserve);
+                            // println!("HEAP SUMMARY");
+                            // println!("\tAllocated: {:?}", cbAllocated);
+                            // println!("\tCommitted: {:?}", cbCommitted);
+                            // println!("\tReserved: {:?}", cbReserved);
+                            // println!("\tMax Reserve: {:?}", cbMaxReserve);
                         }
                         _ => {
                             panic!("Unable to get the heap summary")
