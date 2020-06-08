@@ -12,7 +12,7 @@ use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update
 use crate::pages::{page_alloc, page_free};
 use atomic::{Atomic, Ordering};
 use spin::Mutex;
-use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache};
+use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache, boostrap_reserve};
 use std::cell::RefCell;
 use core::mem::MaybeUninit;
 use thread_local::ThreadLocal;
@@ -57,22 +57,9 @@ unsafe fn init_malloc() {
         heap.size_class_index = idx;
     }
 
+    boostrap_reserve.lock().init();
+
     MALLOC_FINISH_INIT.store(true, Ordering::Release);
-}
-
-unsafe fn thread_local_init_malloc() {
-    /*
-    if thread_cache::thread_init.with(|f| *f.borrow()) {
-
-    }
-
-     */
-    thread_cache::thread_init.with(|f| {
-        let mut ref_mut = f.borrow_mut();
-        *ref_mut = true;
-    });
-
-    thread_cache::thread_cache.with(|_f| {});
 }
 
 
@@ -110,7 +97,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
     //thread_cache::thread_init.
 
 
-    allocate_to_cache(size_class_index)
+    allocate_to_cache(size, size_class_index)
 }
 
 fn is_power_of_two(x: usize) -> bool {
@@ -189,10 +176,10 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
       */
 
-    allocate_to_cache(size_class_index)
+    allocate_to_cache(size, size_class_index)
 }
 
-fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
+fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 // Because of how rust creates thread locals, we have to assume the thread local does not exist yet
     // We also can't tell if a thread local exists without causing it to initialize, and when using
     // This as a global allocator, it ends up calling this function again. If not careful, we will create an
@@ -201,6 +188,7 @@ fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
 
     // todo: remove the true
     if use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
+        /*
         unsafe {
             // Gets and fills the correct cache from the bootstrap
             let mut bootstrap_cache_guard = bootstrap_cache.lock();
@@ -210,6 +198,10 @@ fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
             }
 
             cache.pop_block()
+        }
+         */
+        unsafe {
+            boostrap_reserve.lock().allocate(size)
         }
     } else {
         set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
@@ -344,17 +336,21 @@ pub fn do_free<T>(ptr: *const T) {
             desc.retire();
         }
         Some(size_class_index) => {
-            let force_bootstrap = use_bootstrap() || match thread_cache::thread_init.try_with(|_| {}) {
-                Ok(_) => {
-                    false
-                },
-                Err(_) => {
-                    true
-                },
-            };
+            let force_bootstrap =
+                unsafe { boostrap_reserve.lock().ptr_in_bootstrap(ptr) } ||
+                    use_bootstrap() ||
+                    match thread_cache::thread_init.try_with(|_| {}) {
+                        Ok(_) => {
+                            false
+                        },
+                        Err(_) => {
+                            true
+                        },
+                    };
             // todo: remove true
             if force_bootstrap {
                 unsafe {
+                    /*
                     let mut bootstrap_cache_guard = bootstrap_cache.lock();
                     let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
                     let sc = &SIZE_CLASSES[size_class_index];
@@ -364,6 +360,8 @@ pub fn do_free<T>(ptr: *const T) {
                     }
 
                     cache.push_block(ptr as *mut u8);
+
+                     */
                 }
             } else {
                 set_use_bootstrap(true);

@@ -2,6 +2,7 @@ use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
 use lralloc_rs::{do_malloc, do_free, do_aligned_alloc};
 use core::ops::RangeTo;
+use std::thread;
 
 
 struct Dummy;
@@ -38,5 +39,21 @@ fn global_allocator() {
     assert_eq!(vec.len(), 0);
     assert_eq!(v.len(), 100);
 
+}
 
+#[test]
+fn mass_stress() {
+    for j in 0..5000 {
+        let mut vec = vec![];
+        for i in 0..8 {
+            vec.push(thread::spawn(move ||
+                {
+                    do_malloc(8);
+                    println!("Thread {} says hello", j * 8 + i)
+                }));
+        }
+        for join in vec {
+            join.join();
+        }
+    }
 }

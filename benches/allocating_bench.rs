@@ -39,16 +39,16 @@ fn allocate_and_free_one_thread(c: &mut Criterion) {
 }
 
 fn allocate_multi_thread(c: &mut Criterion) {
-    let mut group = c.benchmark_group("allocate");
+    let mut group = c.benchmark_group("allocate multi thread");
     for bytes in (8..=14).map(|b| 1 << b) {
-        group.throughput(Throughput::Bytes(bytes * 100));
+        group.throughput(Throughput::Bytes(bytes * 8));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),
             &bytes,
             |b, &size| {
                 b.iter(|| {
                     let mut vec = vec![];
-                    for _ in 0..100 {
+                    for _ in 0..8 {
                         vec.push(thread::spawn( move ||
                                                     {
                                                         do_malloc(size as usize);
@@ -65,5 +65,6 @@ fn allocate_multi_thread(c: &mut Criterion) {
 
 
 
-criterion_group!(benches, allocate_one_thread, allocate_and_free_one_thread, allocate_multi_thread);
-criterion_main!(benches);
+criterion_group!(one_thread, allocate_one_thread, allocate_and_free_one_thread, allocate_multi_thread);
+criterion_group!(multi_thread, allocate_multi_thread);
+criterion_main!(one_thread, multi_thread);

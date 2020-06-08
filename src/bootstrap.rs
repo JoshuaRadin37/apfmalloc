@@ -34,19 +34,23 @@ impl BootstrapReserve {
         Self {
             mem: None,
             next: null_mut(),
-            avail: size,
-            max: 0
+            avail: 0,
+            max: size
         }
     }
 
     pub fn init(&mut self) {
         match &mut self.mem {
             None => {
-                exit(-1);
+                std::mem::replace(&mut self.mem, Some(SEGMENT_ALLOCATOR.allocate(self.max).unwrap_or_else(|_| exit(-1))));
+                // self.mem = Some(SEGMENT_ALLOCATOR.allocate(self.avail).unwrap_or_else(|_| exit(-1)));
+                self.next = self.mem.as_ref().unwrap().get_ptr() as *mut u8;
+                self.avail = self.max;
             },
             Some(seg) => {
-                *seg = SEGMENT_ALLOCATOR.allocate(self.avail).unwrap_or_else(|| exit(-1));
+                *seg = SEGMENT_ALLOCATOR.allocate(self.max).unwrap_or_else(|_| exit(-1));
                 self.next = seg.get_ptr() as *mut u8;
+                self.avail = self.max;
             },
         }
     }
@@ -73,8 +77,8 @@ impl BootstrapReserve {
     }
 }
 
-pub static mut boostrap_reserve: Mutex<BootstrapReserve> = Mutex::new(B)
+const KB: usize = 1028;
+const MB: usize = 1028 * KB;
 
-pub fn init_bootstrap() {
 
-}
+pub static mut boostrap_reserve: Mutex<BootstrapReserve> = Mutex::new(BootstrapReserve::new(128 * KB));
