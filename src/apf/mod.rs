@@ -93,7 +93,7 @@ impl ApfTuner<'_> {
 		return true;
 	}
 
-	pub fn count_fetch(&mut self) {
+	fn count_fetch(&mut self) {
 		self.fetch_count += 1;
 	}
 
@@ -105,7 +105,7 @@ impl ApfTuner<'_> {
 
 	// Average demand in windows of length k
 	// Returns none if reuse counter has not completed a burst yet
-	pub fn demand(&self, k: usize) -> Option<f32> {
+	fn demand(&self, k: usize) -> Option<f32> {
 		match self.r_counter.reuse(k) {
 			Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
 			None => None
