@@ -20,7 +20,7 @@ unsafe impl GlobalAlloc for Dummy {
 }
 
 
-//#[test]
+#[test]
 fn multiple_threads() {
 
     let mut vec = vec![];
@@ -41,6 +41,7 @@ fn multiple_threads() {
         join_handle.join();
     }
 
+    println!();
     for x in & *boxes.lock().unwrap() {
         assert_eq!(**x, 0xdeadbeaf);
     }

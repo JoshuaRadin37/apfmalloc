@@ -76,8 +76,6 @@ unsafe fn thread_local_init_malloc() {
 
 
 pub fn do_malloc(size: usize) -> *mut u8 {
-    static thread_localized: Mutex<bool> = Mutex::new(false);
-    static do_thread_bootstrap: Mutex<bool> = Mutex::new(false);
 
     unsafe {
         if !MALLOC_INIT {
@@ -97,7 +95,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
 
-        desc.anchor.store(anchor, Ordering::Acquire);
+        desc.anchor.store(anchor, Ordering::Release);
 
         register_desc(desc);
         let ptr = desc.super_block;
@@ -109,35 +107,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
     //thread_cache::thread_init.
 
 
-    if !*thread_localized.lock() || use_bootstrap() {
-        unsafe {
-            let mut bootstrap_cache_guard = bootstrap_cache.lock();
-            let cache = &mut bootstrap_cache_guard[size_class_index];
-            if cache.get_block_num() == 0 {
-                fill_cache(size_class_index, cache);
-            }
-
-            cache.pop_block()
-        }
-    } else {
-        set_use_bootstrap(true);
-        thread_cache::thread_cache.with(|tcache| {
-            *thread_localized.lock() = true;
-            let cache = unsafe {
-                (*tcache.get()).get_mut(size_class_index).unwrap()
-            };
-            if cache.get_block_num() == 0 {
-                fill_cache(size_class_index, cache);
-            }
-
-
-            if use_bootstrap() {
-                set_use_bootstrap(false);
-            }
-
-            cache.pop_block()
-        })
-    }
+    allocate_to_cache(size_class_index)
 }
 
 fn is_power_of_two(x: usize) -> bool {
@@ -146,7 +116,6 @@ fn is_power_of_two(x: usize) -> bool {
 }
 
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
-    static thread_localized: Mutex<bool> = Mutex::new(false);
 
     if !is_power_of_two(align) {
         return null_mut();
@@ -216,10 +185,21 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
       */
 
-    if /* !*thread_localized.lock() && */ use_bootstrap(){
+    allocate_to_cache(size_class_index)
+}
+
+fn allocate_to_cache(size_class_index: usize) -> *mut u8 {
+// Because of how rust creates thread locals, we have to assume the thread local does not exist yet
+    // We also can't tell if a thread local exists without causing it to initialize, and when using
+    // This as a global allocator, it ends up calling this function again. If not careful, we will create an
+    // infinite recursion. As such, we must have a "bootstrap" bin that threads can use to initalize it's
+    // own local bin
+
+    if use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
         unsafe {
+            // Gets and fills the correct cache from the bootstrap
             let mut bootstrap_cache_guard = bootstrap_cache.lock();
-            let cache = &mut bootstrap_cache_guard[size_class_index];
+            let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
             if cache.get_block_num() == 0 {
                 fill_cache(size_class_index, cache);
             }
@@ -227,28 +207,32 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
             cache.pop_block()
         }
     } else {
-        set_use_bootstrap(true);
-        thread_cache::thread_init.with(|val| {
-            if !*val.borrow() {
-                thread_cache::thread_cache.with(|tcache| {
-                    let _tcache = tcache;
-                });
-                *val.borrow_mut() = true;
+        set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+        thread_cache::thread_init.with(|val| { // if not initalized, it goes back
+            if !*val.borrow() { // the default value of the val is false, which means that the thread cache has not been created yet
+                thread_cache::thread_cache.with(|tcache| { // This causes another allocation, hopefully with bootstrap
+                    let _tcache = tcache;                                                    // There is a theoretical bootstrap data race here, but because
+                });                                                                          // it repeatedly sets it false, eventually, it will allocate
+                *val.borrow_mut() = true; // Never has to repeat this code after this
             }
-            set_use_bootstrap(false)
+            set_use_bootstrap(false) // Turns off the bootstrap
         });
 
+        // If we are able to reach this piece of code, we know that the thread local cache is initalized
         thread_cache::thread_cache.with(|tcache| {
-            *thread_localized.lock() = true;
             let cache = unsafe {
-                (*tcache.get()).get_mut(size_class_index).unwrap()
+                (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
             };
+
+
             if cache.get_block_num() == 0 {
-                fill_cache(size_class_index, cache);
+                fill_cache(size_class_index, cache); // Fills the cache if necessary
             }
 
 
-            cache.pop_block()
+
+
+            cache.pop_block() // Pops the block from the thread cache bin
         })
     }
 }
@@ -336,7 +320,7 @@ pub fn do_free<T>(ptr: *const T) {
    // #[cfg(debug_assertions)]
         // println!("Free will succeed at {:?}", ptr);
 
-        let size_class_index = info.get_size_class_index();
+    let size_class_index = info.get_size_class_index();
     match size_class_index {
         None => {
             let super_block = desc.super_block;
@@ -392,6 +376,22 @@ pub fn do_free<T>(ptr: *const T) {
                         (*tcache.get()).get_mut(size_class_index).unwrap()
                     };
                     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+                    /*
+                    if sc.block_num == 0 {
+                        unsafe {
+                            let mut guard = bootstrap_cache.lock();
+                            let cache = guard.get_mut(size_class_index).unwrap();
+
+
+                            if cache.get_block_num() >= sc.cache_block_num {
+                                flush_cache(size_class_index, cache);
+                            }
+
+                            return cache.push_block(ptr as *mut u8);
+                        }
+                    }
+
+                     */
 
                     if cache.get_block_num() >= sc.cache_block_num {
                         flush_cache(size_class_index, cache);
@@ -425,5 +425,11 @@ mod tests {
         *ptr = MaybeUninit::new(8);
         assert_eq!(& unsafe { *(ptr as * const MaybeUninit<usize> as * const u8) }, &8); // should be trivial
         do_free(ptr as *mut MaybeUninit<usize>);
+    }
+
+    #[test]
+    fn malloc_and_free_large() {
+        let ptr = super::do_malloc(MAX_SZ * 2);
+        do_free(ptr);
     }
 }

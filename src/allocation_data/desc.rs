@@ -16,6 +16,14 @@ pub struct DescriptorNode {
     desc: Option<*mut Descriptor>,
 }
 
+impl Default for DescriptorNode {
+    fn default() -> Self {
+        Self {
+            desc: None
+        }
+    }
+}
+
 unsafe impl Send for DescriptorNode {}
 unsafe impl Sync for DescriptorNode {}
 
@@ -24,11 +32,16 @@ impl DescriptorNode {
         Self { desc: None }
     }
 
-    pub fn set(&mut self, desc: &'static Descriptor, count: u64) {
-        let usize_desc = desc as *const Descriptor as u64;
-        assert_eq!(usize_desc & CACHE_LINE_MASK as u64, 0);
-        let pointer = (usize_desc | (count & CACHE_LINE_MASK as u64)) as *mut Descriptor;
-        self.desc = Some(pointer);
+    pub fn set(&mut self, desc: Option<&'static Descriptor>, count: u64) {
+
+        if desc.is_some() {
+            let usize_desc = desc.unwrap() as *const Descriptor as u64;
+            assert_eq!(usize_desc & CACHE_LINE_MASK as u64, 0);
+            let pointer = (usize_desc | (count & CACHE_LINE_MASK as u64)) as *mut Descriptor;
+            self.desc = Some(pointer);
+        } else {
+            self.desc = desc.map(|d| d as *const _ as * mut Descriptor)
+        }
 
     }
 
@@ -56,11 +69,7 @@ impl DescriptorNode {
     }
 }
 
-impl Default for DescriptorNode {
-    fn default() -> Self {
-        Self { desc: None }
-    }
-}
+
 
 impl From<*mut Descriptor> for DescriptorNode {
     fn from(d: *mut Descriptor) -> Self {
@@ -74,13 +83,27 @@ impl From<*mut Descriptor> for DescriptorNode {
 #[repr(align(64))]
 #[derive(Debug)]
 pub struct Descriptor {
-    pub next_free: Atomic<DescriptorNode>,
-    pub next_partial: Atomic<DescriptorNode>,
+    pub next_free: Atomic<Option<DescriptorNode>>,
+    pub next_partial: Atomic<Option<DescriptorNode>>,
     pub anchor: Atomic<Anchor>,
     pub super_block: *mut u8,
     pub proc_heap: *mut ProcHeap,
     pub block_size: u32,
     pub max_count: u32,
+}
+
+impl Default for Descriptor {
+    fn default() -> Self {
+        Self {
+            next_free: Atomic::new(None),
+            next_partial: Atomic::new(None),
+            anchor: Atomic::new(Anchor::default()),
+            super_block: null_mut(),
+            proc_heap: null_mut(),
+            block_size: 0,
+            max_count: 0
+        }
+    }
 }
 
 /*
@@ -96,37 +119,19 @@ static ref DESCRIPTORS_SPACE
  */
 
 impl Descriptor {
-    pub fn new(
-        next_free: Atomic<DescriptorNode>,
-        next_partial: Atomic<DescriptorNode>,
-        anchor: Anchor,
-        super_block: *mut u8,
-        proc_heap: *mut ProcHeap,
-        block_size: u32,
-        max_count: u32,
-    ) -> Self {
-        Descriptor {
-            next_free,
-            next_partial,
-            anchor: Atomic::new(anchor),
-            super_block,
-            proc_heap,
-            block_size,
-            max_count,
-        }
-    }
+
 
     pub fn retire(&'static mut self) {
         self.block_size = 0;
         let mut avail = AVAILABLE_DESC.lock();
         let old_head = *avail;
         let mut new_head: DescriptorNode = DescriptorNode::default();
-            self.next_free.store(old_head, Ordering::Release);
+        self.next_free.store(Some(old_head), Ordering::Release);
 
-            new_head.set(
-                self,
-                old_head.get_counter().expect("Counter Should exist") + 1,
-            );
+        new_head.set(
+            Some(self),
+            old_head.get_counter().expect("Counter Should exist") + 1,
+        );
         *avail = new_head;
         /*
             if {
@@ -149,10 +154,16 @@ impl Descriptor {
             match desc {
                 Some(desc) => {
                     let mut new_head = desc.next_free.load(Ordering::Acquire);
-                    new_head.set(
-                        new_head.get_desc().expect("Head should have a descriptor"),
-                        old_head.get_counter().expect("Head should have a counter"),
-                    );
+                    match &mut new_head {
+                        None => { },
+                        Some(new_head) => {
+                            new_head.set(
+                                new_head.get_desc().map(|d| &*d),
+                                old_head.get_counter().expect("Head should have a counter"),
+                            );
+                        },
+                    }
+
                     /*
                     if AVAILABLE_DESC
                         .compare_exchange_weak(
@@ -166,7 +177,7 @@ impl Descriptor {
                         return desc as *mut Descriptor;
                     }
                      */
-                    *avail = new_head;
+                    *avail = new_head.unwrap_or(DescriptorNode::new());
                     return desc;
                 }
                 None => {
@@ -186,11 +197,14 @@ impl Descriptor {
                     let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
                     while (curr_ptr as usize + descriptor_size as usize) < max {
                         let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
+                        unsafe {
+                            *curr = MaybeUninit::new(Descriptor::default())
+                        }
                         if !prev.is_null() {
 
                             let prev_init = &mut *(*prev).as_mut_ptr();
                             prev_init.next_free.store(
-                                DescriptorNode::from(curr_ptr as *mut Descriptor),
+                                Some(DescriptorNode::from(curr_ptr as *mut Descriptor)),
                                 Ordering::Release,
                             );
 
@@ -203,31 +217,31 @@ impl Descriptor {
 
                     let prev = &mut *(*prev).as_mut_ptr();
                     prev.next_free
-                        .store(DescriptorNode::default(), Ordering::Release);
+                        .store(Some(DescriptorNode::default()), Ordering::Release);
 
                     // let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
                     let mut new_head: DescriptorNode = DescriptorNode::default();
                     // loop {
-                        prev.next_free.store(old_head, Ordering::Release);
-                        new_head.set(
-                            &mut *(first as *mut Descriptor),
-                            old_head.get_counter().unwrap_or(0) + 1,
-                        );
-                        /*
-                        if AVAILABLE_DESC
-                            .compare_exchange_weak(
-                                old_head,
-                                new_head,
-                                Ordering::Acquire,
-                                Ordering::Release,
-                            )
-                            .is_ok()
-                        {
-                            break;
-                        }
+                    prev.next_free.store(Some(old_head), Ordering::Release);
+                    new_head.set(
+                        Some(&mut *(first as *mut Descriptor)),
+                        old_head.get_counter().unwrap_or(0) + 1,
+                    );
+                    /*
+                    if AVAILABLE_DESC
+                        .compare_exchange_weak(
+                            old_head,
+                            new_head,
+                            Ordering::Acquire,
+                            Ordering::Release,
+                        )
+                        .is_ok()
+                    {
+                        break;
+                    }
 
-                         */
-                        *avail = new_head;
+                     */
+                    *avail = new_head;
                     // }
 
 

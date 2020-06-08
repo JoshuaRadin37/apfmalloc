@@ -1,5 +1,5 @@
 use crate::allocation_data::Descriptor;
-use crate::mem_info::{LG_PAGE, MAX_SZ_IDX, PAGE, PAGE_MASK};
+use crate::mem_info::{LG_PAGE, MAX_SZ_IDX, PAGE, PAGE_MASK, MAX_SZ};
 use bitfield::size_of;
 
 use crossbeam::atomic::AtomicCell;
@@ -141,9 +141,6 @@ impl PageInfo {
 
     pub fn get_size_class_index(&self) -> Option<usize> {
 
-
-
-
         match self.desc {
             ptr if ptr == null_mut() => None,
             desc => Some({
@@ -155,6 +152,9 @@ impl PageInfo {
                  */
                 unsafe {
                     let d = & *desc;
+                    if d.block_size > MAX_SZ as u32 {
+                        return Some(0);
+                    }
                     let ret = get_size_class(d.block_size as usize);
                     ret
                 }
