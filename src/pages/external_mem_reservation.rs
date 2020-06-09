@@ -20,6 +20,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
 #[cfg(windows)] use winapi::shared::minwindef::LPVOID;
+use crate::no_heap_mutex::NoHeapMutex;
 
 #[derive(Debug)]
 pub struct Segment {
@@ -58,9 +59,9 @@ pub enum AllocationError {
     #[cfg(windows)]
     NoHeap,
     #[cfg(windows)]
-    HeapNotCreated,
+    HeapNotCreated(usize),
     #[cfg(windows)]
-    AllocationFailed
+    AllocationFailed(usize)
 }
 
 impl Display for AllocationError {
@@ -135,7 +136,7 @@ impl SegAllocator for SegmentAllocator {
                     }
                 }
             if alloc.is_null() {
-                Err(AllocationError::AllocationFailed)
+                Err(AllocationError::AllocationFailed(size))
             } else {
                 let seg = Segment::new(
                     alloc,
@@ -165,7 +166,7 @@ impl SegAllocator for SegmentAllocator {
 
              */
             if alloc.is_null() {
-                Err(AllocationError::AllocationFailed)
+                Err(AllocationError::AllocationFailed(size))
             } else {
                 let seg = Segment::new(
                     alloc,

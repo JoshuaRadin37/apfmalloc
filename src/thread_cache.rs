@@ -4,24 +4,30 @@ use crate::allocation_data::Anchor;
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
+    block_size: Option<isize>
 }
 
 impl ThreadCacheBin {
     pub const fn new() -> Self {
         Self {
             block: null_mut(),
-            block_num: 0
+            block_num: 0,
+            block_size: None
         }
     }
 
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
-        unsafe {
-            *(block as *mut *mut u8) = self.block;
-        };
-        self.block = block;
-        self.block_num += 1;
+        if let Some(block_size) = self.block_size {
+
+        } else {
+            unsafe {
+                *(block as *mut *mut u8) = self.block;
+            }
+            self.block = block;
+            self.block_num += 1;
+        }
     }
 
     /// Pushes a block list
@@ -54,6 +60,7 @@ impl ThreadCacheBin {
             self.block_num -= 1;
             ret
         }
+
     }
 
     /// Manually popped the list and now needs to update cache
@@ -199,10 +206,7 @@ use crate::pages::page_free;
 use crate::size_classes::SIZE_CLASSES;
 
 thread_local! {
-    pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin {
-        block: null_mut(),
-        block_num: 0
-    }; MAX_SZ_IDX]);
+    pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
 }
@@ -217,10 +221,7 @@ mod test {
     #[test]
     fn check_bin_consistency() {
 
-        let _bin = ThreadCacheBin {
-            block: null_mut(),
-            block_num: 0
-        };
+        let _bin = ThreadCacheBin::new();
 
     }
 

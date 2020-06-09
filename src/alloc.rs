@@ -399,6 +399,7 @@ mod test {
 
 
     #[test]
+    #[ignore]
     fn from_new_sb() {
         let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
         unsafe {

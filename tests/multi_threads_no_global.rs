@@ -1,29 +1,8 @@
-extern crate lrmalloc_rs;
-
 use std::thread;
-use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
-use std::alloc::{GlobalAlloc, Layout};
-use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
-use core::sync::atomic::Ordering;
-use core::time::Duration;
-
-struct Dummy;
-#[global_allocator]
-static ALLOCATOR: Dummy = Dummy;
-
-unsafe impl GlobalAlloc for Dummy {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // do_malloc(layout.size())
-        let output = do_aligned_alloc(layout.align(), layout.size());
-        output
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let _layout = layout;
-        do_free(ptr)
-    }
-}
-
+use std::sync::{Mutex, Arc};
+use lrmalloc_rs::{IN_BOOTSTRAP, IN_CACHE, do_malloc};
+use std::sync::atomic::Ordering;
+use lrmalloc_rs::auto_ptr::AutoPtr;
 
 #[test]
 fn test_multiple_threads() {
@@ -39,7 +18,7 @@ fn test_multiple_threads() {
             // thread::sleep(Duration::from_secs_f64(5.0));
             for _ in 0..10_000 {
 
-                let b = Box::new(0xdeadbeafusize);
+                let b = AutoPtr::new(0xdeadbeafusize);
                 let arc = &clone;
                 let mut guard = arc.lock().unwrap();
                 guard.push(b);

@@ -3,6 +3,17 @@ use std::iter::Iterator;
 use lrmalloc_rs::{do_malloc, do_free};
 use std::thread;
 
+fn do_nothing(c: &mut Criterion) {
+    c.bench_function(
+        "do nothing",
+        |b| {
+            b.iter(|| {
+                let _ = 8usize;
+            })
+        }
+    );
+}
+
 fn allocate_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate");
     for bytes in (8..=13).map(|b| 1 << b) {
@@ -11,7 +22,9 @@ fn allocate_one_thread(c: &mut Criterion) {
             BenchmarkId::from_parameter(bytes as u64),
             &bytes,
             |b, &size| {
-                b.iter(|| do_malloc(size as usize))
+                b.iter(|| {
+                    do_malloc(size as usize)
+                })
             }
         );
 
@@ -47,7 +60,8 @@ fn allocate_and_free_one_thread_comparison(c: &mut Criterion) {
             &bytes,
             |b, &size| {
                 b.iter(|| {
-                    Vec::<u8>::with_capacity(size as usize);
+                    let mut v = Vec::<u8>::with_capacity(size as usize);
+                    v.push(1);
                 })
             }
         );
@@ -60,6 +74,6 @@ fn allocate_and_free_one_thread_comparison(c: &mut Criterion) {
 
 
 
-criterion_group!(one_thread, allocate_one_thread, allocate_and_free_one_thread, allocate_and_free_one_thread_comparison);
+criterion_group!(one_thread, do_nothing, allocate_one_thread, allocate_and_free_one_thread, allocate_and_free_one_thread_comparison);
 
 criterion_main!(one_thread);
