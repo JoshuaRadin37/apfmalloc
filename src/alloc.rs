@@ -391,3 +391,25 @@ pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usi
     debug_assert_eq!(diff / _sc_block_size, index);
     index
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::mem_info::MAX_SZ_IDX;
+
+
+    #[test]
+    fn from_new_sb() {
+        let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
+        unsafe {
+            crate::init_malloc();
+        }
+        let cache = &mut tcache[1];
+        for i in 0..10000 {
+            malloc_from_new_sb(1, cache, &mut 0);
+            cache.pop_list(cache.peek_block(), cache.get_block_num());
+            println!("Allocated {}", i)
+        }
+
+    }
+}

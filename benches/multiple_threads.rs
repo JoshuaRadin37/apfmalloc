@@ -30,4 +30,4 @@ fn allocate_multi_thread(c: &mut Criterion) {
 }
 
 criterion_group!(multi_thread, allocate_multi_thread);
-// criterion_main!(multi_thread);
+criterion_main!(multi_thread);

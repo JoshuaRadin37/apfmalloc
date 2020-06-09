@@ -59,6 +59,7 @@ fn allocate_and_free_one_thread_comparison(c: &mut Criterion) {
 
 
 
+
 criterion_group!(one_thread, allocate_one_thread, allocate_and_free_one_thread, allocate_and_free_one_thread_comparison);
 
 criterion_main!(one_thread);

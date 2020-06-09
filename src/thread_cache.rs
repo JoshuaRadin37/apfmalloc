@@ -7,6 +7,13 @@ pub struct ThreadCacheBin {
 }
 
 impl ThreadCacheBin {
+    pub const fn new() -> Self {
+        Self {
+            block: null_mut(),
+            block_num: 0
+        }
+    }
+
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {

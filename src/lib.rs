@@ -18,18 +18,24 @@ use std::sync::atomic::AtomicBool;
 use std::ffi::c_void;
 use std::fs::read;
 
+
 #[macro_use]
 pub mod macros;
-mod alloc;
-mod allocation_data;
-#[allow(unused)] mod mem_info;
-mod page_map;
-mod pages;
+
+
+pub mod alloc;
+pub mod allocation_data;
+#[allow(unused)] pub mod mem_info;
+pub mod page_map;
+pub mod pages;
 pub mod size_classes;
-mod thread_cache;
-mod no_heap_mutex;
+pub mod thread_cache;
+pub mod no_heap_mutex;
 mod bootstrap;
+
 pub mod auto_ptr;
+
+
 
 
 #[macro_use]
@@ -44,8 +50,7 @@ pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); /
 pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
 
 
-
-unsafe fn init_malloc() {
+pub unsafe fn init_malloc() {
     init_size_class();
 
     S_PAGE_MAP.init();
@@ -117,10 +122,12 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     let mut size = align_val(size, align);
 
     unsafe {
-        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-            init_malloc();
+        if !MALLOC_SKIP {
+            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
+                init_malloc();
+            }
+            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
         }
-        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) { }
     }
 
     if size > PAGE {

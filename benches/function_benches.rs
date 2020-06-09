@@ -1,25 +1,92 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
-use lrmalloc_rs::allocate_to_cache;
-use lrmalloc_rs::size_classes::get_size_class;
+use lrmalloc_rs::{allocate_to_cache, do_malloc};
+use lrmalloc_rs::mem_info::{MAX_SZ_IDX, PAGE};
+use lrmalloc_rs::thread_cache::{
+    ThreadCacheBin,
+    fill_cache
+};
+use lrmalloc_rs::pages::page_alloc;
+use lrmalloc_rs::alloc::malloc_from_new_sb;
+use lrmalloc_rs::allocation_data::Descriptor;
 
-fn allocate_to_cache_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("allocate to cache");
-    for bytes in (8..=13).map(|b| 1 << b) {
-        group.throughput(Throughput::Bytes(bytes));
-        let size_class_index = get_size_class(bytes as usize);
-        group.bench_with_input(
-            BenchmarkId::from_parameter(size_class_index as u64),
-            &bytes,
-            |b, &size_class| {
-                b.iter(|| {
-                    allocate_to_cache(0, size_class as usize);
-                })
+fn init_malloc(c: &mut Criterion) {
+
+    c.bench_function(
+        "init malloc",
+        |b| {
+            b.iter(|| unsafe {
+                lrmalloc_rs::init_malloc()
             }
-        );
+            );
+        }
 
-    }
-    group.finish()
+    );
 }
 
-criterion_group!(functions, allocate_to_cache_bench);
-criterion_main!(functions, multo);
+fn thread_cache_fill(c: &mut Criterion) {
+    let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
+    c.bench_function(
+        "cache fill",
+        |b| {
+            let cache = &mut tcache[1];
+            b.iter(
+                || {
+                    fill_cache(
+                        1,
+                        cache
+                    );
+                    cache.pop_list(cache.peek_block(), cache.get_block_num());
+                }
+
+            );
+        }
+    );
+}
+
+fn page_alloc_bench(c: &mut Criterion) {
+    c.bench_function(
+        "page get",
+        |b| {
+            b.iter( || {
+                page_alloc(PAGE)
+            }
+            );
+        }
+    );
+}
+
+
+fn from_new_sb(c: &mut Criterion) {
+    let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
+    unsafe {
+        lrmalloc_rs::init_malloc();
+    }
+    c.bench_function(
+        "malloc from new super block",
+        |b| {
+            let cache = &mut tcache[1];
+            b.iter(
+                || {
+                    malloc_from_new_sb(1, cache, &mut 0);
+                    cache.pop_list(cache.peek_block(), cache.get_block_num());
+                }
+            );
+        }
+    );
+}
+
+fn desc_alloc(c: &mut Criterion) {
+    c.bench_function(
+        "allocate descriptor",
+        |b| {
+            b.iter(
+                || unsafe {
+                    Descriptor::alloc()
+                }
+            );
+        }
+    );
+}
+
+criterion_group!(functions, init_malloc, thread_cache_fill, page_alloc_bench, from_new_sb, desc_alloc);
+criterion_main!(functions);

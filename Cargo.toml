@@ -22,12 +22,12 @@ spin = "0.5.2"
 thread_local = "1.0.1"
 
 
+
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "winnt", "winerror", "memoryapi"] }
 
 [dev-dependencies]
 criterion = "0.3"
-
 [[bench]]
 name = "allocating_bench"
 harness = false
@@ -36,6 +36,7 @@ harness = false
 name = "function_benches"
 harness = false
 
-[[bench]]
-name = "multiples_threads"
-harness = false
+
+# [[bench]]
+# name = "multiple_threads"
+# harness = false
