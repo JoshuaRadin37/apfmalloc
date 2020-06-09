@@ -226,7 +226,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             boostrap_reserve.lock().allocate(size)
         }
     } else {
-        #[cfg(not(unix))]{
+        #[cfg(not(thread_local_storage))] {
             set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
             //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
             thread_cache::thread_init.with(|val| { // if not initalized, it goes back
@@ -425,17 +425,18 @@ pub fn do_free<T>(ptr: *const T) {
                      */
                 }
             } else {
-                set_use_bootstrap(true);
-                thread_cache::thread_init.with(|val| {
-                    if !*val.borrow() {
-                        thread_cache::thread_cache.with(|tcache| {
-                            let _tcache = tcache;
-                        });
-                        *val.borrow_mut() = true;
-                    }
-                    set_use_bootstrap(false)
-                });
-
+                #[cfg(not(thread_local_storage))] {
+                    set_use_bootstrap(true);
+                    thread_cache::thread_init.with(|val| {
+                        if !*val.borrow() {
+                            thread_cache::thread_cache.with(|tcache| {
+                                let _tcache = tcache;
+                            });
+                            *val.borrow_mut() = true;
+                        }
+                        set_use_bootstrap(false)
+                    });
+                }
                 thread_cache::thread_cache.try_with(|tcache| {
                     let cache = unsafe {
                         (*tcache.get()).get_mut(size_class_index).unwrap()
