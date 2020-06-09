@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::alloc::{GlobalAlloc, Layout};
 use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
 use core::sync::atomic::Ordering;
+use core::time::Duration;
 
 struct Dummy;
 #[global_allocator]
@@ -30,14 +31,18 @@ fn test_multiple_threads() {
     let mut vec = vec![];
     let boxes = Arc::new(Mutex::new(Vec::new()));
 
-    for i in 0..100 {
+    for i in 0..30 {
         let clone = boxes.clone();
         vec.push(thread::spawn (move || {
+            thread::sleep(Duration::from_secs_f64(5.0));
             println!("Thread {} says hi!", &i);
-            let b = Box::new(0xdeadbeafusize);
-            let arc = clone;
-            let mut guard = arc.lock().unwrap();
-            guard.push(b);
+            for _ in 0..10_000 {
+
+                let b = Box::new(0xdeadbeafusize);
+                let arc = &clone;
+                let mut guard = arc.lock().unwrap();
+                guard.push(b);
+            }
         }));
     }
 
