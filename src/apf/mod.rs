@@ -22,13 +22,13 @@ pub struct ApfTuner {
     time: u16,
     fetch_count: u16,
     dapf: u16,
-    /* check: &'a dyn Fn() -> u16,
-    get: &'a dyn Fn(usize) -> bool,
-    ret: &'a dyn Fn(usize) -> bool, */
+    check: fn(usize) -> u32,
+    get: fn(usize, usize) -> bool,
+    ret: fn(usize, u32) -> bool
 }
 
 impl ApfTuner {
-    pub fn new() -> ApfTuner {
+    pub fn new(check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner {
         ApfTuner {
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(),
@@ -36,6 +36,9 @@ impl ApfTuner {
             time: 0,
             fetch_count: 0,
             dapf: 0,
+            check: check,
+            get: get,
+            ret: ret
         }
     }
 
@@ -49,7 +52,7 @@ impl ApfTuner {
         self.r_counter.inc_timer();
 
         // If out of free blocks, fetch
-        /* if (self.check)() == 0 {
+        if (self.check)(0) == 0 {
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -60,9 +63,9 @@ impl ApfTuner {
                 }
             }
 
-            (self.get)(demand.ceil() as usize);
+            (self.get)(0, demand.ceil() as usize);
             self.count_fetch();
-        } */
+        } 
         return true;
     }
 
@@ -84,7 +87,7 @@ impl ApfTuner {
         let demand = d.unwrap(); // Safe
 
         // If too many free blocks, return some
-        /*  if (self.check)() as f32 >= 2.0 * demand + 1.0 {
+        if (self.check)(0) as f32 >= 2.0 * demand + 1.0 {
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -95,8 +98,8 @@ impl ApfTuner {
                 }
             }
 
-            (self.ret)(demand.ceil() as usize + 1);
-        } */
+            (self.ret)(0, demand.ceil() as u32 + 1);
+        }
         return true;
     }
 

@@ -173,6 +173,24 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     }
 }
 
+// APF Functions
+
+fn check_blocks(i: usize) -> u32 {
+    return thread_cache.with(|tcache| {
+        unsafe {
+            return (*tcache.get()).get_mut(i).unwrap().get_block_num();
+        };
+    });
+}
+
+fn fetch(i: usize, c: usize) -> bool{
+    return false;
+}
+
+fn ret(i: usize, c: u32) -> bool{
+    return false;
+}
+
 use crate::alloc::{
     compute_index, get_page_info_for_ptr, heap_push_partial, malloc_from_new_sb,
     malloc_from_partial, unregister_desc,
@@ -183,7 +201,7 @@ use crate::pages::page_free;
 use crate::size_classes::SIZE_CLASSES;
 use std::cell::RefCell;
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
+
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
@@ -197,7 +215,7 @@ thread_local! {
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
 
-   pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(); MAX_SZ_IDX]);
+    pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(check_blocks, fetch, ret); MAX_SZ_IDX]);
 }
 
 #[cfg(test)]
