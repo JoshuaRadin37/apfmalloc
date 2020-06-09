@@ -1,6 +1,9 @@
+use crate::apf::constants::REUSE_BURST_LENGTH;
 use std::collections::HashMap;
-use std::vec::Vec;
 use std::fmt;
+use std::vec::Vec;
+
+const MAX_LENGTH: usize = REUSE_BURST_LENGTH;
 
 /*
     Event represents allocation or free operation
@@ -9,25 +12,25 @@ use std::fmt;
 #[derive(Copy, Clone)]
 pub enum Event {
     Alloc(usize),
-    Free(usize)
+    Free(usize),
 }
 
 impl fmt::Debug for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Alloc(u) => { write!(f, "a{}", u) }
-            Free(u) => { write!(f, "f{}", u) }
+            Alloc(u) => write!(f, "a{}", u),
+            Free(u) => write!(f, "f{}", u),
         }
     }
 }
 
 use crate::apf::trace::Event::*;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Trace {
-    accesses: Vec<Event>,
+    accesses: [Option<Event>; MAX_LENGTH],
     length: usize,
-    alloc_count: usize
+    alloc_count: usize,
 }
 
 /*
@@ -37,9 +40,9 @@ pub struct Trace {
 impl Trace {
     pub fn new() -> Trace {
         Trace {
-            accesses: Vec::new(),
+            accesses: [None; MAX_LENGTH],
             length: 0,
-            alloc_count: 0
+            alloc_count: 0,
         }
     }
 
@@ -52,55 +55,63 @@ impl Trace {
     }
 
     pub fn add(&mut self, add: Event) -> () {
-        self.accesses.push(add);
+        if self.length >= MAX_LENGTH { panic!("ERROR: Trace {:?} exceeded max length", self); }
+
+        self.accesses[self.length] = Some(add);
         self.length += 1;
         match add {
-            Alloc(_) => { self.alloc_count += 1; },
+            Alloc(_) => {
+                self.alloc_count += 1;
+            }
             Free(_) => {}
         };
     }
 
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
-        self.accesses.append(&mut vec.clone());
-        self.length += vec.len();
         for i in 0..vec.len() {
+            if self.length >= MAX_LENGTH { panic!("ERROR: Trace exceeded max length"); }
+            
             match vec[i] {
-                Alloc(_) => { self.alloc_count += 1; },
+                Alloc(_) => {
+                    self.alloc_count += 1;
+                }
                 Free(_) => {}
             };
+
+            self.accesses[self.length] = Some(vec[i]);
+            self.length += 1;
         }
     }
 
-    pub fn get(&self, index: usize) -> Event {
+    pub fn get(&self, index: usize) -> Option<Event> {
+        if index > MAX_LENGTH {
+            return None;
+        };
+
         self.accesses[index]
     }
 
     // Counts objects referenced in trace
-    pub fn object_count(&self) -> usize {   // This is dumb
+    pub fn object_count(&self) -> usize {
+        // This is dumb
         let mut seen = HashMap::new();
 
         for i in 0..self.length() {
-            match &self.get(i) {
-                Alloc(s) => { if !seen.contains_key(s) { seen.insert(s.clone(), true); } },
-                Free(s) => { if !seen.contains_key(s) { seen.insert(s.clone(), true); } }
+            match &self.get(i).unwrap() {   // Safe since all indices less than length are Some
+                Alloc(s) => {
+                    if !seen.contains_key(s) {
+                        seen.insert(s.clone(), true);
+                    }
+                }
+                Free(s) => {
+                    if !seen.contains_key(s) {
+                        seen.insert(s.clone(), true);
+                    }
+                }
             };
-            
         }
 
         seen.len()
-    }
-
-    // Generates a subtrace from start to end, excluding end
-    // Returns None if indices not valid
-    pub fn subtrace(&self, start: usize, end: usize) -> Option<Trace> {
-        if start > end { return None; }
-        if end > self.length() { return None; }
-
-        let mut t = Trace::new();
-        for i in start..end {
-            t.add(self.get(i));
-        }
-        Some(t)
     }
 
     // Converts trace to vector of free intervals represented (si, ei)
@@ -111,14 +122,19 @@ impl Trace {
         let mut alloc_clock = 0;
 
         for i in 0..self.length() {
-            match self.get(i) {
-                Free(s) => { frees.insert(s.clone(), alloc_clock); },
-                Alloc(e) => { match frees.get(&e) {
-                                Some(&s) => { result.push((s, alloc_clock)); }   // Should format error to include index
-                                None => {}
-                              }
-                              alloc_clock += 1;
-                            }
+            match self.get(i).unwrap() {
+                Free(s) => {
+                    frees.insert(s.clone(), alloc_clock);
+                }
+                Alloc(e) => {
+                    match frees.get(&e) {
+                        Some(&s) => {
+                            result.push((s, alloc_clock));
+                        } // Should format error to include index
+                        None => {}
+                    }
+                    alloc_clock += 1;
+                }
             }
         }
 
@@ -132,13 +148,18 @@ impl Trace {
         let mut result = Vec::new();
 
         for i in 0..self.length() {
-            match self.get(i) {
-                Free(s) => { frees.insert(s.clone(), i); },
-                Alloc(e) => { match frees.get(&e) {
-                                Some(&s) => { result.push((s, i)); }   // Should format error to include index
-                                None => {}
-                              }
-                            }
+            match self.get(i).unwrap() {
+                Free(s) => {
+                    frees.insert(s.clone(), i);
+                }
+                Alloc(e) => {
+                    match frees.get(&e) {
+                        Some(&s) => {
+                            result.push((s, i));
+                        } // Should format error to include index
+                        None => {}
+                    }
+                }
             }
         }
 
@@ -150,16 +171,28 @@ impl Trace {
         let mut alloc = HashMap::<usize, bool>::new();
 
         for i in 0..self.length() {
-            match self.get(i) {
-                Alloc(s) => { match alloc.insert(s, true) {
-                                Some(b) => { if b == true { return false; } }   // If already allocated, fail
-                                _ => {}
-                              } 
-                }
-                Free(s) => { match alloc.insert(s, false) {
-                                Some(b) => { if b == false { return false; } }   // If already freed, fail
-                                _ => { return false; }  // If never allocated, fail
+            match self.get(i).unwrap() {
+                Alloc(s) => {
+                    match alloc.insert(s, true) {
+                        Some(b) => {
+                            if b == true {
+                                return false;
                             }
+                        } // If already allocated, fail
+                        _ => {}
+                    }
+                }
+                Free(s) => {
+                    match alloc.insert(s, false) {
+                        Some(b) => {
+                            if b == false {
+                                return false;
+                            }
+                        } // If already freed, fail
+                        _ => {
+                            return false;
+                        } // If never allocated, fail
+                    }
                 }
             }
         }
@@ -175,7 +208,14 @@ mod tests {
     #[test]
     fn test_alloc_clock() {
         let mut t = Trace::new();
-        t.extend(vec![Alloc(3), Free(3), Free(2), Free(1), Alloc(1), Alloc(2)]);
+        t.extend(vec![
+            Alloc(3),
+            Free(3),
+            Free(2),
+            Free(1),
+            Alloc(1),
+            Alloc(2),
+        ]);
         assert_eq!(t.free_intervals(), vec![(1, 1), (1, 2)]);
     }
 
@@ -217,10 +257,9 @@ mod tests {
     #[test]
     fn test_intervals_2() {
         let mut t = Trace::new();
-        t.extend(vec![Alloc(1), Alloc(2), Alloc(3), Free(3), Free(2), Free(1), 
+        t.extend(vec![Alloc(1), Alloc(2), Alloc(3), Free(3), Free(2), Free(1),
                       Alloc(1), Alloc(2), Alloc(3), Free(3), Free(2), Free(1),
                       Alloc(1), Alloc(2), Alloc(3)]);
         assert_eq!(t.free_intervals(), vec![(5, 6), (4, 7), (3, 8), (11, 12), (10, 13), (9, 14)]);
     } */
 }
-

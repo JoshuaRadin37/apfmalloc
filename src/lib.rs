@@ -58,6 +58,8 @@ unsafe fn init_malloc() {
         heap.partial_list.store(None, Ordering::Release);
         heap.size_class_index = idx;
     }
+
+    println!("init");
 }
 
 unsafe fn thread_local_init_malloc() {
@@ -103,6 +105,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 
         register_desc(desc);
         let ptr = desc.super_block;
+        // Log malloc with tuner
         return ptr;
     }
 
@@ -119,7 +122,9 @@ pub fn do_malloc(size: usize) -> *mut u8 {
                 fill_cache(size_class_index, cache);
             }
 
-            cache.pop_block()
+            let ptr = cache.pop_block();
+            // Log malloc with tuner
+            ptr
         }
     } else {
         set_use_bootstrap(true);
@@ -137,7 +142,9 @@ pub fn do_malloc(size: usize) -> *mut u8 {
                 set_use_bootstrap(false);
             }
 
-            cache.pop_block()
+            let ptr = cache.pop_block();
+            // Log malloc with tuner
+            ptr
         })
     }
 }

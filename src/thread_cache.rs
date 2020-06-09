@@ -77,18 +77,16 @@ impl ThreadCacheBin {
     }
 }
 
-
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
-
 
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
     }
 
-
-    #[cfg(debug_assertions)] {
+    #[cfg(debug_assertions)]
+    {
         let sc = unsafe { &SIZE_CLASSES[size_class_index] };
         debug_assert!(block_num > 0);
         debug_assert!(block_num <= sc.cache_block_num as usize);
@@ -175,17 +173,21 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     }
 }
 
-
+use crate::alloc::{
+    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_from_new_sb,
+    malloc_from_partial, unregister_desc,
+};
+use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::MAX_SZ_IDX;
-use std::cell::RefCell;
-use std::ptr::null_mut;
-use std::collections::HashMap;
-use std::cell::UnsafeCell;
-use crate::allocation_data::{SuperBlockState, get_heaps};
-use std::sync::atomic::Ordering;
-use crate::alloc::{unregister_desc, heap_push_partial, compute_index, get_page_info_for_ptr, malloc_from_partial, malloc_from_new_sb};
 use crate::pages::page_free;
 use crate::size_classes::SIZE_CLASSES;
+use std::cell::RefCell;
+use std::cell::UnsafeCell;
+use std::collections::HashMap;
+use std::ptr::null_mut;
+use std::sync::atomic::Ordering;
+
+use crate::apf::ApfTuner;
 
 thread_local! {
     pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin {
@@ -194,9 +196,9 @@ thread_local! {
     }; MAX_SZ_IDX]);
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
+
+   pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(); MAX_SZ_IDX]);
 }
-
-
 
 #[cfg(test)]
 mod test {
@@ -205,13 +207,9 @@ mod test {
 
     #[test]
     fn check_bin_consistency() {
-
         let bin = ThreadCacheBin {
             block: null_mut(),
-            block_num: 0
+            block_num: 0,
         };
-
     }
-
-
 }
