@@ -1,6 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
 use std::iter::Iterator;
-use lralloc_rs::{do_malloc, do_free};
+use lrmalloc_rs::{do_malloc, do_free};
 use std::thread;
 
 fn allocate_one_thread(c: &mut Criterion) {
@@ -55,7 +55,7 @@ fn allocate_multi_thread(c: &mut Criterion) {
                                                     }));
                     }
                     for join in vec {
-                        join.join();
+                        join.join().unwrap();
                     }
                 })
             });

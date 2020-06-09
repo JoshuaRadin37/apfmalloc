@@ -1,8 +1,8 @@
 extern crate libc;
 
 
-use std::{io, fmt};
-use std::ffi::{c_void, NulError};
+use std::fmt;
+use std::ffi::c_void;
 
 #[cfg(windows)] use winapi::{
     shared::{
@@ -15,9 +15,8 @@ use std::ffi::{c_void, NulError};
         winnt::{HEAP_ZERO_MEMORY, MEM_RESERVE, PAGE_READWRITE, MEM_RELEASE, MEM_COMMIT}
     }
 };
-use std::io::ErrorKind;
-use std::fmt::{Error, Display};
-use crate::no_heap_mutex::NoHeapMutex;
+
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
 #[cfg(windows)] use winapi::shared::minwindef::LPVOID;
@@ -41,6 +40,7 @@ impl Segment {
         Segment { ptr, length }
     }
 
+    #[allow(unused)]
     pub fn len(&self) -> usize {
         self.length
     }
@@ -55,8 +55,11 @@ pub struct SegmentAllocator;
 
 #[derive(Debug)]
 pub enum AllocationError {
+    #[cfg(windows)]
     NoHeap,
+    #[cfg(windows)]
     HeapNotCreated,
+    #[cfg(windows)]
     AllocationFailed
 }
 
@@ -215,9 +218,8 @@ impl SegAllocator for SegmentAllocator {
 
 #[cfg(test)]
 mod test {
-    use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
+    use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator};
     use crate::mem_info::PAGE;
-    use std::ffi::c_void;
     use crate::page_map::PM_SZ;
 
     #[test]

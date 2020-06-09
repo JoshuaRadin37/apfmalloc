@@ -184,7 +184,6 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 use crate::mem_info::MAX_SZ_IDX;
 use std::cell::RefCell;
 use std::ptr::null_mut;
-use std::collections::HashMap;
 use std::cell::UnsafeCell;
 use crate::allocation_data::{SuperBlockState, get_heaps};
 use std::sync::atomic::Ordering;
@@ -211,7 +210,7 @@ mod test {
     #[test]
     fn check_bin_consistency() {
 
-        let bin = ThreadCacheBin {
+        let _bin = ThreadCacheBin {
             block: null_mut(),
             block_num: 0
         };

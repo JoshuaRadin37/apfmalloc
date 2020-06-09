@@ -187,13 +187,13 @@ impl Descriptor {
                     // organize list with the rest of the descriptors
                     // and add to available descriptors
 
-                    let mut first = null_mut();
+
                     let mut prev: *mut MaybeUninit<Descriptor> = null_mut();
 
                     let descriptor_size = std::mem::size_of::<Descriptor>() as isize;
                     let mut curr_ptr = ptr.offset(descriptor_size);
                     curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
-                    first = curr_ptr as *mut MaybeUninit<Descriptor>;
+                    let first = curr_ptr as *mut MaybeUninit<Descriptor>;
                     let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
                     while (curr_ptr as usize + descriptor_size as usize) < max {
                         let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
@@ -252,4 +252,3 @@ impl Descriptor {
     }
 }
 
-pub fn desc_retire(_desc: &mut Descriptor) {}

@@ -11,6 +11,7 @@ pub struct NoHeapMutex<T> {
 
 pub struct MutexLocked;
 
+#[allow(unused)]
 impl<T> NoHeapMutex<T> {
     pub const fn new(t: T) -> Self {
         Self {
@@ -19,12 +20,14 @@ impl<T> NoHeapMutex<T> {
         }
     }
 
+
     pub fn lock(&self) -> NoHeapMutexGuard<'_, T> {
         while self.lock.compare_and_swap(false, true, Ordering::AcqRel) { }
         NoHeapMutexGuard {
             mutex: self
         }
     }
+
 
     pub fn try_lock(&self) -> Result<NoHeapMutexGuard<'_, T>, MutexLocked> {
         match self.lock.compare_and_swap(false, true, Ordering::AcqRel) {
@@ -70,7 +73,7 @@ impl<T> DerefMut for NoHeapMutexGuard<'_, T> {
 
 #[cfg(test)]
 mod test {
-    use crate::no_heap_mutex::{NoHeapMutex, MutexLocked, NoHeapMutexGuard};
+    use crate::no_heap_mutex::NoHeapMutex;
     use std::thread;
 
 
@@ -109,7 +112,7 @@ mod test {
         static mutex: NoHeapMutex<usize> = NoHeapMutex::new(0usize);
         {
 
-            let lock = mutex.lock();
+            let _lock = mutex.lock();
 
             match mutex.try_lock() {
                 Ok(_) => {

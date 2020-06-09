@@ -1,14 +1,13 @@
 use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
-use lralloc_rs::{do_malloc, do_free, do_aligned_alloc};
-use core::ops::RangeTo;
+use lrmalloc_rs::{do_malloc, do_free, do_aligned_alloc};
 use std::thread;
 
 
 struct Dummy;
 
 #[global_allocator]
-static allocator: Dummy = Dummy;
+static ALLOCATOR: Dummy = Dummy;
 
 unsafe impl GlobalAlloc for Dummy {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -18,6 +17,7 @@ unsafe impl GlobalAlloc for Dummy {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let _layout = layout;
         do_free(ptr)
     }
 }
@@ -42,6 +42,7 @@ fn global_allocator() {
 }
 
 #[test]
+#[ignore]
 fn mass_stress_no_harness() {
     for j in 0..500 {
         let mut vec = vec![];
@@ -53,7 +54,7 @@ fn mass_stress_no_harness() {
                 }));
         }
         for join in vec {
-            join.join();
+            join.join().unwrap();
         }
     }
 }

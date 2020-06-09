@@ -1,11 +1,11 @@
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::alloc::{GlobalAlloc, Layout};
-use lralloc_rs::{do_aligned_alloc, do_free};
+use lrmalloc_rs::{do_aligned_alloc, do_free};
 
 struct Dummy;
 #[global_allocator]
-static allocator: Dummy = Dummy;
+static ALLOCATOR: Dummy = Dummy;
 
 unsafe impl GlobalAlloc for Dummy {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -15,6 +15,7 @@ unsafe impl GlobalAlloc for Dummy {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let _layout = layout;
         do_free(ptr)
     }
 }
@@ -24,7 +25,7 @@ unsafe impl GlobalAlloc for Dummy {
 fn multiple_threads() {
 
     let mut vec = vec![];
-    let mut boxes = Arc::new(Mutex::new(Vec::new()));
+    let boxes = Arc::new(Mutex::new(Vec::new()));
 
     for i in 0..100 {
         let clone = boxes.clone();
@@ -38,7 +39,7 @@ fn multiple_threads() {
     }
 
     for join_handle in vec {
-        join_handle.join();
+        join_handle.join().unwrap();
     }
 
     println!();

@@ -10,21 +10,19 @@ use crate::page_map::S_PAGE_MAP;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::pages::{page_alloc, page_free};
-use atomic::{Atomic, Ordering};
+use atomic::Ordering;
 use spin::Mutex;
 use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache, boostrap_reserve};
-use std::cell::RefCell;
-use core::mem::MaybeUninit;
-use thread_local::ThreadLocal;
-use crate::thread_cache::{ThreadCacheBin, fill_cache, flush_cache};
-use std::thread::AccessError;
+use crate::thread_cache::{fill_cache, flush_cache};
 use std::sync::atomic::AtomicBool;
+use std::ffi::c_void;
+use std::fs::read;
 
 #[macro_use]
 pub mod macros;
 mod alloc;
 mod allocation_data;
-mod mem_info;
+#[allow(unused)] mod mem_info;
 mod page_map;
 mod pages;
 mod size_classes;
@@ -41,8 +39,10 @@ extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-pub static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false);
-pub static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false);
+pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false);
+pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false);
+
+
 
 
 unsafe fn init_malloc() {
@@ -233,6 +233,38 @@ fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     }
 }
 
+pub fn do_realloc(ptr: *mut c_void, size: usize) -> * mut c_void {
+    let new_size_class = get_size_class(size);
+    let old_size = match get_allocation_size(ptr) {
+        Ok(size) => {size as usize},
+        Err(_) => {
+            return null_mut();
+        },
+    };
+    let old_size_class = get_size_class(old_size);
+    if old_size_class == new_size_class {
+        return ptr;
+    }
+
+    let ret = do_malloc(size) as *mut c_void;
+    unsafe {
+        libc::memcpy(ret, ptr, old_size);
+    }
+    do_free(ptr);
+    ret
+}
+
+
+pub fn get_allocation_size(ptr: * const c_void) -> Result<u32, ()> {
+    let info = get_page_info_for_ptr(ptr);
+    let desc = unsafe {
+        & *info.get_desc().ok_or(())?
+    };
+
+    Ok(desc.block_size)
+}
+
+#[allow(unused)]
 fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
     if !is_power_of_two(align) {
         return null_mut();
@@ -402,7 +434,7 @@ pub fn do_free<T>(ptr: *const T) {
                     }
 
                     return cache.push_block(ptr as *mut u8);
-                });
+                }).expect("Freeing to cache failed");
             }
         },
     }

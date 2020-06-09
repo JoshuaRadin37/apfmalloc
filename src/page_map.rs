@@ -1,22 +1,19 @@
 use crate::allocation_data::Descriptor;
-use crate::mem_info::{LG_PAGE, MAX_SZ_IDX, PAGE, PAGE_MASK, MAX_SZ};
+use crate::mem_info::{LG_PAGE, MAX_SZ_IDX, MAX_SZ};
 use bitfield::size_of;
 
-use crossbeam::atomic::AtomicCell;
 use std::ptr::slice_from_raw_parts_mut;
 
-use crate::pages::{page_alloc_over_commit, PAGE_HOLDER_INIT};
-use std::mem::MaybeUninit;
+use crate::pages::page_alloc_over_commit;
 use atomic::Atomic;
 use atomic::Ordering;
+use crate::size_classes::get_size_class;
+use std::ptr::null_mut;
 #[cfg(windows)] use winapi::shared::minwindef::LPVOID;
 #[cfg(windows)] use winapi::um::memoryapi::VirtualAlloc;
 #[cfg(windows)] use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE, MEMORY_BASIC_INFORMATION};
 #[cfg(windows)] use winapi::ctypes::c_void;
-use std::borrow::BorrowMut;
 #[cfg(windows)] use winapi::um::winuser::OffsetRect;
-use crate::size_classes::get_size_class;
-use std::ptr::null_mut;
 #[cfg(windows)] use winapi::um::memoryapi::VirtualQuery;
 #[cfg(windows)] use winapi::shared::minwindef::LPCVOID;
 
@@ -213,6 +210,7 @@ impl PageMap<'_> {
         }
     }
 
+    /*
     unsafe fn unsafe_set_page_info(&self, base_ptr : *mut MaybeUninit<Atomic<PageInfo>>, ptr: *mut MaybeUninit<Atomic<PageInfo>>, info:PageInfo) {
         let key = self.unsafe_addr_to_key(base_ptr, ptr);
         #[cfg(windows)] {
@@ -226,6 +224,7 @@ impl PageMap<'_> {
     }
 
     #[inline]
+
     fn unsafe_addr_to_key<T>(&self, base_ptr: *const MaybeUninit<Atomic<PageInfo>>, ptr: *const T) -> usize {
         /*
         println!("ptr: {:x?}", ptr);
@@ -239,6 +238,8 @@ impl PageMap<'_> {
         let key = ((ptr as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
         key
     }
+
+     */
 
     #[inline]
     pub fn get_page_info<T>(&self, ptr: *const T) -> PageInfo {

@@ -8,7 +8,7 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-use crate::pages::{page_alloc, page_free};
+use crate::pages::page_alloc;
 
 
 

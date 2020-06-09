@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use crate::mem_info::MAX_SZ_IDX;
 use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
@@ -77,7 +76,9 @@ impl BootstrapReserve {
     }
 }
 
+#[allow(unused)]
 const KB: usize = 1028;
+#[allow(unused)]
 const MB: usize = 1028 * KB;
 
 
