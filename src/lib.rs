@@ -25,7 +25,7 @@ mod allocation_data;
 #[allow(unused)] mod mem_info;
 mod page_map;
 mod pages;
-mod size_classes;
+pub mod size_classes;
 mod thread_cache;
 mod no_heap_mutex;
 mod bootstrap;
@@ -39,9 +39,9 @@ extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false);
-pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false);
-
+pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false); // Only one can access init
+pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); // tells anyone who was stuck looping to continue
+pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
 
 
 
@@ -59,6 +59,7 @@ unsafe fn init_malloc() {
 
     boostrap_reserve.lock().init();
 
+    MALLOC_SKIP = true;
     MALLOC_FINISH_INIT.store(true, Ordering::Release);
 }
 
@@ -67,10 +68,12 @@ unsafe fn init_malloc() {
 pub fn do_malloc(size: usize) -> *mut u8 {
 
     unsafe {
-        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-            init_malloc();
+        if !MALLOC_SKIP {
+            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
+                init_malloc();
+            }
+            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
         }
-        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) { }
     }
 
     if size > MAX_SZ {
@@ -179,7 +182,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     allocate_to_cache(size, size_class_index)
 }
 
-fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
+pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 // Because of how rust creates thread locals, we have to assume the thread local does not exist yet
     // We also can't tell if a thread local exists without causing it to initialize, and when using
     // This as a global allocator, it ends up calling this function again. If not careful, we will create an
@@ -467,5 +470,35 @@ mod tests {
     fn malloc_and_free_large() {
         let ptr = super::do_malloc(MAX_SZ * 2);
         do_free(ptr);
+    }
+
+    #[test]
+    fn cache_pop_no_fail() {
+        const size_class: usize = 16;
+        unsafe {
+            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
+                init_malloc();
+            }
+            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) { }
+        }
+
+        let sc = unsafe { &SIZE_CLASSES[size_class] };
+        let total_blocks = sc.block_num;
+        let block_size = sc.block_size;
+
+        let test_blocks = total_blocks * 3 / 2;
+        let null: *mut u8 = null_mut();
+        let mut ptrs = vec![];
+        for _ in 0..test_blocks {
+            let ptr = do_malloc(block_size as usize);
+            unsafe {
+                *ptr = b'1';
+            }
+            assert_ne!(ptr, null, "Did not successfully get a pointer from the cache");
+            ptrs.push(ptr);
+        }
+        for ptr in ptrs {
+            do_free(ptr);
+        }
     }
 }

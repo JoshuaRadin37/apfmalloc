@@ -5,7 +5,7 @@ use std::thread;
 
 fn allocate_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate");
-    for bytes in (8..=14).map(|b| 1 << b) {
+    for bytes in (8..=13).map(|b| 1 << b) {
         group.throughput(Throughput::Bytes(bytes));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),
@@ -21,7 +21,7 @@ fn allocate_one_thread(c: &mut Criterion) {
 
 fn allocate_and_free_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate and free");
-    for bytes in (8..=14).map(|b| 1 << b) {
+    for bytes in (8..=13).map(|b| 1 << b) {
         group.throughput(Throughput::Bytes(bytes));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),
@@ -38,33 +38,27 @@ fn allocate_and_free_one_thread(c: &mut Criterion) {
     group.finish()
 }
 
-fn allocate_multi_thread(c: &mut Criterion) {
-    let mut group = c.benchmark_group("allocate multi thread");
-    for bytes in (8..=14).map(|b| 1 << b) {
-        group.throughput(Throughput::Bytes(bytes * 8));
+fn allocate_and_free_one_thread_comparison(c: &mut Criterion) {
+    let mut group = c.benchmark_group("allocate and free comparison");
+    for bytes in (8..=13).map(|b| 1 << b) {
+        group.throughput(Throughput::Bytes(bytes));
         group.bench_with_input(
             BenchmarkId::from_parameter(bytes as u64),
             &bytes,
             |b, &size| {
                 b.iter(|| {
-                    let mut vec = vec![];
-                    for _ in 0..8 {
-                        vec.push(thread::spawn( move ||
-                                                    {
-                                                        do_malloc(size as usize);
-                                                    }));
-                    }
-                    for join in vec {
-                        join.join().unwrap();
-                    }
+                    Vec::<u8>::with_capacity(size as usize);
                 })
-            });
-    };
+            }
+        );
+
+    }
     group.finish()
 }
 
 
 
-criterion_group!(one_thread, allocate_one_thread, allocate_and_free_one_thread, allocate_multi_thread);
-criterion_group!(multi_thread, allocate_multi_thread);
-criterion_main!(one_thread, multi_thread);
+
+criterion_group!(one_thread, allocate_one_thread, allocate_and_free_one_thread, allocate_and_free_one_thread_comparison);
+
+criterion_main!(one_thread);

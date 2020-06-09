@@ -164,7 +164,7 @@ pub fn malloc_from_new_sb(
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
-    let desc = unsafe { &mut *Descriptor::alloc() }; // todo: for some reason lazy static clears the heap size index information
+    let desc = unsafe { &mut *Descriptor::alloc() };
     // debug_assert!(!desc.is_null());
 
     let block_size = sc.block_size;
