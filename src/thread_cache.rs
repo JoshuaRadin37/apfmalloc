@@ -4,19 +4,22 @@ use crate::allocation_data::Anchor;
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
+    block_size: Some(isize)
 }
 
 impl ThreadCacheBin {
     pub const fn new() -> Self {
         Self {
             block: null_mut(),
-            block_num: 0
+            block_num: 0,
+            block_size: None
         }
     }
 
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
+        if
         unsafe {
             *(block as *mut *mut u8) = self.block;
         };
