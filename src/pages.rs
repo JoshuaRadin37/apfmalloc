@@ -512,6 +512,8 @@ pub fn page_free(ptr: *const u8) -> bool {
 #[cfg(test)]
 mod test {
     use crate::pages::{page_alloc, PAGE_HOLDER, INITIAL_PAGES};
+    use crate::mem_info::PAGE;
+    use crate::size_classes::{SIZE_CLASSES, SizeClassData};
 
     #[test]
     fn get_page() {
@@ -528,6 +530,20 @@ mod test {
         let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
         unsafe {
             *ptr = 0xdeadbeaf; // if this fails it means the test fails
+        }
+    }
+
+    #[test]
+    fn mass_allocate() {
+
+        unsafe {
+            crate::init_malloc();
+        }
+        let sc: &mut SizeClassData = unsafe { &mut SIZE_CLASSES[1] };
+        let size = sc.sb_size;
+
+        for _ in 0..10000 {
+            page_alloc(size as usize).unwrap();
         }
     }
 

@@ -7,7 +7,8 @@ use lrmalloc_rs::thread_cache::{
 };
 use lrmalloc_rs::pages::page_alloc;
 use lrmalloc_rs::alloc::malloc_from_new_sb;
-use lrmalloc_rs::allocation_data::Descriptor;
+use lrmalloc_rs::allocation_data::{Descriptor, get_heaps};
+use lrmalloc_rs::size_classes::SIZE_CLASSES;
 
 fn init_malloc(c: &mut Criterion) {
 
@@ -75,6 +76,38 @@ fn from_new_sb(c: &mut Criterion) {
     );
 }
 
+fn initialize_sb(c: &mut Criterion) {
+    unsafe {
+        lrmalloc_rs::init_malloc();
+    }
+    let size_class_index = 1;
+    c.bench_function(
+        "initialize super block",
+        |b| {
+            b.iter(||{
+                let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+
+
+                // debug_assert!(!desc.is_null());
+
+                let block_size = sc.block_size;
+                let max_count = sc.get_block_num();
+
+
+                let super_block = page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
+
+                for idx in 0..(max_count - 1) {
+                    unsafe {
+                        let block = super_block.offset((idx * block_size as usize) as isize);
+                        let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
+                        *(block as *mut *mut u8) = next;
+                    }
+                }
+            })
+        }
+    );
+}
+
 fn desc_alloc(c: &mut Criterion) {
     c.bench_function(
         "allocate descriptor",
@@ -88,5 +121,5 @@ fn desc_alloc(c: &mut Criterion) {
     );
 }
 
-criterion_group!(functions, init_malloc, thread_cache_fill, page_alloc_bench, from_new_sb, desc_alloc);
+criterion_group!(functions, init_malloc, page_alloc_bench, initialize_sb, from_new_sb, desc_alloc, thread_cache_fill);
 criterion_main!(functions);
