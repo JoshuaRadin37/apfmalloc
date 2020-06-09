@@ -399,15 +399,15 @@ pub fn do_free<T>(ptr: *const T) {
         Some(size_class_index) => {
             let force_bootstrap =
                 unsafe { boostrap_reserve.lock().ptr_in_bootstrap(ptr) } ||
-                    use_bootstrap() ||
-                    match thread_cache::thread_init.try_with(|_| {}) {
+                    use_bootstrap()  ||
+                    (!cfg!(unix) && match thread_cache::thread_init.try_with(|_| {}) {
                         Ok(_) => {
                             false
                         },
                         Err(_) => {
                             true
                         },
-                    };
+                    });
             // todo: remove true
             if force_bootstrap {
                 unsafe {
