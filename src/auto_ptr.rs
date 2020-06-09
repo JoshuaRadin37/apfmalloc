@@ -56,5 +56,7 @@ impl <T> Drop for AutoPtr<T> {
     }
 }
 
+unsafe impl <T : Send> Send for AutoPtr<T> {}
+
 
 
