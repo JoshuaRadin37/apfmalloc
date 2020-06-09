@@ -1,10 +1,23 @@
 use crate::allocation_data::Anchor;
 
+
+use crate::mem_info::MAX_SZ_IDX;
+use std::cell::RefCell;
+use std::ptr::null_mut;
+use std::cell::UnsafeCell;
+use crate::allocation_data::{SuperBlockState, get_heaps};
+use std::sync::atomic::Ordering;
+use crate::alloc::{unregister_desc, heap_push_partial, compute_index, get_page_info_for_ptr, malloc_from_partial, malloc_from_new_sb};
+use crate::pages::page_free;
+use crate::size_classes::SIZE_CLASSES;
+use core::ops::{Deref, DerefMut};
+
+
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
-    block_size: Option<isize>
+    block_size: Option<usize>
 }
 
 impl ThreadCacheBin {
@@ -19,15 +32,13 @@ impl ThreadCacheBin {
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
-        if let Some(block_size) = self.block_size {
 
-        } else {
-            unsafe {
-                *(block as *mut *mut u8) = self.block;
-            }
-            self.block = block;
-            self.block_num += 1;
+        unsafe {
+            *(block as *mut *mut u8) = self.block;
         }
+        self.block = block;
+        self.block_num += 1;
+
     }
 
     /// Pushes a block list
@@ -105,6 +116,8 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     if block_num == 0 || cache.block_num == 0 {
         panic!("Didn't allocate any blocks to the cache. USED PARTIAL: {}", used_partial);
     }
+
+    cache.block_size = Some(size_class_index);
 
 
     #[cfg(debug_assertions)] {
@@ -194,21 +207,82 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     }
 }
 
+pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
 
-use crate::mem_info::MAX_SZ_IDX;
-use std::cell::RefCell;
-use std::ptr::null_mut;
-use std::cell::UnsafeCell;
-use crate::allocation_data::{SuperBlockState, get_heaps};
-use std::sync::atomic::Ordering;
-use crate::alloc::{unregister_desc, heap_push_partial, compute_index, get_page_info_for_ptr, malloc_from_partial, malloc_from_new_sb};
-use crate::pages::page_free;
-use crate::size_classes::SIZE_CLASSES;
+impl ThreadCache {
+    pub const fn new() -> Self {
+        ThreadCache([ThreadCacheBin::new(); MAX_SZ_IDX])
+    }
+}
+
+impl Deref for ThreadCache {
+    type Target = [ThreadCacheBin; MAX_SZ_IDX];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ThreadCache {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Drop for ThreadCache {
+    fn drop(&mut self) {
+
+        unsafe {
+            //let thread_cache_bins  = &mut self.get_mut();
+            for bin_index in 0..self.len() {
+                let bin = self.get_mut(bin_index).unwrap();
+                if let Some(sz_idx) = bin.block_size {
+                    flush_cache(sz_idx, bin);
+                }
+            }
+
+        }
+
+    }
+}
+
+pub struct ThreadEmpty;
+
+#[cfg(unix)]
+impl Drop for ThreadEmpty {
+    fn drop(&mut self) {
+        thread_cache.with(|tcache| {
+            let tcache = unsafe {
+                &mut *tcache.get()
+            };
+            for bin_index in 0..tcache.len() {
+                let cache = tcache.get_mut(bin_index).unwrap();
+                if let Some(size_class_index) = cache.block_size {
+                    flush_cache(size_class_index, cache);
+                }
+            }
+        })
+    }
+}
+
+#[cfg(not(unix))]
+impl Clone for ThreadBool {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+#[cfg(not(unix))]
+impl Copy for ThreadBool { }
 
 thread_local! {
+    // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
     pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
 
-    pub static thread_init: RefCell<bool> = RefCell::new(false);
+    pub static thread_init: ThreadEmpty = ThreadEmpty;
+
+    #[cfg(unix)]
+    pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 }
 
 

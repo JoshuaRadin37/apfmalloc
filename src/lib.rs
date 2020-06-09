@@ -20,6 +20,7 @@ use std::fs::read;
 use crossbeam::atomic::AtomicCell;
 use std::thread;
 use std::thread::ThreadId;
+use std::ops::Deref;
 
 
 #[macro_use]
@@ -240,12 +241,13 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             });
         }
 
+
         #[cfg(debug_assertions)]
             unsafe {
             IN_CACHE.fetch_add(size, Ordering::AcqRel);
         }
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
-        thread_cache::thread_cache.with(|tcache| {
+        let ret = thread_cache::thread_cache.with(|tcache| {
             let cache = unsafe {
                 (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
             };
@@ -258,7 +260,24 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 }
             }
             cache.pop_block() // Pops the block from the thread cache bin
-        })
+        });
+
+        #[cfg(unix)] {
+            thread_cache::skip.with(|b| {
+                unsafe {
+                    if !*b.get() {
+                        let mut skip = b.get();
+                        *skip = true;
+                        let _ = thread_cache::thread_init.with(
+                            |_| { () }
+                        );
+                    }
+                }
+            }
+            )
+        }
+
+        ret
     }
 }
 
