@@ -10,13 +10,16 @@ use crate::page_map::S_PAGE_MAP;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::pages::{page_alloc, page_free};
-use atomic::Ordering;
+use atomic::{Ordering, Atomic};
 use spin::Mutex;
 use crate::bootstrap::{use_bootstrap, set_use_bootstrap, bootstrap_cache, boostrap_reserve};
 use crate::thread_cache::{fill_cache, flush_cache};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::ffi::c_void;
 use std::fs::read;
+use crossbeam::atomic::AtomicCell;
+use std::thread;
+use std::thread::ThreadId;
 
 
 #[macro_use]
@@ -31,10 +34,11 @@ pub mod pages;
 pub mod size_classes;
 pub mod thread_cache;
 pub mod no_heap_mutex;
+
 mod bootstrap;
 
 pub mod auto_ptr;
-
+pub mod thread_local;
 
 
 
@@ -49,6 +53,8 @@ pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false); // Only 
 pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); // tells anyone who was stuck looping to continue
 pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
 
+pub static mut IN_CACHE: AtomicUsize = AtomicUsize::new(0);
+pub static mut IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 pub unsafe fn init_malloc() {
     init_size_class();
@@ -179,24 +185,26 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-     /*
+    /*
 
-     The way this works pretty wild
-     There is a global state of use_bootstrap
+    The way this works pretty wild
+    There is a global state of use_bootstrap
 
-      */
+     */
 
     allocate_to_cache(size, size_class_index)
 }
 
 pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
-// Because of how rust creates thread locals, we have to assume the thread local does not exist yet
+    // Because of how rust creates thread locals, we have to assume the thread local does not exist yet
     // We also can't tell if a thread local exists without causing it to initialize, and when using
     // This as a global allocator, it ends up calling this function again. If not careful, we will create an
     // infinite recursion. As such, we must have a "bootstrap" bin that threads can use to initalize it's
     // own local bin
 
     // todo: remove the true
+    let id = thread::current();
+
     if use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
         /*
         unsafe {
@@ -210,11 +218,16 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             cache.pop_block()
         }
          */
+        #[cfg(debug_assertions)]
+            unsafe {
+            IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
+        }
         unsafe {
             boostrap_reserve.lock().allocate(size)
         }
     } else {
         set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+        //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
         thread_cache::thread_init.with(|val| { // if not initalized, it goes back
             if !*val.borrow() { // the default value of the val is false, which means that the thread cache has not been created yet
                 thread_cache::thread_cache.with(|tcache| { // This causes another allocation, hopefully with bootstrap
@@ -222,9 +235,13 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 });                                                                          // it repeatedly sets it false, eventually, it will allocate
                 *val.borrow_mut() = true; // Never has to repeat this code after this
             }
-            set_use_bootstrap(false) // Turns off the bootstrap
+           set_use_bootstrap(false) // Turns off the bootstrap
         });
 
+        #[cfg(debug_assertions)]
+            unsafe {
+            IN_CACHE.fetch_add(size, Ordering::AcqRel);
+        }
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         thread_cache::thread_cache.with(|tcache| {
             let cache = unsafe {
@@ -350,14 +367,14 @@ pub fn do_free<T>(ptr: *const T) {
         Some(d) => { d},
         None => {
             // #[cfg(debug_assertions)]
-                // println!("Free failed at {:?}", ptr);
-                return; // todo: Band-aid fix
+            // println!("Free failed at {:?}", ptr);
+            return; // todo: Band-aid fix
             // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
         }
     }};
 
-   // #[cfg(debug_assertions)]
-        // println!("Free will succeed at {:?}", ptr);
+    // #[cfg(debug_assertions)]
+    // println!("Free will succeed at {:?}", ptr);
 
     let size_class_index = info.get_size_class_index();
     match size_class_index {

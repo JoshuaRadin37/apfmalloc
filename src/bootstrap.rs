@@ -5,10 +5,7 @@ use spin::Mutex;
 use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
 use std::process::exit;
 
-pub static mut bootstrap_cache: Mutex<[ThreadCacheBin; MAX_SZ_IDX]> = Mutex::new([ThreadCacheBin {
-    block: null_mut(),
-    block_num: 0
-}; MAX_SZ_IDX]);
+pub static mut bootstrap_cache: Mutex<[ThreadCacheBin; MAX_SZ_IDX]> = Mutex::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
 
 static _use_bootstrap: Mutex<bool> = Mutex::new(false);
 
@@ -55,8 +52,9 @@ impl BootstrapReserve {
     }
 
     pub unsafe fn allocate(&mut self, size: usize) -> * mut u8 {
+
         if size > self.avail {
-            panic!("No more bootstrap space available");
+            return null_mut();
         }
 
         let ret = self.next;

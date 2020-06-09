@@ -1,7 +1,9 @@
+extern crate lrmalloc_rs;
+
 use std::thread;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::alloc::{GlobalAlloc, Layout};
-use lrmalloc_rs::{do_aligned_alloc, do_free};
+use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP};
 
 struct Dummy;
 #[global_allocator]
@@ -22,7 +24,7 @@ unsafe impl GlobalAlloc for Dummy {
 
 
 #[test]
-fn multiple_threads() {
+fn test_multiple_threads() {
 
     let mut vec = vec![];
     let boxes = Arc::new(Mutex::new(Vec::new()));
