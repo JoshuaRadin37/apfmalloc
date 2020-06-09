@@ -53,8 +53,8 @@ pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false); // Only 
 pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); // tells anyone who was stuck looping to continue
 pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
 
-pub static mut IN_CACHE: AtomicUsize = AtomicUsize::new(0);
-pub static mut IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
+pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
+pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 pub unsafe fn init_malloc() {
     init_size_class();
@@ -203,7 +203,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     // own local bin
 
     // todo: remove the true
-    let id = thread::current();
+    //let id = thread::current();
 
     if use_bootstrap() { // This is a global state, and tells to allocate from the bootstrap cache
         /*
@@ -226,17 +226,19 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             boostrap_reserve.lock().allocate(size)
         }
     } else {
-        set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
-        //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
-        thread_cache::thread_init.with(|val| { // if not initalized, it goes back
-            if !*val.borrow() { // the default value of the val is false, which means that the thread cache has not been created yet
-                thread_cache::thread_cache.with(|tcache| { // This causes another allocation, hopefully with bootstrap
-                    let _tcache = tcache;                                                    // There is a theoretical bootstrap data race here, but because
-                });                                                                          // it repeatedly sets it false, eventually, it will allocate
-                *val.borrow_mut() = true; // Never has to repeat this code after this
-            }
-           set_use_bootstrap(false) // Turns off the bootstrap
-        });
+        #[cfg(not(unix))]{
+            set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+            //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
+            thread_cache::thread_init.with(|val| { // if not initalized, it goes back
+                if !*val.borrow() { // the default value of the val is false, which means that the thread cache has not been created yet
+                    thread_cache::thread_cache.with(|tcache| { // This causes another allocation, hopefully with bootstrap
+                        let _tcache = tcache;                                                    // There is a theoretical bootstrap data race here, but because
+                    });                                                                          // it repeatedly sets it false, eventually, it will allocate
+                    *val.borrow_mut() = true; // Never has to repeat this code after this
+                }
+                set_use_bootstrap(false) // Turns off the bootstrap
+            });
+        }
 
         #[cfg(debug_assertions)]
             unsafe {

@@ -3,7 +3,8 @@ extern crate lrmalloc_rs;
 use std::thread;
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::alloc::{GlobalAlloc, Layout};
-use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP};
+use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
+use core::sync::atomic::Ordering;
 
 struct Dummy;
 #[global_allocator]
@@ -48,4 +49,7 @@ fn test_multiple_threads() {
     for x in & *boxes.lock().unwrap() {
         assert_eq!(**x, 0xdeadbeaf);
     }
+
+    println!("Allocated in bootstrap: {} bytes", IN_BOOTSTRAP.load(Ordering::Relaxed));
+    println!("Allocated in cache: {} bytes", IN_CACHE.load(Ordering::Relaxed));
 }
