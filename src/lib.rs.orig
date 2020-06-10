@@ -36,7 +36,11 @@ mod bootstrap;
 pub mod auto_ptr;
 
 
+<<<<<<< HEAD
+
+=======
 mod apf;
+>>>>>>> origin/apf-tuning
 
 #[macro_use]
 extern crate bitfield;
@@ -61,8 +65,18 @@ pub unsafe fn init_malloc() {
         heap.partial_list.store(None, Ordering::Release);
         heap.size_class_index = idx;
     }
+<<<<<<< HEAD
+=======
 
     println!("init");
+}
+
+unsafe fn thread_local_init_malloc() {
+    /*
+    if thread_cache::thread_init.with(|f| *f.borrow()) {
+
+    }
+>>>>>>> origin/apf-tuning
 
     boostrap_reserve.lock().init();
 
@@ -96,7 +110,6 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         anchor.set_state(SuperBlockState::FULL);
 
         desc.anchor.store(anchor, Ordering::Release);
-        desc.anchor.store(anchor, Ordering::Acquire);
 
         register_desc(desc);
         let ptr = desc.super_block;
@@ -109,13 +122,43 @@ pub fn do_malloc(size: usize) -> *mut u8 {
     //thread_cache::thread_init.
 
 
+<<<<<<< HEAD
     allocate_to_cache(size, size_class_index)
+=======
+    if !*thread_localized.lock() || use_bootstrap() {
+        unsafe {
+            let mut bootstrap_cache_guard = bootstrap_cache.lock();
+            let cache = &mut bootstrap_cache_guard[size_class_index];
+            if cache.get_block_num() == 0 {
+                fill_cache(size_class_index, cache);
+            }
+
             let ptr = cache.pop_block();
             // Log malloc with tuner
             ptr
+        }
+    } else {
+        set_use_bootstrap(true);
+        thread_cache::thread_cache.with(|tcache| {
+            *thread_localized.lock() = true;
+            let cache = unsafe {
+                (*tcache.get()).get_mut(size_class_index).unwrap()
+            };
+            if cache.get_block_num() == 0 {
+                fill_cache(size_class_index, cache);
+            }
+
+
+            if use_bootstrap() {
+                set_use_bootstrap(false);
+            }
+
             let ptr = cache.pop_block();
             // Log malloc with tuner
             ptr
+        })
+    }
+>>>>>>> origin/apf-tuning
 }
 
 fn is_power_of_two(x: usize) -> bool {

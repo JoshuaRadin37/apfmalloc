@@ -88,7 +88,10 @@ impl ThreadCacheBin {
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
 
+<<<<<<< HEAD
     let mut used_partial = true;
+=======
+>>>>>>> origin/apf-tuning
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
@@ -213,6 +216,10 @@ use crate::mem_info::MAX_SZ_IDX;
 use crate::pages::page_free;
 use crate::size_classes::SIZE_CLASSES;
 use std::cell::RefCell;
+<<<<<<< HEAD
+use std::ptr::null_mut;
+=======
+>>>>>>> origin/apf-tuning
 use std::cell::UnsafeCell;
 
 use std::ptr::null_mut;
@@ -238,7 +245,12 @@ mod test {
 
     #[test]
     fn check_bin_consistency() {
+<<<<<<< HEAD
+
         let _bin = ThreadCacheBin {
+=======
+        let bin = ThreadCacheBin {
+>>>>>>> origin/apf-tuning
             block: null_mut(),
             block_num: 0,
         };
