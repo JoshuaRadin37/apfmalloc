@@ -196,12 +196,11 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 // APF Functions
 
 pub fn init_tuners() {
-    for i in 0..MAX_SZ_IDX { 
-        apf_tuners.with(|tuners| {
-            (*tuners.borrow_mut()).get_mut(i).unwrap().set_id(i); 
-        });
-    }
-
+    apf_tuners.with(|tuners| {
+        for i in 0..MAX_SZ_IDX {
+            (*tuners.borrow_mut()).push(ApfTuner::new(i, check, fetch, ret));
+        }
+    });
 }
 
 fn check(i: usize) -> u32 {
@@ -241,7 +240,7 @@ thread_local! {
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
 
-    pub static apf_tuners: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(0, check, fetch, ret); MAX_SZ_IDX]);
+    pub static apf_tuners: RefCell<Vec<ApfTuner>> = RefCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
 

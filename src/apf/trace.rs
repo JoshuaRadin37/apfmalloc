@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::vec::Vec;
 
-const MAX_LENGTH: usize = REUSE_BURST_LENGTH;
-
 /*
     Event represents allocation or free operation
     usize stores heap slot -- not sure how helpful this will be in practice, so might make it generic
@@ -26,9 +24,9 @@ impl fmt::Debug for Event {
 
 use crate::apf::trace::Event::*;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct Trace {
-    accesses: [Option<Event>; MAX_LENGTH],
+    accesses: Vec<Event>,
     length: usize,
     alloc_count: usize,
 }
@@ -40,7 +38,7 @@ pub struct Trace {
 impl Trace {
     pub fn new() -> Trace {
         Trace {
-            accesses: [None; MAX_LENGTH],
+            accesses: Vec::<Event>::new(),
             length: 0,
             alloc_count: 0,
         }
@@ -55,9 +53,7 @@ impl Trace {
     }
 
     pub fn add(&mut self, add: Event) -> () {
-        if self.length >= MAX_LENGTH { panic!("ERROR: Trace {:?} exceeded max length", self); }
-
-        self.accesses[self.length] = Some(add);
+        self.accesses.push(add);
         self.length += 1;
         match add {
             Alloc(_) => {
@@ -68,8 +64,10 @@ impl Trace {
     }
 
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
+        self.length += vec.len();
+        self.accesses.append(&mut vec.clone());
+
         for i in 0..vec.len() {
-            if self.length >= MAX_LENGTH { panic!("ERROR: Trace exceeded max length"); }
             
             match vec[i] {
                 Alloc(_) => {
@@ -77,17 +75,10 @@ impl Trace {
                 }
                 Free(_) => {}
             };
-
-            self.accesses[self.length] = Some(vec[i]);
-            self.length += 1;
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<Event> {
-        if index > MAX_LENGTH {
-            return None;
-        };
-
+    pub fn get(&self, index: usize) -> Event {
         self.accesses[index]
     }
 
@@ -97,7 +88,7 @@ impl Trace {
         let mut seen = HashMap::new();
 
         for i in 0..self.length() {
-            match &self.get(i).unwrap() {   // Safe since all indices less than length are Some
+            match &self.get(i) {   // Safe since all indices less than length are Some
                 Alloc(s) => {
                     if !seen.contains_key(s) {
                         seen.insert(s.clone(), true);
@@ -122,7 +113,7 @@ impl Trace {
         let mut alloc_clock = 0;
 
         for i in 0..self.length() {
-            match self.get(i).unwrap() {
+            match self.get(i) {
                 Free(s) => {
                     frees.insert(s.clone(), alloc_clock);
                 }
@@ -148,7 +139,7 @@ impl Trace {
         let mut result = Vec::new();
 
         for i in 0..self.length() {
-            match self.get(i).unwrap() {
+            match self.get(i) {
                 Free(s) => {
                     frees.insert(s.clone(), i);
                 }
@@ -171,7 +162,7 @@ impl Trace {
         let mut alloc = HashMap::<usize, bool>::new();
 
         for i in 0..self.length() {
-            match self.get(i).unwrap() {
+            match self.get(i) {
                 Alloc(s) => {
                     match alloc.insert(s, true) {
                         Some(b) => {

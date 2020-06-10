@@ -270,7 +270,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     *init.borrow_mut() = true;
                 }
                 thread_cache::apf_tuners.with(|tuners| {
-                    (tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
+                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
                 });
             });
 
