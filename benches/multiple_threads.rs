@@ -1,31 +1,34 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use lrmalloc_rs::auto_ptr::AutoPtr;
+use lrmalloc_rs::{do_free, do_malloc};
 use std::iter::Iterator;
-use lrmalloc_rs::{do_malloc, do_free};
+use std::sync::{Arc, Mutex};
 use std::thread;
-
 
 fn allocate_multi_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate multi thread");
-    for bytes in (8..=14).map(|b| 1 << b) {
-        group.throughput(Throughput::Bytes(bytes * 8));
+    for threads in 1..32 {
+        group.throughput(Throughput::Elements(threads));
         group.bench_with_input(
-            BenchmarkId::from_parameter(bytes as u64),
-            &bytes,
+            BenchmarkId::from_parameter(format!("{} threads", threads as u64)),
+            &(threads as usize),
             |b, &size| {
-                b.iter(|| {
-                    let mut vec = vec![];
-                    for _ in 0..8 {
-                        vec.push(thread::spawn( move ||
-                            {
-                                do_malloc(size as usize);
-                            }));
+                b.iter_with_large_drop(|| {
+                    let mut vec = Vec::with_capacity(size);
+                    let mut ptrs = Arc::new(Mutex::new(Vec::with_capacity(size)));
+                    for _ in 0..size {
+                        let clone = ptrs.clone();
+                        vec.push(thread::spawn(move || {
+                            clone.lock().unwrap().push(AutoPtr::new(0u8));
+                        }));
                     }
                     for join in vec {
                         join.join().unwrap();
                     }
                 })
-            });
-    };
+            },
+        );
+    }
     group.finish()
 }
 

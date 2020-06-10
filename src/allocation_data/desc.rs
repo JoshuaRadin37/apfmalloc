@@ -18,9 +18,7 @@ pub struct DescriptorNode {
 
 impl Default for DescriptorNode {
     fn default() -> Self {
-        Self {
-            desc: None
-        }
+        Self { desc: None }
     }
 }
 
@@ -33,16 +31,14 @@ impl DescriptorNode {
     }
 
     pub fn set(&mut self, desc: Option<&'static Descriptor>, count: u64) {
-
         if desc.is_some() {
             let usize_desc = desc.unwrap() as *const Descriptor as u64;
             assert_eq!(usize_desc & CACHE_LINE_MASK as u64, 0);
             let pointer = (usize_desc | (count & CACHE_LINE_MASK as u64)) as *mut Descriptor;
             self.desc = Some(pointer);
         } else {
-            self.desc = desc.map(|d| d as *const _ as * mut Descriptor)
+            self.desc = desc.map(|d| d as *const _ as *mut Descriptor)
         }
-
     }
 
     pub fn get_desc(&self) -> Option<&'static mut Descriptor> {
@@ -68,8 +64,6 @@ impl DescriptorNode {
         }
     }
 }
-
-
 
 impl From<*mut Descriptor> for DescriptorNode {
     fn from(d: *mut Descriptor) -> Self {
@@ -101,7 +95,7 @@ impl Default for Descriptor {
             super_block: null_mut(),
             proc_heap: null_mut(),
             block_size: 0,
-            max_count: 0
+            max_count: 0,
         }
     }
 }
@@ -119,8 +113,6 @@ static ref DESCRIPTORS_SPACE
  */
 
 impl Descriptor {
-
-
     pub fn retire(&'static mut self) {
         self.block_size = 0;
         let mut avail = AVAILABLE_DESC.lock();
@@ -134,16 +126,15 @@ impl Descriptor {
         );
         *avail = new_head;
         /*
-            if {
-                AVAILABLE_DESC
-                    .compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Release)
-                    .is_ok()
-            } {
-                break;
-            }
+           if {
+               AVAILABLE_DESC
+                   .compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Release)
+                   .is_ok()
+           } {
+               break;
+           }
 
-         */
-
+        */
     }
 
     pub unsafe fn alloc() -> *mut Descriptor {
@@ -155,13 +146,13 @@ impl Descriptor {
                 Some(desc) => {
                     let mut new_head = desc.next_free.load(Ordering::Acquire);
                     match &mut new_head {
-                        None => { },
+                        None => {}
                         Some(new_head) => {
                             new_head.set(
                                 new_head.get_desc().map(|d| &*d),
                                 old_head.get_counter().expect("Head should have a counter"),
                             );
-                        },
+                        }
                     }
 
                     /*
@@ -187,7 +178,6 @@ impl Descriptor {
                     // organize list with the rest of the descriptors
                     // and add to available descriptors
 
-
                     let mut prev: *mut MaybeUninit<Descriptor> = null_mut();
 
                     let descriptor_size = std::mem::size_of::<Descriptor>() as isize;
@@ -197,17 +187,13 @@ impl Descriptor {
                     let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
                     while (curr_ptr as usize + descriptor_size as usize) < max {
                         let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
-                        unsafe {
-                            *curr = MaybeUninit::new(Descriptor::default())
-                        }
+                        unsafe { *curr = MaybeUninit::new(Descriptor::default()) }
                         if !prev.is_null() {
-
                             let prev_init = &mut *(*prev).as_mut_ptr();
                             prev_init.next_free.store(
                                 Some(DescriptorNode::from(curr_ptr as *mut Descriptor)),
                                 Ordering::Release,
                             );
-
                         }
 
                         prev = curr;
@@ -244,11 +230,9 @@ impl Descriptor {
                     *avail = new_head;
                     // }
 
-
                     return ret as *mut Descriptor;
                 }
             }
         }
     }
 }
-
