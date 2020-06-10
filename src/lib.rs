@@ -95,7 +95,6 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         anchor.set_state(SuperBlockState::FULL);
 
         desc.anchor.store(anchor, Ordering::Release);
-        desc.anchor.store(anchor, Ordering::Acquire);
 
         register_desc(desc);
         let ptr = desc.super_block;
@@ -108,12 +107,6 @@ pub fn do_malloc(size: usize) -> *mut u8 {
     //thread_cache::thread_init.
 
     allocate_to_cache(size, size_class_index)
-            let ptr = cache.pop_block();
-            // Log malloc with tuner
-            ptr
-            let ptr = cache.pop_block();
-            // Log malloc with tuner
-            ptr
 }
 
 fn is_power_of_two(x: usize) -> bool {
