@@ -1,7 +1,11 @@
-use std::thread;
-use std::sync::{Arc, Mutex};
+extern crate lrmalloc_rs;
+
+use core::sync::atomic::Ordering;
+use core::time::Duration;
+use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
 use std::alloc::{GlobalAlloc, Layout};
-use lrmalloc_rs::{do_aligned_alloc, do_free};
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
+use std::thread;
 
 struct Dummy;
 #[global_allocator]
@@ -20,21 +24,24 @@ unsafe impl GlobalAlloc for Dummy {
     }
 }
 
-
 #[test]
-fn multiple_threads() {
-
+fn test_multiple_threads() {
     let mut vec = vec![];
     let boxes = Arc::new(Mutex::new(Vec::new()));
 
-    for i in 0..100 {
+    for i in 0..30 {
         let clone = boxes.clone();
-        vec.push(thread::spawn (move || {
+        vec.push(thread::spawn(move || {
             println!("Thread {} says hi!", &i);
-            let b = Box::new(0xdeadbeafusize);
-            let arc = clone;
-            let mut guard = arc.lock().unwrap();
-            guard.push(b);
+            // thread::sleep(Duration::from_secs_f64(5.0));
+            for j in 0..10 {
+                let b = Box::new(0xdeadbeafusize);
+                println!("Thread {} created box {}", &i, j);
+                let arc = &clone;
+                let mut guard = arc.lock().unwrap();
+                guard.push(b);
+                println!("Boxes length: {}", guard.len());
+            }
         }));
     }
 
@@ -42,8 +49,17 @@ fn multiple_threads() {
         join_handle.join().unwrap();
     }
 
-    println!();
-    for x in & *boxes.lock().unwrap() {
+    println!("All threads were joined");
+    for x in &*boxes.lock().unwrap() {
         assert_eq!(**x, 0xdeadbeaf);
     }
+
+    println!(
+        "Allocated in bootstrap: {} bytes",
+        IN_BOOTSTRAP.load(Ordering::Relaxed)
+    );
+    println!(
+        "Allocated in cache: {} bytes",
+        IN_CACHE.load(Ordering::Relaxed)
+    );
 }

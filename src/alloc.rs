@@ -1,7 +1,7 @@
 use crate::allocation_data::{
     get_heaps, Anchor, Descriptor, DescriptorNode, ProcHeap, SuperBlockState,
 };
-use crate::mem_info::{PAGE_MASK, PAGE};
+use crate::mem_info::{PAGE, PAGE_MASK};
 use crate::page_map::{PageInfo, S_PAGE_MAP};
 use crate::size_classes::SIZE_CLASSES;
 use crate::thread_cache::ThreadCacheBin;
@@ -9,8 +9,6 @@ use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
 use crate::pages::page_alloc;
-
-
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
@@ -54,10 +52,8 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
             node.set(Some(desc), 0);
             replace = true;
             node
-        },
-        Some(list) => {
-            list
-        },
+        }
+        Some(list) => list,
     };
 
     // let old_head = list.load(Ordering::Acquire).unwrap();
@@ -77,7 +73,7 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
         if replace {
             list.store(Some(new_head), Ordering::Acquire);
             break;
-        }else if list
+        } else if list
             .compare_exchange_weak(
                 Some(old_head),
                 Some(new_head),
@@ -133,8 +129,6 @@ pub fn malloc_from_partial(
                 new_anchor.set_avail(max_count as u64);
                 new_anchor.set_state(SuperBlockState::FULL);
 
-
-
                 if desc
                     .anchor
                     .compare_exchange(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
@@ -147,7 +141,12 @@ pub fn malloc_from_partial(
             let blocks_taken = old_anchor.count() as isize;
             let avail = old_anchor.avail() as isize;
 
-            assert!(avail <= max_count as isize, "Avail: {}, Max Count {}", avail, max_count);
+            assert!(
+                avail <= max_count as isize,
+                "Avail: {}, Max Count {}",
+                avail,
+                max_count
+            );
             let block = unsafe { super_block.offset(avail * block_size as isize) };
             assert_eq!(cache.get_block_num(), 0);
             cache.push_list(block, blocks_taken as u32);
@@ -228,7 +227,9 @@ pub fn update_page_map(
         "sb_size must be a multiple of a page"
     );
     for index in 0..(sb_size / PAGE as u32) {
-        unsafe { S_PAGE_MAP.set_page_info(ptr.offset((index * PAGE as u32) as isize), info.clone()) }
+        unsafe {
+            S_PAGE_MAP.set_page_info(ptr.offset((index * PAGE as u32) as isize), info.clone())
+        }
     }
 }
 
@@ -397,7 +398,6 @@ mod test {
     use super::*;
     use crate::mem_info::MAX_SZ_IDX;
 
-
     #[test]
     fn from_new_sb() {
         let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
@@ -405,11 +405,7 @@ mod test {
             crate::init_malloc();
         }
         let cache = &mut tcache[1];
-        for i in 0..10000 {
-            malloc_from_new_sb(1, cache, &mut 0);
-            cache.pop_list(cache.peek_block(), cache.get_block_num());
-            println!("Allocated {}", i)
-        }
-
+        malloc_from_new_sb(1, cache, &mut 0);
+        assert!(cache.block_num > 0);
     }
 }

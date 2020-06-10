@@ -32,11 +32,11 @@ criterion = "0.3"
 name = "allocating_bench"
 harness = false
 
-[[bench]]
-name = "function_benches"
-harness = false
-
-
 # [[bench]]
-# name = "multiple_threads"
+# name = "function_benches"
 # harness = false
+
+
+[[bench]]
+name = "multiple_threads"
+harness = false

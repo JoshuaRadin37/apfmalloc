@@ -1,8 +1,7 @@
 #![no_std]
 
-
 use core::alloc::{GlobalAlloc, Layout};
-use lrmalloc_rs::{do_free, do_aligned_alloc};
+use lrmalloc_rs::{do_aligned_alloc, do_free};
 
 extern crate alloc;
 

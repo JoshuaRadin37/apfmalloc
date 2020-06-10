@@ -1,9 +1,8 @@
 use bitfield::size_of;
+use core::ptr::null_mut;
 use lrmalloc_rs::{do_free, do_malloc};
 use std::mem::MaybeUninit;
-use core::ptr::null_mut;
 use std::thread;
-
 
 #[test]
 fn create_and_destroy() {
@@ -30,11 +29,10 @@ mod mass_stress {
         for _j in 0..50 {
             let mut vec = vec![];
             for _ in 0..8 {
-                vec.push(thread::spawn(move ||
-                    {
-                        do_free(do_malloc(8));
-                        //println!("Thread {} says hello", j * 8 + i)
-                    }));
+                vec.push(thread::spawn(move || {
+                    do_free(do_malloc(8));
+                    //println!("Thread {} says hello", j * 8 + i)
+                }));
             }
             for join in vec {
                 join.join().unwrap();
@@ -43,16 +41,15 @@ mod mass_stress {
     }
 
     #[test]
-// #[ignore]
+    // #[ignore]
     fn mass_thread_spawn_stress_comparison() {
         for _j in 0..50 {
             let mut vec = vec![];
             for _ in 0..8 {
-                vec.push(thread::spawn(move ||
-                    {
-                        Box::new(0usize)
-                        //println!("Thread {} says hello", j * 8 + i)
-                    }));
+                vec.push(thread::spawn(move || {
+                    Box::new(0usize)
+                    //println!("Thread {} says hello", j * 8 + i)
+                }));
             }
             for join in vec {
                 join.join().unwrap();
@@ -65,13 +62,12 @@ mod mass_stress {
         for _ in 0..8 {
             let mut vec = vec![];
 
-            vec.push(thread::spawn(move ||
-                {
-                    for _j in 0..500000 {
-                        do_free(do_malloc(8));
-                        //println!("Thread {} says hello", j * 8 + i)
-                    }
-                }));
+            vec.push(thread::spawn(move || {
+                for _j in 0..500000 {
+                    do_free(do_malloc(16));
+                    //println!("Thread {} says hello", j * 8 + i)
+                }
+            }));
 
             for join in vec {
                 join.join().unwrap();
@@ -80,18 +76,17 @@ mod mass_stress {
     }
 
     #[test]
-// #[ignore]
+    // #[ignore]
     fn mass_thread_allocate_stress_comparison() {
         for _ in 0..8 {
             let mut vec = vec![];
 
-            vec.push(thread::spawn(move ||
-                {
-                    for _j in 0..500000 {
-                        Box::new(0usize);
-                        //println!("Thread {} says hello", j * 8 + i)
-                    }
-                }));
+            vec.push(thread::spawn(move || {
+                for _j in 0..500000 {
+                    Box::new((0usize, 0usize));
+                    //println!("Thread {} says hello", j * 8 + i)
+                }
+            }));
 
             for join in vec {
                 join.join().unwrap();
