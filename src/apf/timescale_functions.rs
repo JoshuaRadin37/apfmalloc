@@ -208,8 +208,8 @@ fn reuse(t: &Trace) -> [f32; REUSE_BURST_LENGTH] {
     }
 
     let mut result = [0.0; REUSE_BURST_LENGTH];
-    for k in 1..n + 1 {
-        result[k] = (x[k - 1] + z[k - 1] - y[k - 1]) as f32 / (n - k + 1) as f32;
+    for k in 1..n {
+        result[k-1] = (x[k - 1] + z[k - 1] - y[k - 1]) as f32 / (n - k + 1) as f32;
     }
 
     result

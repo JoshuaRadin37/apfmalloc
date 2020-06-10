@@ -246,6 +246,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             IN_CACHE.fetch_add(size, Ordering::AcqRel);
         }
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
+
         thread_cache::thread_cache.with(|tcache| {
             let cache = unsafe {
                 (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
@@ -258,7 +259,24 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     panic!("Cache didn't fill");
                 }
             }
-            cache.pop_block() // Pops the block from the thread cache bin
+            // ELIAS EDIT
+            let ptr = cache.pop_block(); // Pops the block from the thread cache bin
+
+            /* WARNING -- ELIAS CODE -- WARNING */
+
+            thread_cache::apf_init.with(|init| {
+                if !*init.borrow() {
+                    thread_cache::init_tuners();
+                    *init.borrow_mut() = true;
+                }
+                thread_cache::apf_tuners.with(|tuners| {
+                    (tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
+                });
+            });
+
+            ptr
+
+            /* --- END ELIAS CODE --- */
         })
     }
 }
