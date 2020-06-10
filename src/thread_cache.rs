@@ -208,15 +208,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     }
 }
 
-// APF Functions
 
-fn check_blocks(i: usize) -> u32 {
-    return thread_cache.with(|tcache| {
-        unsafe {
-            return (*tcache.get()).get_mut(i).unwrap().get_block_num();
-        };
-    });
-}
 pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
 
 impl ThreadCache {
@@ -269,6 +261,15 @@ impl Drop for ThreadEmpty {
         })
     }
 }
+// APF Functions
+
+fn check_blocks(i: usize) -> u32 {
+    return thread_cache.with(|tcache| {
+        unsafe {
+            return (*tcache.get()).get_mut(i).unwrap().get_block_num();
+        };
+    });
+}
 
 fn fetch(i: usize, c: usize) -> bool{
     return false;
@@ -276,6 +277,26 @@ fn fetch(i: usize, c: usize) -> bool{
 
 fn ret(i: usize, c: u32) -> bool{
     return false;
+}
+
+/*
+pub fn init_tuners() {
+    for i in 0..MAX_SZ_IDX {
+        apf_tuner.with(|tuners| {
+            (*tuners.borrow_mut()).get_mut(i).unwrap().set_id(i);
+        });
+    }
+
+}
+
+ */
+
+fn check(i: usize) -> u32 {
+    return thread_cache.with(|tcache| {
+        unsafe {
+            return (*tcache.get()).get(i).unwrap().get_block_num();
+        };
+    });
 }
 
 
@@ -301,6 +322,7 @@ thread_local! {
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 
     pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(check_blocks, fetch, ret); MAX_SZ_IDX]);
+    pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
 
 #[cfg(test)]
