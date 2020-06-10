@@ -11,11 +11,12 @@ mod trace;
 
 /*
         -- APF Tuner --
-    * One for each thread
+    * One for each size container
     * Call malloc() and free() whenever those operations are performed
 */
 #[derive(Copy, Clone)]
 pub struct ApfTuner {
+    id: usize,
     l_counter: LivenessCounter,
     r_counter: ReuseCounter,
     trace: Trace,
@@ -28,8 +29,9 @@ pub struct ApfTuner {
 }
 
 impl ApfTuner {
-    pub fn new(check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner {
+    pub fn new(id: usize, check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner {
         ApfTuner {
+            id: id,
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(),
             trace: Trace::new(),
@@ -42,6 +44,10 @@ impl ApfTuner {
         }
     }
 
+    pub fn set_id(&mut self, id: usize) {
+        self.id = id;
+    }
+
     pub fn malloc(&mut self, ptr: *mut u8) -> bool {
         self.time += 1;
 
@@ -52,7 +58,7 @@ impl ApfTuner {
         self.r_counter.inc_timer();
 
         // If out of free blocks, fetch
-        if (self.check)(0) == 0 {
+        if (self.check)(self.id) == 0 {
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -63,7 +69,7 @@ impl ApfTuner {
                 }
             }
 
-            (self.get)(0, demand.ceil() as usize);
+            (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
         } 
         return true;
@@ -87,7 +93,7 @@ impl ApfTuner {
         let demand = d.unwrap(); // Safe
 
         // If too many free blocks, return some
-        if (self.check)(0) as f32 >= 2.0 * demand + 1.0 {
+        if (self.check)(self.id) as f32 >= 2.0 * demand + 1.0 {
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -98,7 +104,7 @@ impl ApfTuner {
                 }
             }
 
-            (self.ret)(0, demand.ceil() as u32 + 1);
+            (self.ret)(self.id, demand.ceil() as u32 + 1);
         }
         return true;
     }

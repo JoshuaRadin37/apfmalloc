@@ -175,7 +175,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 
 // APF Functions
 
-fn check_blocks(i: usize) -> u32 {
+fn check(i: usize) -> u32 {
     return thread_cache.with(|tcache| {
         unsafe {
             return (*tcache.get()).get_mut(i).unwrap().get_block_num();
@@ -215,7 +215,8 @@ thread_local! {
 
     pub static thread_init: RefCell<bool> = RefCell::new(false);
 
-    pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(check_blocks, fetch, ret); MAX_SZ_IDX]);
+    pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(0, check, fetch, ret); MAX_SZ_IDX]);
+    pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
 
 #[cfg(test)]
