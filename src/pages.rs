@@ -4,14 +4,14 @@ use memmap::MmapMut;
 use std::io::ErrorKind;
 use std::os::raw::c_void;
 
+use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use crate::pages::MemoryOrFreePointer::Free;
 use atomic::Ordering;
 use bitfield::fmt::{Debug, Display, Formatter};
 use std::mem::MaybeUninit;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
 use std::{fmt, io};
-use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
-use crate::pages::MemoryOrFreePointer::Free;
 
 pub mod external_mem_reservation;
 
@@ -63,9 +63,7 @@ impl PageInfoHolder {
     }
 
     fn grab(&mut self) {
-        while self.lock.compare_and_swap(false, true, Ordering::Acquire) {
-
-        }
+        while self.lock.compare_and_swap(false, true, Ordering::Acquire) {}
     }
 
     fn release(&mut self) {
@@ -113,8 +111,8 @@ impl PageInfoHolder {
                 self.internals.as_mut().unwrap().as_mut_ptr() as *mut MemoryOrFreePointer,
                 *self.get_capacity(),
             )
-                .as_mut()
-                .unwrap()
+            .as_mut()
+            .unwrap()
         }
     }
 
@@ -140,7 +138,7 @@ impl PageInfoHolder {
             if first {
                 prev = Some(index + self.capacity);
                 first = false;
-                // first_index = Some(index + self.capacity);
+            // first_index = Some(index + self.capacity);
             } else {
                 prev = Some(prev.unwrap() - 1);
             }
@@ -160,11 +158,11 @@ impl PageInfoHolder {
         self.head = Some(self.capacity);
     }
 
-    pub fn get_index_from_pointer(&self, ptr: * const MemoryOrFreePointer) -> Option<usize> {
+    pub fn get_index_from_pointer(&self, ptr: *const MemoryOrFreePointer) -> Option<usize> {
         match &self.internals {
-            None => { None },
+            None => None,
             Some(map) => {
-                let base_ptr = & map[0] as *const u8 as usize;
+                let base_ptr = &map[0] as *const u8 as usize;
                 if (ptr as usize) < base_ptr {
                     None
                 } else {
@@ -175,7 +173,7 @@ impl PageInfoHolder {
                         None
                     }
                 }
-            },
+            }
         }
     }
 
@@ -210,7 +208,6 @@ impl PageInfoHolder {
         }
 
         let (memory, ptr) = {
-
             /*if size > MIN_MAP_ALLOCATION_SIZE {
                 let mut map = MmapOptions::new().len(size).map_anon()?;
                 let ptr = map.as_mut_ptr();
@@ -220,23 +217,27 @@ impl PageInfoHolder {
             } else
             {
              */
-                let segment = SEGMENT_ALLOCATOR.allocate(size).expect("Should be able to allocate a space");
-                let ptr = segment.get_ptr() as *mut u8;
-                let combo = MemoryOrFreePointer::Segment(segment);
-                //self.release();
-                //return Ok(ptr)
-                (combo, ptr)
+            let segment = SEGMENT_ALLOCATOR
+                .allocate(size)
+                .expect("Should be able to allocate a space");
+            let ptr = segment.get_ptr() as *mut u8;
+            let combo = MemoryOrFreePointer::Segment(segment);
+            //self.release();
+            //return Ok(ptr)
+            (combo, ptr)
             // }
         };
         unsafe {
             let head = self.head;
-            if let MemoryOrFreePointer::Free { next: prev_pointer } = self.get_at_index(head.unwrap()).unwrap() {
+            if let MemoryOrFreePointer::Free { next: prev_pointer } =
+                self.get_at_index(head.unwrap()).unwrap()
+            {
                 if prev_pointer.is_none() {
                     panic!("Previous pointer should not be null");
                 }
                 // println!("Previous pointer: {:x?}", *prev_pointer);
                 self.head = *prev_pointer;
-                // self.head.store(*prev_pointer, Ordering::SeqCst);
+            // self.head.store(*prev_pointer, Ordering::SeqCst);
             } else {
                 // eprintln!("Head is {:?}", head);
                 panic!("No more space in page container")
@@ -252,19 +253,17 @@ impl PageInfoHolder {
         Ok(ptr)
     }
 
-    fn get_at_index(&self, index: usize) -> Option<& mut MemoryOrFreePointer> {
+    fn get_at_index(&self, index: usize) -> Option<&mut MemoryOrFreePointer> {
         match &self.internals {
-            None => { None },
+            None => None,
             Some(map) => {
-                let ptr = &map[0] as * const u8 as * mut MemoryOrFreePointer;
+                let ptr = &map[0] as *const u8 as *mut MemoryOrFreePointer;
                 if index >= self.capacity {
                     None
                 } else {
-                    unsafe {
-                        Some(&mut *ptr.offset(index as isize))
-                    }
+                    unsafe { Some(&mut *ptr.offset(index as isize)) }
                 }
-            },
+            }
         }
     }
 
@@ -282,7 +281,9 @@ impl PageInfoHolder {
         }
 
         let (memory, ptr) = {
-            let segment = SEGMENT_ALLOCATOR.allocate_massive(size).expect("Should be able to allocate a space");
+            let segment = SEGMENT_ALLOCATOR
+                .allocate_massive(size)
+                .expect("Should be able to allocate a space");
             let ptr = segment.get_ptr() as *mut u8;
             let combo = MemoryOrFreePointer::Segment(segment);
 
@@ -290,12 +291,14 @@ impl PageInfoHolder {
         };
         unsafe {
             let head = self.head.unwrap();
-            if let MemoryOrFreePointer::Free { next: prev_pointer } = self.get_at_index(head).unwrap() {
+            if let MemoryOrFreePointer::Free { next: prev_pointer } =
+                self.get_at_index(head).unwrap()
+            {
                 if prev_pointer.is_none() {
                     panic!("Previous pointer should not be null");
                 }
                 self.head = *prev_pointer;
-                // self.head.store(*prev_pointer, Ordering::SeqCst);
+            // self.head.store(*prev_pointer, Ordering::SeqCst);
             } else {
                 panic!("No more space in page container")
             }
@@ -312,53 +315,48 @@ impl PageInfoHolder {
 
     pub fn dealloc(&mut self, page_ptr: *const u8) -> bool {
         self.grab();
-        let prev = {
-            self.head.clone()
-        };
+        let prev = { self.head.clone() };
         let mut found_mem = None;
-        let new_head =
-            {
-                for page in self.get_maps() {
-                    match page {
-                        MemoryOrFreePointer::Map(map) => {
-                            if map.as_ptr() == page_ptr {
-                                found_mem = Some(page);
-                                break;
-                            }
-                        },
-                        MemoryOrFreePointer::Segment(segment) => {
-                            if segment.get_ptr() as *const u8 == page_ptr {
-                                let x = page;
-                                found_mem = Some(x);
-                                break;
-                            }
-                        },
-                        MemoryOrFreePointer::Free { next: _ } => {
-
+        let new_head = {
+            for page in self.get_maps() {
+                match page {
+                    MemoryOrFreePointer::Map(map) => {
+                        if map.as_ptr() == page_ptr {
+                            found_mem = Some(page);
+                            break;
                         }
                     }
-                }
-
-                let output = match found_mem {
-                    None => return false,
-                    Some(page) => {
-                        // println!("De-allocating a page");
-
-                        unsafe {
-                            // Now will definitely drop the map
-                            let mem = std::ptr::replace(page, MemoryOrFreePointer::Free { next: prev });
-                            if let MemoryOrFreePointer::Segment(segment) = mem {
-                                // deallocate the segment
-                                SEGMENT_ALLOCATOR.deallocate(segment);
-                            }
-                        };
-                        page as * mut MemoryOrFreePointer
-                        //self.head
-                        //    .store(page as *mut MemoryOrFreePointer, Ordering::Release);
+                    MemoryOrFreePointer::Segment(segment) => {
+                        if segment.get_ptr() as *const u8 == page_ptr {
+                            let x = page;
+                            found_mem = Some(x);
+                            break;
+                        }
                     }
-                };
-                output
+                    MemoryOrFreePointer::Free { next: _ } => {}
+                }
+            }
+
+            let output = match found_mem {
+                None => return false,
+                Some(page) => {
+                    // println!("De-allocating a page");
+
+                    unsafe {
+                        // Now will definitely drop the map
+                        let mem = std::ptr::replace(page, MemoryOrFreePointer::Free { next: prev });
+                        if let MemoryOrFreePointer::Segment(segment) = mem {
+                            // deallocate the segment
+                            SEGMENT_ALLOCATOR.deallocate(segment);
+                        }
+                    };
+                    page as *mut MemoryOrFreePointer
+                    //self.head
+                    //    .store(page as *mut MemoryOrFreePointer, Ordering::Release);
+                }
             };
+            output
+        };
         self.head = self.get_index_from_pointer(new_head);
         self.count -= 1;
         // println!("{:?}", self);
@@ -374,8 +372,6 @@ impl PageInfoHolder {
             // println!("Head: {:?}", head);
             let mut ptr = head;
             loop {
-
-
                 if ptr.is_none() {
                     // println!("done");
                     break;
@@ -386,15 +382,14 @@ impl PageInfoHolder {
                 if let Some(Free { next }) = self.get_at_index(ptr.unwrap()) {
                     ptr = *next;
                 } /*else {
-                    panic!("Free list inconsistent")
-                } */
-
+                      panic!("Free list inconsistent")
+                  } */
             }
         }
     }
 
     #[allow(unused)]
-    pub fn get_free_list(&self) -> Vec<Option<usize>>{
+    pub fn get_free_list(&self) -> Vec<Option<usize>> {
         let mut output = vec![];
         let head = self.head;
 
@@ -431,8 +426,15 @@ impl Debug for PageInfoHolder {
                     (&*slice_from_raw_parts(
                         self.internals.as_ref().unwrap().as_ptr() as *const MemoryOrFreePointer,
                         self.capacity,
-                    )).iter()
-                        .map(|mem| format!("{:?}: {:?}", self.get_index_from_pointer(mem as *const MemoryOrFreePointer), mem))
+                    ))
+                        .iter()
+                        .map(|mem| {
+                            format!(
+                                "{:?}: {:?}",
+                                self.get_index_from_pointer(mem as *const MemoryOrFreePointer),
+                                mem
+                            )
+                        })
                         .collect::<Vec<String>>()
                         .join(", ")
                 }
@@ -511,9 +513,9 @@ pub fn page_free(ptr: *const u8) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::pages::{page_alloc, PAGE_HOLDER, INITIAL_PAGES};
     use crate::mem_info::PAGE;
-    use crate::size_classes::{SIZE_CLASSES, SizeClassData};
+    use crate::pages::{page_alloc, INITIAL_PAGES, PAGE_HOLDER};
+    use crate::size_classes::{SizeClassData, SIZE_CLASSES};
 
     #[test]
     fn get_page() {
@@ -535,7 +537,6 @@ mod test {
 
     #[test]
     fn mass_allocate() {
-
         unsafe {
             crate::init_malloc();
         }

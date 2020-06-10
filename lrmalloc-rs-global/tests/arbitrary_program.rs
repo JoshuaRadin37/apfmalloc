@@ -1,6 +1,6 @@
 extern crate lrmalloc_rs_global;
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 
 // ~O(2^n)
 fn slow_fib(n: usize) -> usize {
@@ -16,9 +16,7 @@ fn fast_fib(n: usize) -> usize {
     let mut saved = vec![0usize, 1];
 
     for i in 2..=n {
-        saved.push(
-            saved[i - 1] + saved[i - 2]
-        );
+        saved.push(saved[i - 1] + saved[i - 2]);
     }
 
     saved[n]
@@ -27,17 +25,22 @@ fn fast_fib(n: usize) -> usize {
 #[test]
 fn fast_fib_no_fail() {
     for n in 0..10 {
-        assert_eq!(fast_fib(n), slow_fib(n), "fast_fib({}) gave the wrong result", n);
+        assert_eq!(
+            fast_fib(n),
+            slow_fib(n),
+            "fast_fib({}) gave the wrong result",
+            n
+        );
     }
 }
 
 #[test]
 fn arbitrary_program_main() {
-    const SIZE:usize  = 4;
+    const SIZE: usize = 4;
     let mut collect = (0..SIZE).map(|n| fast_fib(n)).collect::<Vec<usize>>();
     collect.reverse();
-    fn merge_sort<T : PartialOrd>(input: &mut Vec<T>) {
-        fn merge_sort_helper<T : PartialOrd>(input: &mut [T], from: usize, to: usize) {
+    fn merge_sort<T: PartialOrd>(input: &mut Vec<T>) {
+        fn merge_sort_helper<T: PartialOrd>(input: &mut [T], from: usize, to: usize) {
             let mid = (from + to) / 2;
             if mid == from {
                 return;
@@ -72,7 +75,12 @@ fn arbitrary_program_main() {
                 }
             }
             for _ in 0..total {
-                let one = *mapping.keys().map(|n| *n).collect::<Vec<usize>>().first().unwrap();
+                let one = *mapping
+                    .keys()
+                    .map(|n| *n)
+                    .collect::<Vec<usize>>()
+                    .first()
+                    .unwrap();
 
                 let swap = mapping[&one];
                 input.swap(one, swap);
@@ -83,12 +91,14 @@ fn arbitrary_program_main() {
                     mapping.remove(&swap);
                 }
             }
-
         }
         let len = input.len();
         merge_sort_helper(input, 0, len)
     }
     merge_sort(&mut collect);
 
-    assert_eq!(collect, (0..SIZE).map(|n| fast_fib(n)).collect::<Vec<usize>>());
+    assert_eq!(
+        collect,
+        (0..SIZE).map(|n| fast_fib(n)).collect::<Vec<usize>>()
+    );
 }

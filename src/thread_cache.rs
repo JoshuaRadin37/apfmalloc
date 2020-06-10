@@ -1,23 +1,24 @@
 use crate::allocation_data::Anchor;
 
-
+use crate::alloc::{
+    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_from_new_sb,
+    malloc_from_partial, unregister_desc,
+};
+use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::MAX_SZ_IDX;
-use std::cell::RefCell;
-use std::ptr::null_mut;
-use std::cell::UnsafeCell;
-use crate::allocation_data::{SuperBlockState, get_heaps};
-use std::sync::atomic::Ordering;
-use crate::alloc::{unregister_desc, heap_push_partial, compute_index, get_page_info_for_ptr, malloc_from_partial, malloc_from_new_sb};
 use crate::pages::page_free;
 use crate::size_classes::SIZE_CLASSES;
 use core::ops::{Deref, DerefMut};
-
+use std::cell::RefCell;
+use std::cell::UnsafeCell;
+use std::ptr::null_mut;
+use std::sync::atomic::Ordering;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
-    block_size: Option<usize>
+    block_size: Option<usize>,
 }
 
 impl ThreadCacheBin {
@@ -25,20 +26,18 @@ impl ThreadCacheBin {
         Self {
             block: null_mut(),
             block_num: 0,
-            block_size: None
+            block_size: None,
         }
     }
 
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
-
         unsafe {
             *(block as *mut *mut u8) = self.block;
         }
         self.block = block;
         self.block_num += 1;
-
     }
 
     /// Pushes a block list
@@ -50,7 +49,6 @@ impl ThreadCacheBin {
         if self.block_num > 0 {
             panic!("Attempting to push a block list while cache is not empty");
         } else {
-
             self.block = block;
             self.block_num = length;
         }
@@ -71,7 +69,6 @@ impl ThreadCacheBin {
             self.block_num -= 1;
             ret
         }
-
     }
 
     /// Manually popped the list and now needs to update cache
@@ -103,7 +100,6 @@ impl ThreadCacheBin {
     }
 }
 
-
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
 
@@ -114,13 +110,16 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         used_partial = false;
     }
     if block_num == 0 || cache.block_num == 0 {
-        panic!("Didn't allocate any blocks to the cache. USED PARTIAL: {}", used_partial);
+        panic!(
+            "Didn't allocate any blocks to the cache. USED PARTIAL: {}",
+            used_partial
+        );
     }
 
     cache.block_size = Some(size_class_index);
 
-
-    #[cfg(debug_assertions)] {
+    #[cfg(debug_assertions)]
+    {
         let sc = unsafe { &SIZE_CLASSES[size_class_index] };
         debug_assert!(block_num > 0);
         debug_assert!(block_num <= sc.cache_block_num as usize);
@@ -231,7 +230,6 @@ impl DerefMut for ThreadCache {
 
 impl Drop for ThreadCache {
     fn drop(&mut self) {
-
         unsafe {
             //let thread_cache_bins  = &mut self.get_mut();
             for bin_index in 0..self.len() {
@@ -240,9 +238,7 @@ impl Drop for ThreadCache {
                     flush_cache(sz_idx, bin);
                 }
             }
-
         }
-
     }
 }
 
@@ -252,9 +248,7 @@ pub struct ThreadEmpty;
 impl Drop for ThreadEmpty {
     fn drop(&mut self) {
         thread_cache.with(|tcache| {
-            let tcache = unsafe {
-                &mut *tcache.get()
-            };
+            let tcache = unsafe { &mut *tcache.get() };
             for bin_index in 0..tcache.len() {
                 let cache = tcache.get_mut(bin_index).unwrap();
                 if let Some(size_class_index) = cache.block_size {
@@ -273,7 +267,7 @@ impl Clone for ThreadBool {
 }
 
 #[cfg(not(unix))]
-impl Copy for ThreadBool { }
+impl Copy for ThreadBool {}
 
 thread_local! {
     // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
@@ -285,8 +279,6 @@ thread_local! {
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 }
 
-
-
 #[cfg(test)]
 mod test {
     use crate::thread_cache::ThreadCacheBin;
@@ -294,10 +286,6 @@ mod test {
 
     #[test]
     fn check_bin_consistency() {
-
         let _bin = ThreadCacheBin::new();
-
     }
-
-
 }

@@ -1,10 +1,9 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
-use std::iter::Iterator;
-use lrmalloc_rs::{do_malloc, do_free};
-use std::thread;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use lrmalloc_rs::auto_ptr::AutoPtr;
+use lrmalloc_rs::{do_free, do_malloc};
+use std::iter::Iterator;
 use std::sync::{Arc, Mutex};
-
+use std::thread;
 
 fn allocate_multi_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate multi thread");
@@ -19,17 +18,17 @@ fn allocate_multi_thread(c: &mut Criterion) {
                     let mut ptrs = Arc::new(Mutex::new(Vec::with_capacity(size)));
                     for _ in 0..size {
                         let clone = ptrs.clone();
-                        vec.push(thread::spawn( move ||
-                            {
-                                clone.lock().unwrap().push(AutoPtr::new(0u8));
-                            }));
+                        vec.push(thread::spawn(move || {
+                            clone.lock().unwrap().push(AutoPtr::new(0u8));
+                        }));
                     }
                     for join in vec {
                         join.join().unwrap();
                     }
                 })
-            });
-    };
+            },
+        );
+    }
     group.finish()
 }
 
