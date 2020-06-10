@@ -48,7 +48,7 @@ impl LivenessCounter {
 
     pub fn inc_timer(&mut self) {
         self.n += 1;
-        if self.n >= MAX_N { panic!("ERROR: Liveness time exceeded max time") };
+        if self.n >= MAX_N { panic!("ERROR: Liveness time exceeded max time: {}", self.n) };
 
         self.alloc_counts[self.n] = self.alloc_counts[self.n - 1];
         self.alloc_sum[self.n] = self.alloc_sum[self.n - 1];
@@ -208,7 +208,7 @@ fn reuse(t: &Trace) -> [f32; REUSE_BURST_LENGTH] {
     }
 
     let mut result = [0.0; REUSE_BURST_LENGTH];
-    for k in 1..n {
+    for k in 1..n+1 {
         result[k-1] = (x[k - 1] + z[k - 1] - y[k - 1]) as f32 / (n - k + 1) as f32;
     }
 
@@ -263,48 +263,48 @@ mod test {
         rc.alloc(3);
         rc.inc_timer();
 
-        assert_eq!(rc.reuse(4), Some(7.0 / 3.0));
+        assert_eq!(rc.reuse(3), Some(7.0 / 3.0));
     }
 
     #[test]
     fn test_reuse_function() {
         let mut t = Trace::new();
         t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[1], 2.0/6.0);
+        assert_eq!(reuse(&t)[0], 2.0/6.0);
     }
 
     #[test]
     fn test_reuse_function_2() {
         let mut t = Trace::new();
         t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[2], 1.0);
+        assert_eq!(reuse(&t)[1], 1.0);
     }
 
     #[test]
     fn test_reuse_function_3() {
         let mut t = Trace::new();
         t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[3], 7.0/4.0);
+        assert_eq!(reuse(&t)[2], 7.0/4.0);
     }
 
     #[test]
     fn test_reuse_function_4() {
         let mut t = Trace::new();
         t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[4], 7.0/3.0);
+        assert_eq!(reuse(&t)[3], 7.0/3.0);
     }
 
     #[test]
     fn test_reuse_function_5() {
         let mut t = Trace::new();
         t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[5], 5.0/2.0);
+        assert_eq!(reuse(&t)[4], 5.0/2.0);
     }
 
     #[test]
     fn test_reuse_function_6() {
         let mut t = Trace::new();
         t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[6], 3.0);
+        assert_eq!(reuse(&t)[5], 3.0);
     }
 }
