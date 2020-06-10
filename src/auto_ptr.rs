@@ -2,7 +2,6 @@ use crate::{do_aligned_alloc, do_free};
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
-use std::ptr::null_mut;
 
 pub struct AutoPtr<T> {
     data: * mut T
@@ -56,6 +55,8 @@ impl <T> Drop for AutoPtr<T> {
         do_free(self.data);
     }
 }
+
+unsafe impl <T : Send> Send for AutoPtr<T> {}
 
 
 

@@ -1,12 +1,14 @@
 use bitfield::size_of;
-use lralloc_rs::{do_free, do_malloc};
+use lrmalloc_rs::{do_free, do_malloc};
 use std::mem::MaybeUninit;
 use core::ptr::null_mut;
+use std::thread;
+
 
 #[test]
-fn run() {
+fn create_and_destroy() {
     unsafe {
-        let o = (do_malloc(size_of::<Option<usize>>()) as *mut MaybeUninit<Option<usize>>);
+        let o = do_malloc(size_of::<Option<usize>>()) as *mut MaybeUninit<Option<usize>>;
         assert_ne!(o, null_mut());
         // println!("First allocation successful");
         *o = MaybeUninit::new(Some(15));
@@ -17,5 +19,83 @@ fn run() {
         // println!("First allocation successful");
 
         do_free(o as *const Option<usize>);
+    }
+}
+
+mod mass_stress {
+    use super::*;
+
+    #[test]
+    fn mass_thread_spawn_stress() {
+        for _j in 0..50 {
+            let mut vec = vec![];
+            for _ in 0..8 {
+                vec.push(thread::spawn(move ||
+                    {
+                        do_free(do_malloc(8));
+                        //println!("Thread {} says hello", j * 8 + i)
+                    }));
+            }
+            for join in vec {
+                join.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+// #[ignore]
+    fn mass_thread_spawn_stress_comparison() {
+        for _j in 0..50 {
+            let mut vec = vec![];
+            for _ in 0..8 {
+                vec.push(thread::spawn(move ||
+                    {
+                        Box::new(0usize)
+                        //println!("Thread {} says hello", j * 8 + i)
+                    }));
+            }
+            for join in vec {
+                join.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn mass_thread_allocate_stress() {
+        for _ in 0..8 {
+            let mut vec = vec![];
+
+            vec.push(thread::spawn(move ||
+                {
+                    for _j in 0..500000 {
+                        do_free(do_malloc(8));
+                        //println!("Thread {} says hello", j * 8 + i)
+                    }
+                }));
+
+            for join in vec {
+                join.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+// #[ignore]
+    fn mass_thread_allocate_stress_comparison() {
+        for _ in 0..8 {
+            let mut vec = vec![];
+
+            vec.push(thread::spawn(move ||
+                {
+                    for _j in 0..500000 {
+                        Box::new(0usize);
+                        //println!("Thread {} says hello", j * 8 + i)
+                    }
+                }));
+
+            for join in vec {
+                join.join().unwrap();
+            }
+        }
     }
 }

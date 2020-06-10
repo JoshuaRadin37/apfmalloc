@@ -16,6 +16,7 @@ pub struct ProcHeap {
 }
 
 impl ProcHeap {
+
     pub fn new(partial_list: DescriptorNode, size_class_index: usize) -> Self {
         let ptr = Atomic::new(Some(partial_list));
         ProcHeap {
@@ -31,6 +32,7 @@ impl ProcHeap {
             size_class_index,
         }
     }
+
 
     pub fn get_size_class_index(&self) -> usize {
         self.size_class_index
@@ -66,9 +68,6 @@ impl Heaps {
         Heaps(None)
     }
 
-    fn new(field0: MmapMut) -> Self {
-        Heaps(Some(field0))
-    }
 
     fn as_heaps_mut(&mut self) -> &mut [ProcHeap] {
         unsafe {
@@ -77,6 +76,8 @@ impl Heaps {
             std::slice::from_raw_parts_mut(ptr, MAX_SZ_IDX)
         }
     }
+
+    #[allow(unused)]
     fn as_heaps(&self) -> &[ProcHeap] {
         unsafe {
             let map = &self.0.as_ref().unwrap()[0];
@@ -85,6 +86,7 @@ impl Heaps {
         }
     }
 
+    #[allow(unused)]
     pub fn get_heap_at(&self, index: usize) -> &ProcHeap {
         &self.as_heaps()[index]
         // self.0[index].borrow()

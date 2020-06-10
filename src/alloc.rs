@@ -8,7 +8,7 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-use crate::pages::{page_alloc, page_free};
+use crate::pages::page_alloc;
 
 
 
@@ -27,10 +27,10 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
         }
         let old_desc = old_desc.unwrap();
 
-        new_head = old_desc.next_partial.load(Ordering::Acquire);
+        new_head = old_desc.next_partial.load(Ordering::Acquire).unwrap();
         let desc = old_head.get_desc();
         let counter = old_head.get_counter().expect("Counter doesn't exist");
-        new_head.set(desc.unwrap(), counter);
+        new_head.set(desc.map(|d| &*d), counter);
 
         if list
             .compare_exchange_weak(ptr, Some(new_head), Ordering::Acquire, Ordering::Release)
@@ -51,7 +51,7 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
     let old_head = match list.load(Ordering::Acquire) {
         None => {
             let mut node = DescriptorNode::new();
-            node.set(desc, 0);
+            node.set(Some(desc), 0);
             replace = true;
             node
         },
@@ -65,13 +65,13 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
 
     loop {
         new_head.set(
-            desc,
+            Some(desc),
             old_head.get_counter().expect("Old heap should exist") + 1,
         );
         // debug_assert_ne!(old_head.get_desc(), new_head.get_desc());
         match new_head.get_desc() {
             None => panic!("A descriptor should exist"),
-            Some(desc) => desc.next_partial.store(old_head, Ordering::SeqCst),
+            Some(desc) => desc.next_partial.store(Some(old_head), Ordering::SeqCst),
         }
 
         if replace {
@@ -126,14 +126,18 @@ pub fn malloc_from_partial(
                     return malloc_from_partial(size_class_index, cache, block_num);
                 }
 
+                // debug_assert_eq!(old_anchor.state(), SuperBlockState::PARTIAL);
+
                 new_anchor = old_anchor;
                 new_anchor.set_count(0);
                 new_anchor.set_avail(max_count as u64);
                 new_anchor.set_state(SuperBlockState::FULL);
 
+
+
                 if desc
                     .anchor
-                    .compare_exchange(new_anchor, old_anchor, Ordering::Acquire, Ordering::Relaxed)
+                    .compare_exchange(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
                     .is_ok()
                 {
                     break;
@@ -143,9 +147,9 @@ pub fn malloc_from_partial(
             let blocks_taken = old_anchor.count() as isize;
             let avail = old_anchor.avail() as isize;
 
-            debug_assert!(avail < max_count as isize);
+            assert!(avail <= max_count as isize, "Avail: {}, Max Count {}", avail, max_count);
             let block = unsafe { super_block.offset(avail * block_size as isize) };
-            debug_assert_eq!(cache.get_block_num(), 0);
+            assert_eq!(cache.get_block_num(), 0);
             cache.push_list(block, blocks_taken as u32);
             *block_num += 1;
         }
@@ -160,7 +164,7 @@ pub fn malloc_from_new_sb(
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
-    let desc = unsafe { &mut *Descriptor::alloc() }; // todo: for some reason lazy static clears the heap size index information
+    let desc = unsafe { &mut *Descriptor::alloc() };
     // debug_assert!(!desc.is_null());
 
     let block_size = sc.block_size;
@@ -386,4 +390,27 @@ pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usi
     ];
     debug_assert_eq!(diff / _sc_block_size, index);
     index
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::mem_info::MAX_SZ_IDX;
+
+
+    #[test]
+    #[ignore]
+    fn from_new_sb() {
+        let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
+        unsafe {
+            crate::init_malloc();
+        }
+        let cache = &mut tcache[1];
+        for i in 0..10000 {
+            malloc_from_new_sb(1, cache, &mut 0);
+            cache.pop_list(cache.peek_block(), cache.get_block_num());
+            println!("Allocated {}", i)
+        }
+
+    }
 }

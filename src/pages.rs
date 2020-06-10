@@ -1,24 +1,22 @@
 use crate::mem_info::PAGE_MASK;
 use bitfield::size_of;
-use memmap::{MmapMut, MmapOptions};
+use memmap::MmapMut;
 use std::io::ErrorKind;
 use std::os::raw::c_void;
 
-use atomic::{Ordering, Atomic};
+use atomic::Ordering;
 use bitfield::fmt::{Debug, Display, Formatter};
 use std::mem::MaybeUninit;
-use std::ptr::{null, null_mut, replace, slice_from_raw_parts, slice_from_raw_parts_mut};
-use std::sync::atomic::{AtomicBool, AtomicPtr};
+use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
+use std::sync::atomic::AtomicBool;
 use std::{fmt, io};
 use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
 use crate::pages::MemoryOrFreePointer::Free;
-use std::ops::Deref;
-use crate::alloc::get_page_info_for_ptr;
-use spin::MutexGuard;
 
-mod external_mem_reservation;
+pub mod external_mem_reservation;
 
 #[inline]
+#[allow(unused)]
 pub fn page_addr2base<T>(a: &T) -> *mut c_void {
     (a as *const T as usize & !PAGE_MASK) as *mut c_void
 }
@@ -32,6 +30,7 @@ struct PageInfoHolder {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum MemoryOrFreePointer {
     Map(MmapMut),
     Segment(Segment),
@@ -132,8 +131,11 @@ impl PageInfoHolder {
             //std::mem::swap(map_or_pointer,&mut ;
             //*map_or_pointer =
             *map_or_pointer = MaybeUninit::new(MemoryOrFreePointer::Free { next: prev });
+            /*
             let ptr = map_or_pointer as *mut MaybeUninit<MemoryOrFreePointer>;
             let ptr = ptr as *mut MemoryOrFreePointer;
+
+             */
             //map_or_pointer.write();
             if first {
                 prev = Some(index + self.capacity);
@@ -153,7 +155,7 @@ impl PageInfoHolder {
                 *next_ptr = old_head;
             }
         }
-        let first = &mut slice[0];
+        // let first = &mut slice[0];
 
         self.head = Some(self.capacity);
     }
@@ -365,6 +367,7 @@ impl PageInfoHolder {
     }
 
     #[cfg(test)]
+    #[allow(unused)]
     pub fn show_free_list(&self) {
         let head = self.head;
         unsafe {
@@ -380,7 +383,7 @@ impl PageInfoHolder {
                     // println!("{:?} ->", ptr);
                 }
 
-                if let Some(Free { next: next }) = self.get_at_index(ptr.unwrap()) {
+                if let Some(Free { next }) = self.get_at_index(ptr.unwrap()) {
                     ptr = *next;
                 } /*else {
                     panic!("Free list inconsistent")
@@ -390,6 +393,7 @@ impl PageInfoHolder {
         }
     }
 
+    #[allow(unused)]
     pub fn get_free_list(&self) -> Vec<Option<usize>>{
         let mut output = vec![];
         let head = self.head;
@@ -509,6 +513,7 @@ pub fn page_free(ptr: *const u8) -> bool {
 mod test {
     use crate::pages::{page_alloc, PAGE_HOLDER, INITIAL_PAGES};
     use crate::mem_info::PAGE;
+    use crate::size_classes::{SIZE_CLASSES, SizeClassData};
 
     #[test]
     fn get_page() {
@@ -525,6 +530,20 @@ mod test {
         let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
         unsafe {
             *ptr = 0xdeadbeaf; // if this fails it means the test fails
+        }
+    }
+
+    #[test]
+    fn mass_allocate() {
+
+        unsafe {
+            crate::init_malloc();
+        }
+        let sc: &mut SizeClassData = unsafe { &mut SIZE_CLASSES[1] };
+        let size = sc.sb_size;
+
+        for _ in 0..10000 {
+            page_alloc(size as usize).unwrap();
         }
     }
 
