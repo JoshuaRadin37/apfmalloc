@@ -34,6 +34,8 @@ pub mod page_map;
 pub mod pages;
 pub mod size_classes;
 pub mod thread_cache;
+pub mod info_dump;
+pub mod single_access;
 
 mod bootstrap;
 

@@ -1,20 +1,17 @@
 use lrmalloc_rs::{do_aligned_alloc, do_free, do_realloc};
 use std::os::raw::c_void;
 
-#[cfg(test)]
-static mut OVERRIDE_MALLOC: bool = false;
-#[cfg(test)]
-static mut OVERRIDE_CALLOC: bool = false;
-#[cfg(test)]
-static mut OVERRIDE_REALLOC: bool = false;
-#[cfg(test)]
-static mut OVERRIDE_FREE: bool = false;
-#[cfg(test)]
-static mut OVERRIDE_ALIGNED_ALLOC: bool = false;
+
+pub static mut OVERRIDE_MALLOC: bool = false;
+
+pub static mut OVERRIDE_CALLOC: bool = false;
+pub static mut OVERRIDE_REALLOC: bool = false;
+pub static mut OVERRIDE_FREE: bool = false;
+pub static mut OVERRIDE_ALIGNED_ALLOC: bool = false;
 
 #[no_mangle]
 extern "C" fn malloc(size: usize) -> *mut c_void {
-    #[cfg(test)]
+
     unsafe {
         OVERRIDE_MALLOC = true;
     }
@@ -23,7 +20,7 @@ extern "C" fn malloc(size: usize) -> *mut c_void {
 
 #[no_mangle]
 extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
-    #[cfg(test)]
+
     unsafe {
         OVERRIDE_CALLOC = true;
     }
@@ -38,7 +35,7 @@ extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
 
 #[no_mangle]
 extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
-    #[cfg(test)]
+
     unsafe {
         OVERRIDE_REALLOC = true;
     }
@@ -47,7 +44,7 @@ extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
 
 #[no_mangle]
 extern "C" fn free(ptr: *mut c_void) {
-    #[cfg(test)]
+
     unsafe {
         OVERRIDE_FREE = true;
     }
@@ -56,7 +53,7 @@ extern "C" fn free(ptr: *mut c_void) {
 
 #[no_mangle]
 extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
-    #[cfg(test)]
+
     unsafe {
         OVERRIDE_ALIGNED_ALLOC = true;
     }
