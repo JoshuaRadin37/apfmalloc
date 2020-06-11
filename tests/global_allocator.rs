@@ -3,7 +3,6 @@ use std::alloc::Layout;
 use lrmalloc_rs::{do_malloc, do_free, do_aligned_alloc};
 use std::thread;
 
-
 struct Dummy;
 
 #[global_allocator]
@@ -34,17 +33,14 @@ fn global_allocator() {
         assert_eq!(i, vec[i])
     }
 
-
-    let v : Vec<_> =vec.drain(0..100).collect();
+    let v: Vec<_> = vec.drain(0..100).collect();
     assert_eq!(vec.len(), 0);
     assert_eq!(v.len(), 100);
-
 }
 
 #[test]
-#[ignore]
 fn mass_stress_no_harness() {
-    for j in 0..500 {
+    for j in 0..10{
         let mut vec = vec![];
         for i in 0..8 {
             vec.push(thread::spawn(move ||
