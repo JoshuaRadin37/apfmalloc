@@ -87,5 +87,5 @@ const KB: usize = 1028;
 #[allow(unused)]
 const MB: usize = 1028 * KB;
 
-pub static mut boostrap_reserve: Mutex<BootstrapReserve> =
+pub static mut bootstrap_reserve: Mutex<BootstrapReserve> =
     Mutex::new(BootstrapReserve::new(128 * KB));

@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 use rand::thread_rng;
 use rand::seq::SliceRandom;
+use lrmalloc_rs::dump_info;
 
 // ~O(2^n)
 fn slow_fib(n: usize) -> Box<usize> {
@@ -25,7 +26,7 @@ fn fast_fib(n: usize) -> usize {
 }
 
 #[test]
-fn fast_fib_no_fail() {
+fn fast_fib_no_fail_global() {
     for n in 0..10 {
         assert_eq!(
             fast_fib(n),
@@ -34,6 +35,7 @@ fn fast_fib_no_fail() {
             n
         );
     }
+
 
     assert!(unsafe {
         lrmalloc_rs_global::OVERRIDE_MALLOC

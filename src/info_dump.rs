@@ -1,5 +1,5 @@
 use crate::mem_info::MAX_SZ_IDX;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{Ordering, AtomicBool};
 use spin::Mutex;
 
 #[derive(Debug, Clone)]
@@ -50,7 +50,16 @@ pub fn log_free(size: usize) {
 
 
 pub fn get_info_dump() -> InfoDump {
+    static skip: AtomicBool = AtomicBool::new(false);
     let guard = INFO_DUMP.lock();
     guard.clone()
+}
+
+pub fn print_info_dump() {
+    static skip: AtomicBool = AtomicBool::new(false);
+    if !skip.compare_and_swap(false, true, Ordering::Acquire) {
+        println!("{:?}", get_info_dump());
+        skip.store(false, Ordering::Relaxed);
+    }
 }
 

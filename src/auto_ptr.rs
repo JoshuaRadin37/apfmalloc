@@ -64,6 +64,9 @@ impl<T> DerefMut for AutoPtr<T> {
 
 impl<T : ?Sized> Drop for AutoPtr<T> {
     fn drop(&mut self) {
+        unsafe {
+            drop_in_place(self.data);
+        }
         do_free(self.data);
     }
 }
