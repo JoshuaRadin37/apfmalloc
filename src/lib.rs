@@ -358,7 +358,7 @@ fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
     }
 }
 
-pub fn do_free<T>(ptr: *const T) {
+pub fn do_free<T : ?Sized>(ptr: *const T) {
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe {
         &mut *match info.get_desc() {
@@ -527,6 +527,16 @@ mod tests {
             do_free(ptr);
         }
     }
+
+    #[test]
+    fn zero_size_malloc() {
+        let v = do_malloc(0);
+        assert_ne!(v, null_mut());
+        assert_eq!(get_allocation_size(v as *const c_void).expect("Zero Sized Allocation should act as an 8 byte allocation"), 8);
+        do_free(v);
+    }
+
+
 
 
 }

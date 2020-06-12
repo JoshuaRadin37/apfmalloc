@@ -3,7 +3,6 @@ use std::os::raw::c_void;
 
 
 pub static mut OVERRIDE_MALLOC: bool = false;
-
 pub static mut OVERRIDE_CALLOC: bool = false;
 pub static mut OVERRIDE_REALLOC: bool = false;
 pub static mut OVERRIDE_FREE: bool = false;
@@ -58,6 +57,32 @@ extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
         OVERRIDE_ALIGNED_ALLOC = true;
     }
     do_aligned_alloc(alignment, size) as *mut c_void
+}
+
+#[no_mangle]
+extern "C" fn check_override() -> bool {
+    unsafe {
+        let ptr = malloc(8);
+        if !OVERRIDE_MALLOC {
+            return false;
+        }
+        let new_ptr = realloc(ptr, 64);
+        assert_ne!(new_ptr, ptr);
+        if !OVERRIDE_REALLOC {
+            return false;
+        }
+        let calloced = calloc(8, 8);
+        assert_ne!(new_ptr, calloced);
+        if !OVERRIDE_CALLOC {
+            return false;
+        }
+        do_free(new_ptr);
+        do_free(calloced);
+        if !OVERRIDE_FREE {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
