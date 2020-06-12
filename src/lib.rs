@@ -34,7 +34,7 @@ pub mod page_map;
 pub mod pages;
 pub mod size_classes;
 pub mod thread_cache;
-pub mod info_dump;
+#[cfg(feature = "track_allocation")] pub mod info_dump;
 pub mod single_access;
 
 mod bootstrap;
@@ -106,7 +106,6 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-    //thread_cache::thread_init.
 
     allocate_to_cache(size, size_class_index)
 }
@@ -249,6 +248,13 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     panic!("Cache didn't fill");
                 }
             }
+            #[cfg(feature = "track_allocation")] {
+                let ret = cache.pop_block();
+                let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
+                crate::info_dump::log_malloc(size);
+                ret
+            }
+            #[cfg(not(feature = "track_allocation"))]
             cache.pop_block() // Pops the block from the thread cache bin
         });
 
@@ -402,6 +408,9 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
                         Err(_) => true,
                     });
             // todo: remove true
+            #[cfg(feature = "track_allocation")] {
+                crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+            }
             if force_bootstrap {
                 unsafe {
                     /*
@@ -462,6 +471,15 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
             }
         }
     }
+}
+
+
+#[macro_export]
+macro_rules! dump_info {
+
+    () => {
+        #[cfg(feature = "track_allocation")] println!("{:?}", crate::info_dump::get_info_dump())
+    };
 }
 
 #[cfg(test)]
@@ -536,7 +554,31 @@ mod tests {
         do_free(v);
     }
 
+}
+
+#[cfg(test)]
+mod track_allocation_tests {
+    use crate::auto_ptr::AutoPtr;
+
+    #[cfg(feature = "track_allocation")]
+    #[test]
+    fn info_dump_one_thread() {
+        let first_ptrs = (0..10)
+            .into_iter()
+            .map(|_| AutoPtr::new(0usize))
+            .collect::<Vec<_>>();
+
+        dump_info!();
+
+        {
+            let first_ptrs = (0..10)
+                .into_iter()
+                .map(|_| AutoPtr::new([0usize; 16]))
+                .collect::<Vec<_>>();
+            dump_info!();
+        }
 
 
-
+        dump_info!();
+    }
 }

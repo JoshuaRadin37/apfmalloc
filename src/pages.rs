@@ -249,6 +249,9 @@ impl PageInfoHolder {
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
+        #[cfg(feature = "track_allocation")] {
+            crate::info_dump::increase_allocated_from_vm(size);
+        }
         self.release();
         Ok(ptr)
     }
@@ -309,6 +312,7 @@ impl PageInfoHolder {
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
+
         self.release();
         Ok(ptr)
     }
@@ -347,6 +351,9 @@ impl PageInfoHolder {
                         let mem = std::ptr::replace(page, MemoryOrFreePointer::Free { next: prev });
                         if let MemoryOrFreePointer::Segment(segment) = mem {
                             // deallocate the segment
+                            #[cfg(feature = "track_allocation")] {
+                                crate::info_dump::decrease_allocated_from_vm(segment.len());
+                            }
                             SEGMENT_ALLOCATOR.deallocate(segment);
                         }
                     };
@@ -360,6 +367,7 @@ impl PageInfoHolder {
         self.head = self.get_index_from_pointer(new_head);
         self.count -= 1;
         // println!("{:?}", self);
+
         self.release();
         true
     }

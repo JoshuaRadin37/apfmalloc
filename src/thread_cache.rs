@@ -68,6 +68,7 @@ impl ThreadCacheBin {
             self.block = unsafe { *(self.block as *mut *mut u8) };
             //self.block = unsafe { self.block.offset(-1) };
             self.block_num -= 1;
+
             ret
         }
     }
