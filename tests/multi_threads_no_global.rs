@@ -41,3 +41,25 @@ fn test_multiple_threads() {
         IN_CACHE.load(Ordering::Relaxed)
     );
 }
+
+#[test]
+fn multi_test_from_bench() {
+    let size = 32;
+    for _ in 0..1000 {
+        let mut vec = Vec::with_capacity(size);
+        for _ in 0..size {
+            vec.push(thread::spawn(move || {
+                do_malloc(16);
+            }));
+        }
+        for join in vec {
+            match join.join() {
+                Ok(_) => { },
+                Err(e) => {
+                    panic!("{:?}", e);
+                }
+            }
+        }
+    };
+
+}

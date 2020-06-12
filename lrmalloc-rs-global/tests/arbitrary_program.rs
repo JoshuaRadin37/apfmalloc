@@ -1,13 +1,15 @@
-extern crate lrmalloc_rs_global;
+// extern crate lrmalloc_rs_global;
 
 use std::collections::{BTreeMap, HashMap};
+use rand::thread_rng;
+use rand::seq::SliceRandom;
 
 // ~O(2^n)
-fn slow_fib(n: usize) -> usize {
+fn slow_fib(n: usize) -> Box<usize> {
     match n {
-        0 => 0,
-        1 => 1,
-        n => slow_fib(n - 1) + slow_fib(n - 2),
+        0 => Box::new(0),
+        1 => Box::new(1),
+        n => Box::new(*slow_fib(n - 1) + *slow_fib(n - 2)),
     }
 }
 
@@ -27,18 +29,29 @@ fn fast_fib_no_fail() {
     for n in 0..10 {
         assert_eq!(
             fast_fib(n),
-            slow_fib(n),
+            *slow_fib(n),
             "fast_fib({}) gave the wrong result",
             n
         );
     }
+
+    assert!(unsafe {
+        lrmalloc_rs_global::OVERRIDE_MALLOC
+    })
 }
 
 #[test]
 fn arbitrary_program_main() {
     const SIZE: usize = 4;
+    let mut rng = thread_rng();
     let mut collect = (0..SIZE).map(|n| fast_fib(n)).collect::<Vec<usize>>();
-    collect.reverse();
+
+    let option = Some(4);
+    let option_ptr = &option;
+
+
+    //collect.reverse();
+    collect.shuffle(&mut rng);
     fn merge_sort<T: PartialOrd>(input: &mut Vec<T>) {
         fn merge_sort_helper<T: PartialOrd>(input: &mut [T], from: usize, to: usize) {
             let mid = (from + to) / 2;
@@ -74,7 +87,7 @@ fn arbitrary_program_main() {
                     j += 1;
                 }
             }
-            for _ in 0..total {
+            for _ in 0..mapping.len() {
                 let one = *mapping
                     .keys()
                     .map(|n| *n)
