@@ -250,9 +250,9 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 }
             }
 
-            let ptr = cache.pop_block(); // Pops the block from the thread cache bin
-
             /* WARNING -- ELIAS CODE -- WARNING */
+
+            let ptr = cache.pop_block(); // Pops the block from the thread cache bin
 
             thread_cache::apf_init.with(|init| {
                 if !*init.borrow() {
@@ -446,6 +446,16 @@ pub fn do_free<T>(ptr: *const T) {
                         set_use_bootstrap(false)
                     });
                 }
+
+                /* WARNING -- ELIAS CODE -- WARNING */
+
+                thread_cache::apf_tuners.with(|tuners| {
+                    dbg!(size_class_index);
+                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                });
+
+                /* END ELIAS CODE */
+
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };

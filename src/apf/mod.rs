@@ -49,6 +49,7 @@ impl ApfTuner {
     }
 
     pub fn malloc(&mut self, ptr: *mut u8) -> bool {
+        dbg!("malloc");
         self.time += 1;
 
         self.l_counter.inc_timer();
@@ -80,7 +81,7 @@ impl ApfTuner {
     // Ret function returns number of slots to central reserve
     // Returns true if demand can be calculated (reuse counter has completed a burst), false if not
     pub fn free(&mut self, ptr: *mut u8) -> bool {
-        
+        dbg!("free");
         self.r_counter.free(ptr as usize);
         if !USE_ALLOCATION_CLOCK { 
             self.time += 1;
@@ -121,7 +122,7 @@ impl ApfTuner {
     }
 
     fn calculate_dapf(&self) -> usize {
-        let mut dapf;
+        let dapf;
 
         if self.time >= TARGET_APF * (self.fetch_count + 1) {
             dapf = TARGET_APF;
