@@ -619,6 +619,57 @@ mod tests {
     }
 
     #[test]
+    fn fib_intractable_multi_thread() {
+        enum FibTree {
+            Val(usize),
+            Sum(AutoPtr<FibTree>, AutoPtr<FibTree>)
+        }
+
+        impl FibTree {
+
+
+            fn into_val(self) -> usize {
+                dump_info!();
+                match self {
+                    FibTree::Val(v) => v,
+                    FibTree::Sum(l, r) => {
+                        let l = l.take();
+                        let r = r.take();
+                        let l_t = thread::spawn( || l.into_val());
+                        let r_t = thread::spawn(|| r.into_val());
+                        l_t.join().unwrap() + r_t.join().unwrap()
+                    },
+                }
+            }
+        }
+
+        fn fib(n: usize) -> FibTree {
+            match n {
+                0 => {
+                    FibTree::Val(0)
+                },
+                1 => {
+                    FibTree::Val(1)
+                },
+                n => {
+                    FibTree::Sum(AutoPtr::new(fib(n-1)), AutoPtr::new(fib(n-2)))
+                }
+            }
+        }
+
+        for n in 0..15 {
+            assert_eq!(
+                fast_fib(n),
+                fib(n).into_val(),
+                "fast_fib({}) gave the wrong result",
+                n
+            );
+        }
+        dump_info!();
+
+    }
+
+    #[test]
     fn fib_allocation() {
 
 

@@ -22,13 +22,11 @@ impl<T> AutoPtr<T> {
     }
 
     pub fn take(self) -> T
-    where
-        T: Copy,
     {
         unsafe {
-            let Self { data } = self;
-            let output = *data;
-            do_free(data);
+            let Self { data } = &self;
+            let output = std::ptr::read(*data);
+            //do_free(data);
             output
         }
     }
@@ -48,6 +46,8 @@ impl<T> AutoPtr<T> {
     }
 }
 
+
+
 impl<T> Deref for AutoPtr<T> {
     type Target = T;
 
@@ -65,13 +65,14 @@ impl<T> DerefMut for AutoPtr<T> {
 impl<T : ?Sized> Drop for AutoPtr<T> {
     fn drop(&mut self) {
         unsafe {
-            drop_in_place(self.data);
+            // drop_in_place::<T>(self.data);
         }
         do_free(self.data);
     }
 }
 
-unsafe impl<T: Send> Send for AutoPtr<T> {}
+unsafe impl <T: Send> Send for AutoPtr<T> {}
+unsafe impl <T: Sync> Sync for AutoPtr<T> {}
 
 #[cfg(test)]
 mod test {
