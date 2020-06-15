@@ -397,13 +397,15 @@ pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usi
 mod test {
     use super::*;
     use crate::mem_info::MAX_SZ_IDX;
+    use crate::MALLOC_INIT_S;
 
     #[test]
     fn from_new_sb() {
         let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
-        unsafe {
+        MALLOC_INIT_S.with(|| unsafe {
             crate::init_malloc();
-        }
+        });
+
         let cache = &mut tcache[1];
         malloc_from_new_sb(1, cache, &mut 0);
         assert!(cache.block_num > 0);

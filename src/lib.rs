@@ -21,6 +21,15 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::thread;
 use std::thread::ThreadId;
+use crate::single_access::SingleAccess;
+use log4rs::append::file::FileAppender;
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::config::{Config, Appender, Root};
+use log::LevelFilter;
+
+#[macro_use]
+extern crate log;
+
 
 #[macro_export]
 macro_rules! dump_info {
@@ -64,6 +73,10 @@ pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomici
 pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
+static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
+static LOG_INIT: SingleAccess = SingleAccess::new();
+
+
 pub unsafe fn init_malloc() {
     init_size_class();
 
@@ -76,13 +89,41 @@ pub unsafe fn init_malloc() {
         heap.size_class_index = idx;
     }
 
+
+/*
+    LOG_INIT.with(|| {
+        thread::spawn(|| {
+            let logfile = FileAppender::builder()
+                .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} {l}: {m}\n")))
+                .append(false)
+                .build("log/output.log").unwrap();
+
+            let config = Config::builder()
+                .appender(Appender::builder().build("logfile", Box::new(logfile)))
+                .build(Root::builder()
+                    .appender("logfile")
+                    .build(LevelFilter::Info)).unwrap();
+
+            log4rs::init_config(config).unwrap();
+            info!("Initialized Log");
+        }
+        );
+    });
+
+ */
+
+
+
     bootstrap_reserve.lock().init();
 
     MALLOC_SKIP = true;
     MALLOC_FINISH_INIT.store(true, Ordering::Release);
+    info!("Malloc Initialized")
 }
 
 pub fn do_malloc(size: usize) -> *mut u8 {
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
+    /*
     unsafe {
         if !MALLOC_SKIP {
             if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
@@ -91,6 +132,8 @@ pub fn do_malloc(size: usize) -> *mut u8 {
             while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
         }
     }
+
+     */
 
     if size > MAX_SZ {
         let pages = page_ceiling!(size);
@@ -130,14 +173,21 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let mut size = align_val(size, align);
 
-    unsafe {
-        if !MALLOC_SKIP {
-            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-                init_malloc();
-            }
-            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
-        }
-    }
+    MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
+        let logfile = FileAppender::builder()
+            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} {l}: {m}\n")))
+            .append(false)
+            .build("log/output.log").unwrap();
+
+        let config = Config::builder()
+            .appender(Appender::builder().build("logfile", Box::new(logfile)))
+            .build(Root::builder()
+                .appender("logfile")
+                .build(LevelFilter::Info)).unwrap();
+
+        log4rs::init_config(config).unwrap();
+        info!("Initialized Log");
+    });
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -312,12 +362,7 @@ fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
 
     let mut size = align_val(size, align);
 
-    unsafe {
-        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-            init_malloc();
-        }
-        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
-    }
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -515,12 +560,7 @@ mod tests {
     #[test]
     fn cache_pop_no_fail() {
         const size_class: usize = 16;
-        unsafe {
-            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-                init_malloc();
-            }
-            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
-        }
+        MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
         let sc = unsafe { &SIZE_CLASSES[size_class] };
         let total_blocks = sc.block_num;
