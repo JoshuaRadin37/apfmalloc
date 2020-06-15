@@ -20,6 +20,5 @@ fn threads_return_extra_to_heap() {
         &* do_malloc(8)
     };
     assert_eq!(new_ptr as * const u8, ptr as * const u8);
-
-
+    dump_info!();
 }

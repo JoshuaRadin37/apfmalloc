@@ -1,3 +1,4 @@
+use lrmalloc_rs::dump_info;
 
 #[test]
 fn test() {
@@ -8,10 +9,4 @@ fn test() {
         use lrmalloc_rs_global::OVERRIDE_MALLOC;
         assert!(OVERRIDE_MALLOC);
     }
-}
-
-#[test]
-fn im_a_test() {
-    let x = 3;
-    assert_ne!(x, 4, "3 and 4 should not be equal");
 }

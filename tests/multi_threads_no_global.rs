@@ -49,16 +49,11 @@ fn multi_test_from_bench() {
         let mut vec = Vec::with_capacity(size);
         for _ in 0..size {
             vec.push(thread::spawn(move || {
-                do_malloc(16);
+                AutoPtr::new(3799i16)
             }));
         }
-        for join in vec {
-            match join.join() {
-                Ok(_) => { },
-                Err(e) => {
-                    panic!("{:?}", e);
-                }
-            }
+        for (i, join) in vec.into_iter().enumerate() {
+            let _ptr = join.join().expect(format!("thread {} panicked", i).as_str());
         }
     };
 

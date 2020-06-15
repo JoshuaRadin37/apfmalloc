@@ -250,6 +250,7 @@ pub struct ThreadEmpty;
 
 #[cfg(unix)]
 impl Drop for ThreadEmpty {
+
     fn drop(&mut self) {
         thread_cache.with(|tcache| {
             let tcache = unsafe { &mut *tcache.get() };
@@ -259,7 +260,7 @@ impl Drop for ThreadEmpty {
                     flush_cache(size_class_index, cache);
                 }
             }
-        })
+        });
     }
 }
 // APF Functions

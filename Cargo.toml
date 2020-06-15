@@ -9,6 +9,7 @@ edition = "2018"
 [features]
 default = []
 track_allocation = []
+show_all_allocations = []
 
 [workspace]
 members = [

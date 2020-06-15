@@ -22,6 +22,14 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::thread;
 use std::thread::ThreadId;
 
+#[macro_export]
+macro_rules! dump_info {
+
+    () => {
+        #[cfg(feature = "track_allocation")] $crate::info_dump::print_info_dump()
+    };
+}
+
 #[macro_use]
 pub mod macros;
 
@@ -174,12 +182,6 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-    /*
-
-    The way this works pretty wild
-    There is a global state of use_bootstrap
-
-     */
 
     allocate_to_cache(size, size_class_index)
 }
@@ -252,6 +254,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 let ret = cache.pop_block();
                 let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
                 crate::info_dump::log_malloc(size);
+                #[cfg(feature = "show_all_allocations")] dump_info!();
                 ret
             }
             #[cfg(not(feature = "track_allocation"))]
@@ -410,6 +413,7 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
             // todo: remove true
             #[cfg(feature = "track_allocation")]
                 crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+            #[cfg(feature = "show_all_allocations")] dump_info!();
 
             if force_bootstrap {
                 unsafe {
@@ -474,13 +478,7 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
 }
 
 
-#[macro_export]
-macro_rules! dump_info {
 
-    () => {
-        #[cfg(feature = "track_allocation")] $crate::info_dump::print_info_dump()
-    };
-}
 
 #[cfg(test)]
 mod tests {
@@ -679,7 +677,6 @@ mod tests {
                 1 => AutoPtr::new(1),
                 n => {
                     let ret = AutoPtr::new(*slow_fib(n - 1) + *slow_fib(n - 2));
-                    dump_info!();
                     ret
                 },
             }
@@ -709,6 +706,7 @@ mod track_allocation_tests {
     #[test]
     fn info_dump_one_thread() {
         {
+            dump_info!();
             let first_ptrs = (0..10)
                 .into_iter()
                 .map(|_| AutoPtr::new(0usize))
