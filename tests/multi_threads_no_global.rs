@@ -43,7 +43,7 @@ fn test_multiple_threads() {
 }
 
 #[test]
-fn multi_test_from_bench() {
+fn multi_test_from_bench_no_global() {
     let size = 32;
     for t in 0..10 {
         let mut vec = Vec::with_capacity(size);
@@ -53,7 +53,12 @@ fn multi_test_from_bench() {
             }));
         }
         for (i, join) in vec.into_iter().enumerate() {
-            let _ptr = join.join().expect(format!("thread {} panicked", i + t * size).as_str());
+            let _ptr = match join.join() {
+                Ok(_) => {},
+                Err(e) => {
+                    panic!(e);
+                }
+            };
         }
     };
 

@@ -11,7 +11,7 @@ use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 
 
-#[repr(packed)]
+
 #[derive(Copy, Clone, Debug)]
 pub struct DescriptorNode {
     desc: *mut Descriptor,
@@ -43,9 +43,9 @@ impl DescriptorNode {
     }
 
     pub fn get_desc(&self) -> &'static mut Descriptor {
-                let usize_desc = self.descdesc as u64;
-                let fixed_ptr = usize_desc & !CACHE_LINE_MASK as u64;
-                unsafe { &mut *(fixed_ptr as *mut Descriptor) }
+        let usize_desc = self.desc as u64;
+        let fixed_ptr = usize_desc & !CACHE_LINE_MASK as u64;
+        unsafe { &mut *(fixed_ptr as *mut Descriptor) }
     }
 
     pub fn get_counter(&self) -> u64 {
@@ -112,7 +112,7 @@ impl Descriptor {
 
         new_head.set(
             Some(self),
-            old_head.get_counter().expect("Counter Should exist") + 1,
+            old_head.get_counter() + 1,
         );
         *avail = new_head;
         /*
@@ -132,97 +132,187 @@ impl Descriptor {
         let old_head = *avail; //AVAILABLE_DESC.load(Ordering::Acquire);
         loop {
             let desc = old_head.get_desc();
-            match desc {
-                Some(desc) => {
-                    let mut new_head = desc.next_free.load(Ordering::Acquire);
-                    match &mut new_head {
-                        None => {}
-                        Some(new_head) => {
-                            new_head.set(
-                                new_head.get_desc().map(|d| &*d),
-                                old_head.get_counter().expect("Head should have a counter"),
-                            );
-                        }
-                    }
+            return if desc as *mut Descriptor == null_mut() {
+                let ptr = page_alloc(DESCRIPTOR_BLOCK_SZ)
+                    .expect("Creating a descriptor block failed");
+                let ret = ptr as *mut MaybeUninit<Descriptor>;
+                // organize list with the rest of the descriptors
+                // and add to available descriptors
 
-                    /*
-                    if AVAILABLE_DESC
-                        .compare_exchange_weak(
-                            old_head,
-                            new_head,
-                            Ordering::Acquire,
+                let mut prev: *mut MaybeUninit<Descriptor> = null_mut();
+
+                let descriptor_size = std::mem::size_of::<Descriptor>() as isize;
+                let mut curr_ptr = ptr.offset(descriptor_size);
+                curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
+                let first = curr_ptr as *mut MaybeUninit<Descriptor>;
+                let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
+                let mut count = 0;
+                while (curr_ptr as usize + descriptor_size as usize) < max {
+                    let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
+                    unsafe { *curr = MaybeUninit::new(Descriptor::default()) }
+                    if !prev.is_null() {
+                        let prev_init = &mut *(*prev).as_mut_ptr();
+                        prev_init.next_free.store(
+                            Some(DescriptorNode::from(curr_ptr as *mut Descriptor)),
                             Ordering::Release,
-                        )
-                        .is_ok()
-                    {
-                        return desc as *mut Descriptor;
+                        );
                     }
-                     */
-                    *avail = new_head.unwrap_or(DescriptorNode::new());
-                    return desc;
-                }
-                None => {
-                    let ptr = page_alloc(DESCRIPTOR_BLOCK_SZ)
-                        .expect("Creating a descriptor block failed");
-                    let ret = ptr as *mut MaybeUninit<Descriptor>;
-                    // organize list with the rest of the descriptors
-                    // and add to available descriptors
 
-                    let mut prev: *mut MaybeUninit<Descriptor> = null_mut();
-
-                    let descriptor_size = std::mem::size_of::<Descriptor>() as isize;
-                    let mut curr_ptr = ptr.offset(descriptor_size);
+                    prev = curr;
+                    curr_ptr = curr_ptr.offset(1);
                     curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
-                    let first = curr_ptr as *mut MaybeUninit<Descriptor>;
-                    let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
-                    while (curr_ptr as usize + descriptor_size as usize) < max {
-                        let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
-                        unsafe { *curr = MaybeUninit::new(Descriptor::default()) }
-                        if !prev.is_null() {
-                            let prev_init = &mut *(*prev).as_mut_ptr();
-                            prev_init.next_free.store(
-                                Some(DescriptorNode::from(curr_ptr as *mut Descriptor)),
-                                Ordering::Release,
-                            );
-                        }
-
-                        prev = curr;
-                        curr_ptr = curr_ptr.offset(descriptor_size);
-                        curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
-                    }
-
-                    let prev = &mut *(*prev).as_mut_ptr();
-                    prev.next_free
-                        .store(Some(DescriptorNode::default()), Ordering::Release);
-
-                    // let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
-                    let mut new_head: DescriptorNode = DescriptorNode::default();
-                    // loop {
-                    prev.next_free.store(Some(old_head), Ordering::Release);
-                    new_head.set(
-                        Some(&mut *(first as *mut Descriptor)),
-                        old_head.get_counter().unwrap_or(0) + 1,
-                    );
-                    /*
-                    if AVAILABLE_DESC
-                        .compare_exchange_weak(
-                            old_head,
-                            new_head,
-                            Ordering::Acquire,
-                            Ordering::Release,
-                        )
-                        .is_ok()
-                    {
-                        break;
-                    }
-
-                     */
-                    *avail = new_head;
-                    // }
-
-                    return ret as *mut Descriptor;
+                    count += 1;
                 }
+                //info!("Generated {} Descriptors", count);
+
+                let prev = &mut *(prev as *mut Descriptor) ;
+                prev.next_free
+                    .store(None, Ordering::Release);
+
+                // let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
+                let mut new_head: DescriptorNode = DescriptorNode::default();
+                // loop {
+                //prev.next_free.store(Some(old_head), Ordering::Release);
+                new_head.set(
+                    Some(&mut *(first as *mut Descriptor)),
+                    0,
+                );
+                /*
+                if AVAILABLE_DESC
+                    .compare_exchange_weak(
+                        old_head,
+                        new_head,
+                        Ordering::Acquire,
+                        Ordering::Release,
+                    )
+                    .is_ok()
+                {
+                    break;
+                }
+
+                 */
+                *avail = new_head;
+                // }
+
+                ret as *mut Descriptor
+            } else {
+                let mut new_head = desc.next_free.load(Ordering::Acquire);
+
+                match &mut new_head {
+                    None => {}
+                    Some(new_head) => {
+                        new_head.set(
+                            Some(new_head.get_desc()),
+                            old_head.get_counter(),
+                        );
+                    }
+                }
+
+                /*
+            if AVAILABLE_DESC
+                .compare_exchange_weak(
+                    old_head,
+                    new_head,
+                    Ordering::Acquire,
+                    Ordering::Release,
+                )
+                .is_ok()
+            {
+                return desc as *mut Descriptor;
             }
+             */
+                *avail = new_head.unwrap_or(DescriptorNode::new());
+                desc
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::mem::size_of;
+    use crate::allocation_data::SuperBlockState;
+
+    #[test]
+    fn descriptor_list_good() {
+        unsafe {
+            let ptr = page_alloc(DESCRIPTOR_BLOCK_SZ)
+                .expect("Creating a descriptor block failed");
+            let ret = ptr as *mut MaybeUninit<Descriptor>;
+            // organize list with the rest of the descriptors
+            // and add to available descriptors
+
+            let mut prev: *mut MaybeUninit<Descriptor> = null_mut();
+
+            let descriptor_size = std::mem::size_of::<Descriptor>() as isize;
+            let mut curr_ptr = ptr.offset(descriptor_size);
+            curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
+            let first = curr_ptr as *mut MaybeUninit<Descriptor>;
+            let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
+            let mut count = 0;
+            while (curr_ptr as usize + descriptor_size as usize) < max {
+                let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
+                unsafe { *curr = MaybeUninit::new(Descriptor::default()) }
+                if !prev.is_null() {
+                    let prev_init = &mut *(prev as *mut Descriptor);
+                    prev_init.next_free.store(
+                        Some(DescriptorNode::from(curr_ptr as *mut Descriptor)),
+                        Ordering::Release,
+                    );
+                }
+
+                prev = curr;
+                curr_ptr = curr_ptr.offset(descriptor_size);
+                curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
+                count += 1;
+            }
+            //info!("Generated {} Descriptors", count);
+
+            let prev = &mut *(prev as *mut Descriptor);
+            prev.next_free
+                .store(None, Ordering::Release);
+
+            // let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
+            let mut new_head: DescriptorNode = DescriptorNode::default();
+            // loop {
+            //prev.next_free.store(Some(old_head), Ordering::Release);
+            new_head.set(
+                Some(&mut *(first as *mut Descriptor)),
+                0,
+            );
+
+            assert!(prev.next_free.load(Ordering::Relaxed).is_none());
+
+            let mut curr: Option<*mut Descriptor> = Some(prev as *mut Descriptor);
+            let mut prev: Option<*mut Descriptor> = None;
+            loop {
+                if (*curr.unwrap()).next_free.load(Ordering::Acquire).is_some() {
+                    assert_eq!(
+                        (*curr.unwrap()).next_free.load(Ordering::Acquire).unwrap().desc,
+                        prev.unwrap(),
+                        "Descriptor at {:x?} has incorrect next free pointer",
+                        curr.unwrap());
+                }
+
+                let descriptor = curr.unwrap().read();
+                let anchor = descriptor.anchor.load(Ordering::Acquire);
+                assert_eq!(anchor.state(), SuperBlockState::FULL);
+                assert_eq!(anchor.avail(), 0);
+                assert_eq!(anchor.count(), 0);
+
+                prev = curr.clone();
+                curr = Some(curr.unwrap().offset(-1));
+                if curr.unwrap() == ret as *mut Descriptor {
+                    break;
+                }
+
+            }
+
+
+
+
+
         }
     }
 }

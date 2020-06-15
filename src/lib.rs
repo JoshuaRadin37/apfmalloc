@@ -105,7 +105,7 @@ pub unsafe fn init_malloc() {
                     .build(LevelFilter::Info)).unwrap();
 
             log4rs::init_config(config).unwrap();
-            info!("Initialized Log");
+            //info!("Initialized Log");
         }
         );
     });
@@ -118,7 +118,7 @@ pub unsafe fn init_malloc() {
 
     MALLOC_SKIP = true;
     MALLOC_FINISH_INIT.store(true, Ordering::Release);
-    info!("Malloc Initialized")
+    //info!("Malloc Initialized")
 }
 
 pub fn do_malloc(size: usize) -> *mut u8 {
@@ -135,7 +135,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
                 .build(LevelFilter::Info)).unwrap();
 
         log4rs::init_config(config).unwrap();
-        info!("Initialized Log");
+        //info!("Initialized Log");
     });
     /*
     unsafe {
@@ -200,7 +200,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
                 .build(LevelFilter::Info)).unwrap();
 
         log4rs::init_config(config).unwrap();
-        info!("Initialized Log");
+        //info!("Initialized Log");
     });
 
     if size > PAGE {
@@ -389,7 +389,7 @@ fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
                 .build(LevelFilter::Info)).unwrap();
 
         log4rs::init_config(config).unwrap();
-        info!("Initialized Log");
+        //info!("Initialized Log");
     });
 
     if size > PAGE {
