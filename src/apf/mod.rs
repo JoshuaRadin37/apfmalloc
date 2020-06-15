@@ -50,7 +50,6 @@ impl ApfTuner {
     }
 
     pub fn malloc(&mut self, ptr: *mut u8) -> bool {
-        println!("malloc to {}", self.id);
         // dbg!("malloc");
         self.time += 1;
 

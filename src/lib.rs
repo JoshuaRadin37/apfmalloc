@@ -264,6 +264,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
+            set_use_bootstrap(true);
+
             thread_cache::apf_init.with(|init| {
                 if !*init.borrow() {
                     thread_cache::init_tuners();
@@ -273,6 +275,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
                 });
                 assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                set_use_bootstrap(false);
             });
             assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
 
