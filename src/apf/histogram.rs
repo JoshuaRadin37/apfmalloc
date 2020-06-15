@@ -3,6 +3,7 @@ use std::collections::HashMap;
 /*
     Histogram class -- really just a Hashmap
 */
+#[derive(Debug)]
 pub struct Histogram {
     histogram: HashMap<usize, usize>,
 }

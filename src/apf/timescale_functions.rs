@@ -11,6 +11,7 @@ use crate::apf::trace::*;
     At each alloc or free operation, call alloc() and free() methods accordingly
     Update timestep with inc_timer()
 */
+#[derive(Debug)]
 pub struct LivenessCounter {
     n: usize,                     // Timer
     m: usize,                     // Number of objects
@@ -57,11 +58,8 @@ impl LivenessCounter {
 	// Evaluates liveness for windows of size k
 	pub fn liveness(&self, k: usize) -> f32 {
 		let i = self.n-k+1;
-		println!("{}, {}, {}, {}", self.m, self.free_counts.get(&i), i, self.free_sum.get(&i));
 		let tmp1 = (self.m-self.free_counts.get(&i)) * i + self.free_sum.get(&i);
-		println!("{}, {}, {}, {}", self.alloc_counts.get(&k), k, self.alloc_sum.get(&self.n), self.alloc_sum.get(&k));
 		let tmp2 = self.alloc_counts.get(&k) * k + self.alloc_sum.get(&self.n) - self.alloc_sum.get(&k);
-		println!("{}, {}", tmp1, tmp2);
 		((tmp1 - tmp2 + self.m * k) as f32) / i as f32
 	}
 }
@@ -73,6 +71,8 @@ impl LivenessCounter {
     inc_timer() works as described for liveness
     reuse(k) gets reuse for windows of length k
 */
+
+#[derive(Debug)]
 pub struct ReuseCounter {
     burst_length: usize,                // Length of bursts
     hibernation_period: usize,          // Length of hibernation

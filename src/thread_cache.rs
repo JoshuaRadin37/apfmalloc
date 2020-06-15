@@ -264,7 +264,6 @@ impl Drop for ThreadEmpty {
 // APF Functions
 
 pub fn init_tuners() {
-    dbg!("init");
     apf_tuners.with(|tuners| {
         for i in 0..MAX_SZ_IDX {
             (*tuners.borrow_mut()).push(ApfTuner::new(i, check, fetch, ret));

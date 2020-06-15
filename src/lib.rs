@@ -117,6 +117,7 @@ fn is_power_of_two(x: usize) -> bool {
 }
 
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
+
     if !is_power_of_two(align) {
         return null_mut();
     }
@@ -262,7 +263,9 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 thread_cache::apf_tuners.with(|tuners| {
                     (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
                 });
+                assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
             });
+            assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
 
             ptr
         });
@@ -449,10 +452,12 @@ pub fn do_free<T>(ptr: *const T) {
 
                 /* WARNING -- ELIAS CODE -- WARNING */
 
-                thread_cache::apf_tuners.with(|tuners| {
-                    dbg!(size_class_index);
-                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
-                });
+                // Should always be initialized at this point
+                if thread_cache::apf_init.with(|init| { *init.borrow() }) {
+                    thread_cache::apf_tuners.with(|tuners| {
+                        (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                    });
+                }
 
                 /* END ELIAS CODE */
 
