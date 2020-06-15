@@ -10,15 +10,16 @@ use atomic::{Atomic, Ordering};
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 
+
 #[repr(packed)]
 #[derive(Copy, Clone, Debug)]
 pub struct DescriptorNode {
-    desc: Option<*mut Descriptor>,
+    desc: *mut Descriptor,
 }
 
 impl Default for DescriptorNode {
     fn default() -> Self {
-        Self { desc: None }
+        Self { desc: null_mut() }
     }
 }
 
@@ -27,7 +28,7 @@ unsafe impl Sync for DescriptorNode {}
 
 impl DescriptorNode {
     pub const fn new() -> Self {
-        Self { desc: None }
+        Self { desc: null_mut()}
     }
 
     pub fn set(&mut self, desc: Option<&'static Descriptor>, count: u64) {
@@ -35,39 +36,28 @@ impl DescriptorNode {
             let usize_desc = desc.unwrap() as *const Descriptor as u64;
             assert_eq!(usize_desc & CACHE_LINE_MASK as u64, 0);
             let pointer = (usize_desc | (count & CACHE_LINE_MASK as u64)) as *mut Descriptor;
-            self.desc = Some(pointer);
+            self.desc = pointer;
         } else {
-            self.desc = desc.map(|d| d as *const _ as *mut Descriptor)
+            panic!("descriptor can not be None");
         }
     }
 
-    pub fn get_desc(&self) -> Option<&'static mut Descriptor> {
-        match self.desc {
-            None => None,
-            // This seems disgusting
-            Some(desc) => {
-                let usize_desc = desc as u64;
+    pub fn get_desc(&self) -> &'static mut Descriptor {
+                let usize_desc = self.descdesc as u64;
                 let fixed_ptr = usize_desc & !CACHE_LINE_MASK as u64;
-                unsafe { Some(&mut *(fixed_ptr as *mut Descriptor)) }
-            }
-        }
+                unsafe { &mut *(fixed_ptr as *mut Descriptor) }
     }
 
-    pub fn get_counter(&self) -> Option<u64> {
-        match self.desc {
-            None => None,
-            // This seems disgusting
-            Some(desc) => {
-                let usize_desc = desc as u64;
-                Some(usize_desc & CACHE_LINE_MASK as u64)
-            }
-        }
+    pub fn get_counter(&self) -> u64 {
+        let usize_desc = self.desc as u64;
+        usize_desc & CACHE_LINE_MASK as u64
+
     }
 }
 
 impl From<*mut Descriptor> for DescriptorNode {
     fn from(d: *mut Descriptor) -> Self {
-        Self { desc: Some(d) }
+        Self { desc: d }
     }
 }
 

@@ -49,7 +49,7 @@ impl ThreadCacheBin {
         if self.block_num > 0 {
             panic!("Attempting to push a block list while cache is not empty");
         } else {
-
+            info!("Pushing {} blocks to cache", length);
             self.block = block;
             self.block_num = length;
         }
@@ -107,14 +107,19 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
 
     let mut used_partial = true;
+    info!("Attempting to fill a cache");
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
         used_partial = false;
     }
     if block_num == 0 || cache.block_num == 0 {
+        error!("Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
+               used_partial,
+               block_num,
+               cache.block_num);
         panic!(
-            "Didn't allocate any blocks to the cache. USED PARTIAL: {}",
+            "Didn't allocate any blocks to the cache. USED PARTIAL={}",
             used_partial
         );
     }
@@ -122,15 +127,16 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     cache.block_size = Some(size_class_index);
 
     #[cfg(debug_assertions)]
-    {
-        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-        debug_assert!(block_num > 0);
-        debug_assert!(block_num <= sc.cache_block_num as usize);
-    }
+        {
+            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+            debug_assert!(block_num > 0);
+            debug_assert!(block_num <= sc.cache_block_num as usize);
+        }
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     // println!("Flushing Cache");
+    info!("Flushing size class {} cache...", size_class_index);
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
 
@@ -145,8 +151,8 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let mut tail = head;
         let info = get_page_info_for_ptr(head);
         let desc = unsafe { &mut *info.get_desc().expect("Could not find descriptor") };
-        // println!("Descriptor: {:?}", desc);
-        // println!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
+        // info!("Descriptor: {:?}", desc);
+        // info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
         let super_block = desc.super_block;
 
@@ -160,7 +166,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
             block_count += 1;
             tail = ptr;
         }
-
+        info!("Reclaiming {} blocks", block_count);
         cache.pop_list(unsafe { *(tail as *mut *mut u8) }, block_count);
 
         let index = compute_index(super_block, head, size_class_index);
@@ -185,9 +191,13 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
             }
 
             if old_anchor.count() + block_count as u64 == desc.max_count as u64 {
+                info!("Setting new anchor to EMPTY");
                 new_anchor.set_count(desc.max_count as u64 - 1);
                 new_anchor.set_state(SuperBlockState::EMPTY);
             } else {
+                if block_count == 0 {
+                    error!("Setting new anchor to have a block count of 0");
+                }
                 new_anchor.set_count(block_count as u64);
             }
 
@@ -204,6 +214,11 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
             unregister_desc(Some(heap), super_block);
             page_free(super_block);
         } else if old_anchor.state() == SuperBlockState::FULL {
+            info!("Pushing a partially used list to the heap (Size Class Index = {}, available = {}, count = {})",
+                  size_class_index,
+                  desc.anchor.load(Ordering::Acquire).avail(),
+                  desc.anchor.load(Ordering::Acquire).count()
+            );
             heap_push_partial(desc)
         }
     }
@@ -236,6 +251,7 @@ impl Drop for ThreadCache {
     fn drop(&mut self) {
         unsafe {
             //let thread_cache_bins  = &mut self.get_mut();
+            info!("Flushing a thread cache");
             for bin_index in 0..self.len() {
                 let bin = self.get_mut(bin_index).unwrap();
                 if let Some(sz_idx) = bin.block_size {
@@ -252,6 +268,7 @@ pub struct ThreadEmpty;
 impl Drop for ThreadEmpty {
 
     fn drop(&mut self) {
+        info!("Flushing entire thread cache");
         thread_cache.with(|tcache| {
             let tcache = unsafe { &mut *tcache.get() };
             for bin_index in 0..tcache.len() {

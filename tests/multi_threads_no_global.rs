@@ -45,7 +45,7 @@ fn test_multiple_threads() {
 #[test]
 fn multi_test_from_bench() {
     let size = 32;
-    for _ in 0..1000 {
+    for t in 0..10 {
         let mut vec = Vec::with_capacity(size);
         for _ in 0..size {
             vec.push(thread::spawn(move || {
@@ -53,7 +53,7 @@ fn multi_test_from_bench() {
             }));
         }
         for (i, join) in vec.into_iter().enumerate() {
-            let _ptr = join.join().expect(format!("thread {} panicked", i).as_str());
+            let _ptr = join.join().expect(format!("thread {} panicked", i + t * size).as_str());
         }
     };
 

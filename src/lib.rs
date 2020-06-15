@@ -122,7 +122,21 @@ pub unsafe fn init_malloc() {
 }
 
 pub fn do_malloc(size: usize) -> *mut u8 {
-    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
+    MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
+        let logfile = FileAppender::builder()
+            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}\n")))
+            .append(false)
+            .build("log/output.log").unwrap();
+
+        let config = Config::builder()
+            .appender(Appender::builder().build("logfile", Box::new(logfile)))
+            .build(Root::builder()
+                .appender("logfile")
+                .build(LevelFilter::Info)).unwrap();
+
+        log4rs::init_config(config).unwrap();
+        info!("Initialized Log");
+    });
     /*
     unsafe {
         if !MALLOC_SKIP {
@@ -175,7 +189,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
         let logfile = FileAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} {l}: {m}\n")))
+            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}\n")))
             .append(false)
             .build("log/output.log").unwrap();
 
@@ -362,7 +376,21 @@ fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
 
     let mut size = align_val(size, align);
 
-    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
+    MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
+        let logfile = FileAppender::builder()
+            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}\n")))
+            .append(false)
+            .build("log/output.log").unwrap();
+
+        let config = Config::builder()
+            .appender(Appender::builder().build("logfile", Box::new(logfile)))
+            .build(Root::builder()
+                .appender("logfile")
+                .build(LevelFilter::Info)).unwrap();
+
+        log4rs::init_config(config).unwrap();
+        info!("Initialized Log");
+    });
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
