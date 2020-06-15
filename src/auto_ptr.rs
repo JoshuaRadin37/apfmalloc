@@ -2,8 +2,9 @@ use crate::{do_aligned_alloc, do_free};
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::ptr::drop_in_place;
 
-pub struct AutoPtr<T> {
+pub struct AutoPtr<T : ?Sized> {
     data: *mut T,
 }
 
@@ -21,17 +22,31 @@ impl<T> AutoPtr<T> {
     }
 
     pub fn take(self) -> T
-    where
-        T: Copy,
     {
         unsafe {
-            let Self { data } = self;
-            let output = *data;
-            do_free(data);
+            let Self { data } = &self;
+            let output = std::ptr::read(*data);
+            //do_free(data);
             output
         }
     }
+
+    /// Converts the AutoPtr into a normal pointer, and removes the ability to auto deallocate the pointer
+    pub fn into_ptr(self) -> * mut T {
+        let AutoPtr { data } = self;
+        data
+    }
+
+    /// Replaces the data stored in the pointer, and returns the old data
+    pub fn replace(&mut self, new: T) -> T {
+        unsafe {
+            let ptr = self.data;
+            ptr.replace(new)
+        }
+    }
 }
+
+
 
 impl<T> Deref for AutoPtr<T> {
     type Target = T;
@@ -47,10 +62,29 @@ impl<T> DerefMut for AutoPtr<T> {
     }
 }
 
-impl<T> Drop for AutoPtr<T> {
+impl<T : ?Sized> Drop for AutoPtr<T> {
     fn drop(&mut self) {
+        unsafe {
+            // drop_in_place::<T>(self.data);
+        }
         do_free(self.data);
     }
 }
 
-unsafe impl<T: Send> Send for AutoPtr<T> {}
+unsafe impl <T: Send> Send for AutoPtr<T> {}
+unsafe impl <T: Sync> Sync for AutoPtr<T> {}
+
+#[cfg(test)]
+mod test {
+    use crate::auto_ptr::AutoPtr;
+    use std::fmt::{Display, Debug};
+
+    #[test]
+    fn normal_ptr() {
+        let mut auto_ptr = AutoPtr::new(Some(0xdeadbeafusize));
+        assert_eq!(*auto_ptr, Some(0xdeadbeafusize));
+        *auto_ptr = None;
+        assert_eq!(*auto_ptr, None);
+    }
+
+}

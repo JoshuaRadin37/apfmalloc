@@ -248,7 +248,7 @@ pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: *mut u8) {
     update_page_map(heap, super_block, None, 0)
 }
 
-pub fn get_page_info_for_ptr<T>(ptr: *const T) -> PageInfo {
+pub fn get_page_info_for_ptr<T : ?Sized>(ptr: *const T) -> PageInfo {
     unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
 }
 

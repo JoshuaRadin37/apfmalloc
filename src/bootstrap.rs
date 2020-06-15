@@ -71,11 +71,11 @@ impl BootstrapReserve {
         ret
     }
 
-    pub fn ptr_in_bootstrap<T>(&self, ptr: *const T) -> bool {
+    pub fn ptr_in_bootstrap<T : ?Sized>(&self, ptr: *const T) -> bool {
         if let Some(segment) = &self.mem {
             let start = segment.get_ptr() as usize;
             let end = start + self.max;
-            ptr as usize >= start && (ptr as usize) < end
+            ptr as * const u8 as usize >= start && (ptr as * const u8 as usize) < end
         } else {
             panic!("No bootstrap memory");
         }
@@ -87,5 +87,5 @@ const KB: usize = 1028;
 #[allow(unused)]
 const MB: usize = 1028 * KB;
 
-pub static mut boostrap_reserve: Mutex<BootstrapReserve> =
+pub static mut bootstrap_reserve: Mutex<BootstrapReserve> =
     Mutex::new(BootstrapReserve::new(128 * KB));

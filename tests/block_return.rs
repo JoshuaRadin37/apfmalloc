@@ -1,7 +1,7 @@
 use lrmalloc_rs::allocation_data::get_heaps;
 use std::sync::atomic::Ordering;
 use std::thread;
-use lrmalloc_rs::{do_malloc, do_free};
+use lrmalloc_rs::{do_malloc, do_free, dump_info};
 use std::fmt::Display;
 
 #[test]
@@ -20,6 +20,5 @@ fn threads_return_extra_to_heap() {
         &* do_malloc(8)
     };
     assert_eq!(new_ptr as * const u8, ptr as * const u8);
-
-
+    dump_info!();
 }
