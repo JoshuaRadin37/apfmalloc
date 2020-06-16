@@ -1,5 +1,3 @@
-
-
 #[macro_export]
 macro_rules! size_class_bin_yes {
     ($block:expr, $pages:expr) => {
@@ -12,7 +10,6 @@ macro_rules! size_class_bin_yes {
     };
 }
 
-
 #[macro_export]
 macro_rules! sc {
     ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, $psz:expr, yes, $pgs:expr, $lg_delta_lookup:expr) => {
@@ -20,4 +17,27 @@ macro_rules! sc {
     };
 }
 
+#[macro_export]
+macro_rules! min_align {
+    () => {
+        std::mem::sizeof::<*const ()>
+    };
+}
 
+/*
+macro_rules! align_val {
+    ($val:expr, $align:expr) => {
+        unsafe {
+            let align = std::mem::align_of_val($expr);
+
+        }
+    };
+}
+ */
+
+macro_rules! page_ceiling {
+    ($s:expr) => {{
+        let page = $crate::mem_info::PAGE;
+        ($s + page - 1) & !(page - 1)
+    }};
+}

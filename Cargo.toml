@@ -1,11 +1,49 @@
 [package]
-name = "lralloc-rs"
+name = "lrmalloc-rs"
 version = "0.1.0"
 authors = ["Joshua Radin <jradin16@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+track_allocation = []
+show_all_allocations = []
+
+[workspace]
+members = [
+    "lrmalloc-rs-global"
+]
+
 [dependencies]
-memmap = "0.7.0"
 bitfield = "0.13.2"
+lazy_static = "1.4.0"
+crossbeam = "0.7.3"
+memmap = "0.7.0"
+libc = "0.2.71"
+atomic = "0.4.5"
+spin = "0.5.2"
+thread_local = "1.0.1"
+log = "0.4.8"
+log4rs = "0.12.0"
+
+
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "winnt", "winerror", "memoryapi"] }
+
+[dev-dependencies]
+criterion = "0.3"
+[[bench]]
+name = "allocating_bench"
+harness = false
+
+# [[bench]]
+# name = "function_benches"
+# harness = false
+
+
+[[bench]]
+name = "multiple_threads"
+harness = false
