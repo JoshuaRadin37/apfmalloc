@@ -83,29 +83,6 @@ pub unsafe fn init_malloc() {
     }
 
 
-/*
-    LOG_INIT.with(|| {
-        thread::spawn(|| {
-            let logfile = FileAppender::builder()
-                .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} {l}: {m}\n")))
-                .append(false)
-                .build("log/output.log").unwrap();
-
-            let config = Config::builder()
-                .appender(Appender::builder().build("logfile", Box::new(logfile)))
-                .build(Root::builder()
-                    .appender("logfile")
-                    .build(LevelFilter::Info)).unwrap();
-
-            log4rs::init_config(config).unwrap();
-            //info!("Initialized Log");
-        }
-        );
-    });
-
- */
-
-
 
     bootstrap_reserve.lock().init();
 
