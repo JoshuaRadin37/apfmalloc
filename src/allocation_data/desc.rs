@@ -42,10 +42,15 @@ impl DescriptorNode {
         }
     }
 
-    pub fn get_desc(&self) -> &'static mut Descriptor {
+    pub fn get_desc(&self) -> Option<&'static mut Descriptor> {
         let usize_desc = self.desc as u64;
         let fixed_ptr = usize_desc & !CACHE_LINE_MASK as u64;
-        unsafe { &mut *(fixed_ptr as *mut Descriptor) }
+        if (fixed_ptr as *const Descriptor).is_null()  {
+            None
+        } else {
+            Some(unsafe { &mut *(fixed_ptr as *mut Descriptor) })
+        }
+
     }
 
     pub fn get_counter(&self) -> u64 {
@@ -132,7 +137,7 @@ impl Descriptor {
         let old_head = *avail; //AVAILABLE_DESC.load(Ordering::Acquire);
         loop {
             let desc = old_head.get_desc();
-            return if desc as *mut Descriptor == null_mut() {
+            return if let None = desc {
                 let ptr = page_alloc(DESCRIPTOR_BLOCK_SZ)
                     .expect("Creating a descriptor block failed");
                 let ret = ptr as *mut MaybeUninit<Descriptor>;
@@ -196,13 +201,14 @@ impl Descriptor {
 
                 ret as *mut Descriptor
             } else {
+                let desc = desc.unwrap();
                 let mut new_head = desc.next_free.load(Ordering::Acquire);
 
                 match &mut new_head {
                     None => {}
                     Some(new_head) => {
                         new_head.set(
-                            Some(new_head.get_desc()),
+                            Some(new_head.get_desc().unwrap()),
                             old_head.get_counter(),
                         );
                     }

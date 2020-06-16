@@ -20,7 +20,7 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
         if old_head.is_none() {
             return None;
         }
-        let old_desc = old_head.unwrap().get_desc();
+        let old_desc = old_head.unwrap().get_desc().unwrap();
         // Lets assume this descriptor exists
 
         let mut new_head: Option<DescriptorNode> = old_desc.next_partial.load(Ordering::Acquire);
@@ -31,7 +31,7 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
                 }
             },
             Some(descriptor_node) => {
-                let desc = descriptor_node.get_desc();
+                let desc = descriptor_node.get_desc().unwrap();
                 let counter = descriptor_node.get_counter();
                 if let Some(mut new_head_desc) = &mut new_head {
                     new_head_desc.set(Some(desc), counter);
@@ -123,8 +123,6 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
 
              */
             break;
-        } else {
-            warn!("Failed to push new head, repeating...")
         }
     }
 }
@@ -181,8 +179,6 @@ pub fn malloc_from_partial(
                 {
 
                     break;
-                } else {
-                    warn!("Failed to replace old anchor, reattempting...")
                 }
             }
 

@@ -16,6 +16,9 @@ members = [
     "lrmalloc-rs-global"
 ]
 
+[profile.test]
+opt-level = 0
+
 [dependencies]
 bitfield = "0.13.2"
 lazy_static = "1.4.0"
@@ -25,8 +28,7 @@ libc = "0.2.71"
 atomic = "0.4.5"
 spin = "0.5.2"
 thread_local = "1.0.1"
-log = "0.4.8"
-log4rs = "0.12.0"
+
 
 
 

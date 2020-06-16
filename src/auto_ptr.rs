@@ -3,9 +3,11 @@ use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::drop_in_place;
+use std::fmt::Debug;
+use std::fmt::Formatter;
 
 /// Similar to Box, but directly calls the do_aligned_alloc and free for dropping
-pub struct AutoPtr<T : ?Sized> {
+pub struct AutoPtr<T> {
     data: *mut T,
 }
 
@@ -28,8 +30,10 @@ impl<T> AutoPtr<T> {
     {
         unsafe {
             let Self { data } = &self;
-            let output = std::ptr::read(*data);
-            //do_free(data);
+            let deref = *data;
+            let output = std::ptr::read(deref);
+            do_free(*data);
+            std::mem::forget(self);
             output
         }
     }
@@ -87,10 +91,10 @@ impl<T> DerefMut for AutoPtr<T> {
     }
 }
 
-impl<T : ?Sized> Drop for AutoPtr<T> {
+impl<T> Drop for AutoPtr<T> {
     fn drop(&mut self) {
         unsafe {
-            // drop_in_place::<T>(self.data);
+            drop_in_place(self.data);
         }
         do_free(self.data);
     }
@@ -98,6 +102,13 @@ impl<T : ?Sized> Drop for AutoPtr<T> {
 
 unsafe impl <T: Send> Send for AutoPtr<T> {}
 unsafe impl <T: Sync> Sync for AutoPtr<T> {}
+
+impl <T : Debug> Debug for AutoPtr<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        (*self).fmt(f)
+    }
+}
+
 
 #[cfg(test)]
 mod test {
@@ -120,6 +131,83 @@ mod test {
         let gotten_val = auto_ptr.take();
         assert_eq!(gotten_val, val);
         // note: compilation fails if try to use the auto_ptr again
+    }
+
+    #[test]
+    fn take_de_allocates() {
+        let _unused1 = AutoPtr::new(0usize); // used to ensure that the cache bin doesn't empty
+        let ptr = AutoPtr::new(0usize);
+        let location = ptr.data;
+        let _ = ptr.take();
+        let new_ptr = AutoPtr::new(0usize);
+        let new_location = new_ptr.data;
+        assert_eq!(new_location, location);
+    }
+
+    #[test]
+    fn tree_properly_de_allocates() {
+        struct Tree(AutoPtr<usize>, AutoPtr<usize>);
+
+        let _unused1 = AutoPtr::new(0usize); // used to ensure that the cache bin doesn't empty
+
+
+        let (loc1, loc2) = {
+            let tree = Tree(AutoPtr::new(0), AutoPtr::new(0));
+            (tree.0.data, tree.1.data)
+        };
+
+        let tree = Tree(AutoPtr::new(0), AutoPtr::new(0));
+        assert!(tree.0.data == loc1 || tree.1.data == loc1);
+        assert!(tree.0.data == loc2 || tree.1.data == loc2);
+
+    }
+
+    #[test]
+    fn nested_auto_ptr_de_allocates() {
+        let _unused1 = AutoPtr::new(0usize); // used to ensure that the cache bin doesn't empty
+
+        let loc = {
+            let dptr = AutoPtr::new(AutoPtr::new(0usize));
+            (*dptr).data
+        };
+
+        let _unused = AutoPtr::new(0usize);
+        let new_managed = AutoPtr::new(0usize);
+        assert_eq!(new_managed.data, loc, "Should be in the same place, as the nested pointer should have been de-allocated as well");
+    }
+
+    #[test]
+    fn recursive_struct_test_ptr_de_allocates() {
+        let _unused1 = AutoPtr::new(Some(AutoPtr::new(0usize)));
+
+        enum Value {
+            Ptr(AutoPtr<Test>),
+            Val(usize)
+        }
+        use Value::*;
+        struct Test(Value);
+
+        impl Test {
+            fn take(self) -> usize {
+                match self.0  {
+                    Ptr(ptr) => {
+                        let t = ptr.take();
+                        t.take()
+                    },
+                    Val(v) => {
+                        v
+                    },
+                }
+            }
+        }
+
+        let val = {
+            let t = Test(Ptr(AutoPtr::new(Test(Val(3799)))));
+            t.take()
+        };
+
+        assert_eq!(val, 3799);
+
     }
 
     #[test]

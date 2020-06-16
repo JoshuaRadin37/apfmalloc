@@ -200,9 +200,6 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
                 new_anchor.set_count(desc.max_count as u64 - 1);
                 new_anchor.set_state(SuperBlockState::EMPTY);
             } else {
-                if block_count == 0 {
-                    error!("Setting new anchor to have a block count of 0");
-                }
                 new_anchor.set_count(block_count as u64);
             }
 

@@ -22,13 +22,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::thread;
 use std::thread::ThreadId;
 use crate::single_access::SingleAccess;
-use log4rs::append::file::FileAppender;
-use log4rs::encode::pattern::PatternEncoder;
-use log4rs::config::{Config, Appender, Root};
-use log::LevelFilter;
 
-#[macro_use]
-extern crate log;
 
 
 #[macro_export]
@@ -74,7 +68,6 @@ pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
-static LOG_INIT: SingleAccess = SingleAccess::new();
 
 
 pub unsafe fn init_malloc() {
@@ -128,21 +121,7 @@ pub fn allocate_type<T>() -> *mut T {
 }
 
 pub fn do_malloc(size: usize) -> *mut u8 {
-    MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
-        let logfile = FileAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}\n")))
-            .append(false)
-            .build("log/output.log").unwrap();
-
-        let config = Config::builder()
-            .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder()
-                .appender("logfile")
-                .build(LevelFilter::Info)).unwrap();
-
-        log4rs::init_config(config).unwrap();
-        //info!("Initialized Log");
-    });
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
     /*
     unsafe {
         if !MALLOC_SKIP {
@@ -193,21 +172,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let mut size = align_val(size, align);
 
-    MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
-        let logfile = FileAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}\n")))
-            .append(false)
-            .build("log/output.log").unwrap();
-
-        let config = Config::builder()
-            .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder()
-                .appender("logfile")
-                .build(LevelFilter::Info)).unwrap();
-
-        log4rs::init_config(config).unwrap();
-        //info!("Initialized Log");
-    });
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -372,78 +337,6 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
     let desc = unsafe { &*info.get_desc().ok_or(())? };
 
     Ok(desc.block_size)
-}
-
-#[allow(unused)]
-fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
-    if !is_power_of_two(align) {
-        return null_mut();
-    }
-
-    let mut size = align_val(size, align);
-
-    MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
-        let logfile = FileAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}\n")))
-            .append(false)
-            .build("log/output.log").unwrap();
-
-        let config = Config::builder()
-            .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder()
-                .appender("logfile")
-                .build(LevelFilter::Info)).unwrap();
-
-        log4rs::init_config(config).unwrap();
-        //info!("Initialized Log");
-    });
-
-    if size > PAGE {
-        size = size.max(MAX_SZ + 1);
-
-        let need_more_pages = align > PAGE;
-        if need_more_pages {
-            size += align;
-        }
-
-        let pages = page_ceiling!(size);
-
-        let desc = unsafe { &mut *Descriptor::alloc() };
-
-        let mut ptr = page_alloc(pages).expect("Error getting pages for aligned allocation");
-
-        desc.proc_heap = null_mut();
-        desc.block_size = pages as u32;
-        desc.max_count = 1;
-        desc.super_block = page_alloc(pages).expect("Should create");
-
-        let mut anchor = Anchor::default();
-        anchor.set_state(SuperBlockState::FULL);
-
-        desc.anchor.store(anchor, Ordering::Release);
-
-        register_desc(desc);
-
-        if need_more_pages {
-            ptr = align_addr(ptr as usize, align) as *mut u8;
-
-            update_page_map(None, ptr, Some(desc), 0);
-        }
-
-        return ptr;
-    }
-
-    let size_class_index = get_size_class(size);
-
-    unsafe {
-        let mut bootstrap_cache_guard = bootstrap_cache.lock();
-        let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
-        if cache.get_block_num() == 0 {
-            fill_cache(size_class_index, cache);
-        }
-
-        cache.pop_block()
-    }
 }
 
 pub fn do_free<T : ?Sized>(ptr: *const T) {
@@ -707,9 +600,11 @@ mod tests {
                     FibTree::Sum(l, r) => {
                         let l = l.take();
                         let r = r.take();
-                        let l_t = thread::spawn( || l.into_val());
-                        let r_t = thread::spawn(|| r.into_val());
-                        l_t.join().unwrap() + r_t.join().unwrap()
+                        let l_t = thread::spawn( move || {
+                            l.into_val()
+                        }).join().unwrap();
+                        let r_t = thread::spawn(move || r.into_val()).join().unwrap();
+                        l_t + r_t
                     },
                 }
             }
@@ -724,7 +619,9 @@ mod tests {
                     FibTree::Val(1)
                 },
                 n => {
-                    FibTree::Sum(AutoPtr::new(fib(n-1)), AutoPtr::new(fib(n-2)))
+                    FibTree::Sum(
+                        AutoPtr::new(fib(n-1)),
+                        AutoPtr::new(fib(n-2)))
                 }
             }
         }
