@@ -524,6 +524,7 @@ mod test {
     use crate::mem_info::PAGE;
     use crate::pages::{page_alloc, INITIAL_PAGES, PAGE_HOLDER};
     use crate::size_classes::{SizeClassData, SIZE_CLASSES};
+    use crate::{MALLOC_INIT_S, init_malloc};
 
     #[test]
     fn get_page() {
@@ -545,9 +546,7 @@ mod test {
 
     #[test]
     fn mass_allocate() {
-        unsafe {
-            crate::init_malloc();
-        }
+        MALLOC_INIT_S.with(|| unsafe { init_malloc() });
         let sc: &mut SizeClassData = unsafe { &mut SIZE_CLASSES[1] };
         let size = sc.sb_size;
 
