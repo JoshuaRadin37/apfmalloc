@@ -82,7 +82,6 @@ impl ApfTuner {
     // Ret function returns number of slots to central reserve
     // Returns true if demand can be calculated (reuse counter has completed a burst), false if not
     pub fn free(&mut self, ptr: *mut u8) -> bool {
-        println!("free from {}", self.id);
         // dbg!("free");
         self.r_counter.free(ptr as usize);
         if !USE_ALLOCATION_CLOCK { 
