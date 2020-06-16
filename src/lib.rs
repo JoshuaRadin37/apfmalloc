@@ -121,6 +121,12 @@ pub unsafe fn init_malloc() {
     //info!("Malloc Initialized")
 }
 
+pub fn allocate_type<T>() -> *mut T {
+    let size = std::mem::size_of::<T>();
+    let align = std::mem::align_of::<T>();
+    do_aligned_alloc(align, size) as *mut T
+}
+
 pub fn do_malloc(size: usize) -> *mut u8 {
     MALLOC_INIT_S.with_then(|| unsafe { init_malloc() }, || {
         let logfile = FileAppender::builder()

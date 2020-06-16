@@ -13,69 +13,7 @@ use crate::pages::page_alloc;
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
 
     let list = &heap.partial_list;
-    /*
-    let mut ptr =
 
-        if let Some(list) = list.load(Ordering::Acquire) {
-            Some(list)
-        } else {
-            None
-        };
-    if ptr.is_none() {
-        return None;
-    }
-    loop {
-
-        //info!("Popping from partial heap");
-        let old_head = ptr.unwrap();
-        let mut new_head: Option<DescriptorNode>;
-
-        let old_desc = old_head.get_desc();
-        //info!("Old head desc anchor = {:?}", old_desc.anchor.load(Ordering::Acquire));
-        new_head = old_desc.next_partial.load(Ordering::Acquire);
-        new_head = if let Some(mut new_head) = new_head {
-            if new_head.get_desc() as *mut Descriptor != null_mut() {
-                let desc = old_head.get_desc();
-                let counter = old_head.get_counter();
-                new_head.set(Some(desc), counter);
-                Some(new_head)
-            } else {
-                None
-            }
-        } else {
-            new_head
-        };
-        //info!("New head desc anchor  = {:?}", new_head.get_desc().anchor.load(Ordering::Acquire));
-        if list
-            .compare_exchange_weak(ptr, new_head, Ordering::Acquire, Ordering::Release)
-            .is_ok()
-        {
-
-            if match &heap.partial_list.load(Ordering::Acquire){
-                None => {
-                    //info!("Heap partial list anchor updated to none");
-                    true
-                },
-                Some(node) => {
-                    /*info!("Heap partial list anchor updated to {:?}", &heap.partial_list
-                        .load(Ordering::Acquire)
-                        .unwrap()
-                        .get_desc()
-                        .anchor.load(Ordering::Acquire));
-
-                     */
-                    true
-                    //node.get_desc().anchor.load(Ordering::Acquire).state() == SuperBlockState::PARTIAL
-                },
-            } {
-                return Some(old_head.get_desc());
-            } else {
-                // error!("Heap partial contained non partial descriptor")
-            }
-        }
-    }
-
-     */
 
     loop {
         let old_head = list.load(Ordering::Acquire);
@@ -136,15 +74,14 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
 
      */
 
-    let old_head = list.load(Ordering::Acquire);
-    if old_head.is_none() {
-        // info!("Pushing to empty Proc Heap")
-    }
+
+
 
     // let old_head = list.load(Ordering::Acquire).unwrap();
     let mut new_head = DescriptorNode::default();
 
     loop {
+        let old_head = list.load(Ordering::Acquire);
         /*
         new_head.set(
             Some(desc),

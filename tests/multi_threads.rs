@@ -26,6 +26,12 @@ unsafe impl GlobalAlloc for Dummy {
 }
 
 #[test]
+fn combo() {
+    multi_test_from_bench();
+    test_multiple_threads();
+}
+
+#[test]
 fn test_multiple_threads() {
     let mut vec = vec![];
     let boxes = Arc::new(Mutex::new(Vec::new()));
