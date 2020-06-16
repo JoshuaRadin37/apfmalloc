@@ -76,11 +76,12 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     }
 
      */
-    let old_head = list.load(Ordering::Acquire);
-    if old_head.is_none() {
-        return None;
-    }
+
     loop {
+        let old_head = list.load(Ordering::Acquire);
+        if old_head.is_none() {
+            return None;
+        }
         let old_desc = old_head.unwrap().get_desc();
         // Lets assume this descriptor exists
 
