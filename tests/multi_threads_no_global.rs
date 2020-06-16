@@ -44,7 +44,7 @@ fn test_multiple_threads() {
 
 #[test]
 fn multi_test_from_bench_no_global() {
-    let size = 32;
+    let size = 1;
     for t in 0..10 {
         let mut vec = Vec::with_capacity(size);
         for _ in 0..size {

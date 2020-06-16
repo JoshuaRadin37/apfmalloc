@@ -13,6 +13,7 @@ use crate::pages::page_alloc;
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
 
     let list = &heap.partial_list;
+    /*
     let mut ptr =
 
         if let Some(list) = list.load(Ordering::Acquire) {
@@ -27,21 +28,26 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
 
         //info!("Popping from partial heap");
         let old_head = ptr.unwrap();
-        let mut new_head: DescriptorNode;
+        let mut new_head: Option<DescriptorNode>;
 
         let old_desc = old_head.get_desc();
         //info!("Old head desc anchor = {:?}", old_desc.anchor.load(Ordering::Acquire));
-        new_head = old_desc.next_partial.load(Ordering::Acquire).unwrap();
-        if new_head.get_desc() as *mut Descriptor != null_mut() {
-            let desc = old_head.get_desc();
-            let counter = old_head.get_counter();
-            new_head.set(Some(desc), counter);
+        new_head = old_desc.next_partial.load(Ordering::Acquire);
+        new_head = if let Some(mut new_head) = new_head {
+            if new_head.get_desc() as *mut Descriptor != null_mut() {
+                let desc = old_head.get_desc();
+                let counter = old_head.get_counter();
+                new_head.set(Some(desc), counter);
+                Some(new_head)
+            } else {
+                None
+            }
         } else {
-            new_head.set(None, 0);
-        }
+            new_head
+        };
         //info!("New head desc anchor  = {:?}", new_head.get_desc().anchor.load(Ordering::Acquire));
         if list
-            .compare_exchange_weak(ptr, Some(new_head), Ordering::Acquire, Ordering::Release)
+            .compare_exchange_weak(ptr, new_head, Ordering::Acquire, Ordering::Release)
             .is_ok()
         {
 
@@ -68,6 +74,40 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
             }
         }
     }
+
+     */
+    let old_head = list.load(Ordering::Acquire);
+    if old_head.is_none() {
+        return None;
+    }
+    loop {
+        let old_desc = old_head.unwrap().get_desc();
+        // Lets assume this descriptor exists
+
+        let mut new_head: Option<DescriptorNode> = old_desc.next_partial.load(Ordering::Acquire);
+        match &mut new_head {
+            None => {
+                if let Some(mut new_head_desc) = &mut new_head {
+                    new_head_desc.set(None, 0);
+                }
+            },
+            Some(descriptor_node) => {
+                let desc = descriptor_node.get_desc();
+                let counter = descriptor_node.get_counter();
+                if let Some(mut new_head_desc) = &mut new_head {
+                    new_head_desc.set(Some(desc), counter);
+                }
+            },
+        }
+
+        match list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
+            Ok(_) => {
+                return Some(old_desc);
+            },
+            Err(_) => {},
+        }
+    }
+
 
 
 }
@@ -97,7 +137,7 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
 
     let old_head = list.load(Ordering::Acquire);
     if old_head.is_none() {
-        //info!("Pushing to empty Proc Heap")
+        // info!("Pushing to empty Proc Heap")
     }
 
     // let old_head = list.load(Ordering::Acquire).unwrap();

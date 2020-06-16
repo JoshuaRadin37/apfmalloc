@@ -114,13 +114,18 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         used_partial = false;
     }
     if block_num == 0 || cache.block_num == 0 {
+        /*
         error!("Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
                used_partial,
                block_num,
                cache.block_num);
+
+         */
         panic!(
-            "Didn't allocate any blocks to the cache. USED PARTIAL={}",
-            used_partial
+            "Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
+               used_partial,
+               block_num,
+               cache.block_num
         );
     }
 
@@ -275,8 +280,10 @@ impl Drop for ThreadEmpty {
             let tcache = unsafe { &mut *tcache.get() };
             for bin_index in 0..tcache.len() {
                 let cache = tcache.get_mut(bin_index).unwrap();
-                if let Some(size_class_index) = cache.block_size {
-                    flush_cache(size_class_index, cache);
+                if cache.block_num > 0 {
+                    if let Some(size_class_index) = cache.block_size {
+                        flush_cache(size_class_index, cache);
+                    }
                 }
             }
         });
