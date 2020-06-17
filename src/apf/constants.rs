@@ -1,3 +1,4 @@
+pub const INIT_TRACE_LENGTH: usize = 1<<32;
 pub const REUSE_BURST_LENGTH: usize = 9;
 pub const REUSE_HIBERNATION_PERIOD: usize = 20;
 pub const USE_ALLOCATION_CLOCK: bool = true;

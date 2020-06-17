@@ -73,16 +73,16 @@ impl LivenessCounter {
 */
 
 #[derive(Debug)]
-pub struct ReuseCounter {
+pub struct ReuseCounter<'a> {
     burst_length: usize,                // Length of bursts
     hibernation_period: usize,          // Length of hibernation
     n: usize,                           // Current time counter
-    trace: Option<Trace>,               // Optional current trace -- none if hibernating
+    trace: Option<Trace<'a>>,               // Optional current trace -- none if hibernating
     reuse: Option<HashMap<usize, f32>>, // Last calculated reuse -- none if not initialized (?)
 }
 
-impl ReuseCounter {
-    pub fn new(bl: usize, hp: usize) -> ReuseCounter {
+impl ReuseCounter<'_> {
+    pub fn new<'a>(bl: usize, hp: usize) -> ReuseCounter<'a> {
         ReuseCounter {
             burst_length: bl,
             hibernation_period: hp,

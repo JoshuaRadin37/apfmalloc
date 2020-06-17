@@ -310,7 +310,8 @@ thread_local! {
     #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 
-    pub static apf_tuners: RefCell<Vec<ApfTuner>> = RefCell::new(Vec::<ApfTuner>::new());
+    // Probably don't want a static lifetime here
+    pub static apf_tuners: RefCell<Vec<ApfTuner<'static>>> = RefCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
 

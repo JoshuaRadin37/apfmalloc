@@ -15,11 +15,11 @@ mod trace;
     * Call malloc() and free() whenever those operations are performed
 */
 #[derive(Debug)]
-pub struct ApfTuner {
+pub struct ApfTuner<'a> {
     id: usize,
     l_counter: LivenessCounter,
-    r_counter: ReuseCounter,
-    trace: Trace,
+    r_counter: ReuseCounter<'a>,
+    trace: Trace<'a>,
     time: usize,
     fetch_count: usize,
     dapf: usize,
@@ -28,8 +28,8 @@ pub struct ApfTuner {
     ret: fn(usize, u32) -> bool
 }
 
-impl ApfTuner {
-    pub fn new(id: usize, check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner {
+impl ApfTuner<'_> {
+    pub fn new<'a>(id: usize, check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner<'a> {
         let tuner = ApfTuner {
             id: id,
             l_counter: LivenessCounter::new(),

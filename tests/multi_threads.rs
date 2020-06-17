@@ -14,7 +14,7 @@ static ALLOCATOR: Dummy = Dummy;
 unsafe impl GlobalAlloc for Dummy {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // do_malloc(layout.size())
-        let output = do_aligned_alloc(layout.align(), layout.size(), true);
+        let output = do_aligned_alloc(layout.align(), layout.size());
         output
     }
 

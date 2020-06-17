@@ -1,4 +1,7 @@
-use crate::apf::constants::REUSE_BURST_LENGTH;
+use crate::pages::page_alloc_over_commit;
+use crate::apf::constants::INIT_TRACE_LENGTH;
+use atomic::Atomic;
+use std::slice::from_raw_parts_mut;
 use std::collections::HashMap;
 use std::fmt;
 use std::vec::Vec;
@@ -24,9 +27,11 @@ impl fmt::Debug for Event {
 
 use crate::apf::trace::Event::*;
 
+// Need trace implementation that doesn't call alloc
 #[derive(Debug)]
-pub struct Trace {
-    accesses: Vec<Event>,
+pub struct Trace<'a> {
+    ptr: Option<*mut u8>,
+    accesses: &'a mut [Event],
     length: usize,
     alloc_count: usize,
 }
@@ -35,13 +40,31 @@ pub struct Trace {
     Memory trace
     Simple wrapper for vector of events
 */
-impl Trace {
-    pub fn new() -> Trace {
-        Trace {
-            accesses: Vec::<Event>::new(),
-            length: 0,
-            alloc_count: 0,
+impl<'a> Trace<'a> {
+    pub fn new() -> Trace<'a> {
+        let page = page_alloc_over_commit(INIT_TRACE_LENGTH);
+        match page {
+            Ok(page) => {
+                let ptr = page as *mut Event;
+                let accesses = unsafe {
+                    from_raw_parts_mut(
+                        ptr,
+                        INIT_TRACE_LENGTH // Size?
+                    )
+                };
+
+                Trace {
+                    ptr: Some(page),
+                    accesses: accesses,
+                    length: 0,
+                    alloc_count: 0,
+                }
+            }
+            Err(e) => panic!("Error initializing trace: {:?}", e)
+
         }
+
+       
     }
 
     pub fn length(&self) -> usize {
@@ -53,7 +76,7 @@ impl Trace {
     }
 
     pub fn add(&mut self, add: Event) -> () {
-        self.accesses.push(add);
+        self.accesses[self.length] = add;
         self.length += 1;
         match add {
             Alloc(_) => {
@@ -61,14 +84,17 @@ impl Trace {
             }
             Free(_) => {}
         };
+
+        if self.length >= INIT_TRACE_LENGTH {
+            panic!("ERROR: Exceeded trace length");
+        }
     }
 
+    // For testing only, I hope
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
-        self.length += vec.len();
-        self.accesses.append(&mut vec.clone());
-
         for i in 0..vec.len() {
-            
+            self.accesses[self.length] = vec[i];
+            self.length += 1;
             match vec[i] {
                 Alloc(_) => {
                     self.alloc_count += 1;
@@ -76,6 +102,8 @@ impl Trace {
                 Free(_) => {}
             };
         }
+
+        self.length += vec.len();
     }
 
     pub fn get(&self, index: usize) -> Event {
