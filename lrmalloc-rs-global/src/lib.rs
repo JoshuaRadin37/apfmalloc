@@ -28,7 +28,7 @@ pub static mut OVERRIDE_ALIGNED_ALLOC: bool = false;
 ///
 /// If size is zero, a pointer to the minimum sized allocation is created
 #[no_mangle]
-extern "C" fn malloc(size: usize) -> *mut c_void {
+pub extern "C" fn malloc(size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_MALLOC = true;
     }
@@ -41,7 +41,7 @@ extern "C" fn malloc(size: usize) -> *mut c_void {
 ///
 /// If size is zero, a pointer to the minimum sized allocation is created
 #[no_mangle]
-extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
+pub extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_CALLOC = true;
     }
@@ -65,7 +65,7 @@ extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
 ///
 /// If size is zero, a pointer to the minimum sized allocation is created
 #[no_mangle]
-extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
+pub extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_REALLOC = true;
     }
@@ -82,7 +82,7 @@ extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
 ///
 /// The behavior is undefined if after free() returns, an access is made through the pointer ptr (unless another allocation function happened to result in a pointer value equal to ptr)
 #[no_mangle]
-extern "C" fn free(ptr: *mut c_void) {
+pub extern "C" fn free(ptr: *mut c_void) {
     unsafe {
         OVERRIDE_FREE = true;
     }
@@ -90,7 +90,7 @@ extern "C" fn free(ptr: *mut c_void) {
 }
 
 #[no_mangle]
-extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
+pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_ALIGNED_ALLOC = true;
     }
@@ -98,7 +98,7 @@ extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
 }
 
 #[no_mangle]
-extern "C" fn check_override() -> bool {
+pub extern "C" fn check_override() -> bool {
     unsafe {
         let ptr = malloc(8);
         if !OVERRIDE_MALLOC {

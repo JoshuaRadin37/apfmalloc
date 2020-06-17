@@ -2,7 +2,7 @@ extern crate lrmalloc_rs;
 
 use core::sync::atomic::Ordering;
 use core::time::Duration;
-use lrmalloc_rs::auto_ptr::AutoPtr;
+use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
 use std::alloc::{GlobalAlloc, Layout};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};

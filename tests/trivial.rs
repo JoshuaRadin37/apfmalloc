@@ -23,7 +23,7 @@ fn create_and_destroy() {
 
 mod mass_stress {
     use super::*;
-    use lrmalloc_rs::auto_ptr::AutoPtr;
+    use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 
     #[test]
     fn mass_thread_spawn_stress() {

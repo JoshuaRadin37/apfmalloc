@@ -49,7 +49,11 @@ pub mod thread_cache;
 
 mod bootstrap;
 
-pub mod auto_ptr;
+pub mod ptr {
+    pub mod auto_ptr;
+    pub mod
+    rc;
+}
 
 mod apf;
 
@@ -227,22 +231,22 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
         #[cfg(not(unix))]
-        {
-            set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
-                                     //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
-            thread_cache::thread_init.with(|val| {
-                // if not initalized, it goes back
-                if !*val.borrow() {
-                    // the default value of the val is false, which means that the thread cache has not been created yet
-                    thread_cache::thread_cache.with(|tcache| {
-                        // This causes another allocation, hopefully with bootstrap
-                        let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
-                    }); // it repeatedly sets it false, eventually, it will allocate
-                    *val.borrow_mut() = true; // Never has to repeat this code after this
-                }
-                set_use_bootstrap(false) // Turns off the bootstrap
-            });
-        }
+            {
+                set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+                //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
+                thread_cache::thread_init.with(|val| {
+                    // if not initalized, it goes back
+                    if !*val.borrow() {
+                        // the default value of the val is false, which means that the thread cache has not been created yet
+                        thread_cache::thread_cache.with(|tcache| {
+                            // This causes another allocation, hopefully with bootstrap
+                            let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
+                        }); // it repeatedly sets it false, eventually, it will allocate
+                        *val.borrow_mut() = true; // Never has to repeat this code after this
+                    }
+                    set_use_bootstrap(false) // Turns off the bootstrap
+                });
+            }
 
         #[cfg(debug_assertions)]
         unsafe {
@@ -260,15 +264,15 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     panic!("Cache didn't fill");
                 }
             }
-
-            #[cfg(feature = "track_allocation")] {
-                let ret = cache.pop_block();
-                let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
-                crate::info_dump::log_malloc(size);
-                #[cfg(feature = "show_all_allocations")]
-                dump_info!();
-                ret
-            }
+            #[cfg(feature = "track_allocation")]
+                {
+                    let ret = cache.pop_block();
+                    let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
+                    crate::info_dump::log_malloc(size);
+                    #[cfg(feature = "show_all_allocations")]
+                    dump_info!();
+                    ret
+                }
             #[cfg(not(feature = "track_allocation"))]
                 let ptr = cache.pop_block(); // Pops the block from the thread cache bin
 
@@ -293,15 +297,15 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
         });
 
         #[cfg(unix)]
-        {
-            thread_cache::skip.with(|b| unsafe {
-                if !*b.get() {
-                    let mut skip = b.get();
-                    *skip = true;
-                    let _ = thread_cache::thread_init.with(|_| ());
-                }
-            })
-        }
+            {
+                thread_cache::skip.with(|b| unsafe {
+                    if !*b.get() {
+                        let mut skip = b.get();
+                        *skip = true;
+                        let _ = thread_cache::thread_init.with(|_| ());
+                    }
+                })
+            }
 
         ret
     }
@@ -347,7 +351,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
                 return; // todo: Band-aid fix
-                        // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
         }
     };
@@ -377,13 +381,13 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
                 || use_bootstrap()
                 || (!cfg!(unix)
-                    && match thread_cache::thread_init.try_with(|_| {}) {
-                        Ok(_) => false,
-                        Err(_) => true,
-                    });
+                && match thread_cache::thread_init.try_with(|_| {}) {
+                Ok(_) => false,
+                Err(_) => true,
+            });
             // todo: remove true
             #[cfg(feature = "track_allocation")]
-            crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+                crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
             dump_info!();
 
@@ -404,18 +408,18 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 }
             } else {
                 #[cfg(not(unix))]
-                {
-                    set_use_bootstrap(true);
-                    thread_cache::thread_init.with(|val| {
-                        if !*val.borrow() {
-                            thread_cache::thread_cache.with(|tcache| {
-                                let _tcache = tcache;
-                            });
-                            *val.borrow_mut() = true;
-                        }
-                        set_use_bootstrap(false)
-                    });
-                }
+                    {
+                        set_use_bootstrap(true);
+                        thread_cache::thread_init.with(|val| {
+                            if !*val.borrow() {
+                                thread_cache::thread_cache.with(|tcache| {
+                                    let _tcache = tcache;
+                                });
+                                *val.borrow_mut() = true;
+                            }
+                            set_use_bootstrap(false)
+                        });
+                    }
 
                 /* WARNING -- ELIAS CODE -- WARNING */
 
@@ -427,7 +431,6 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 }
 
                 /* END ELIAS CODE */
-
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };
@@ -465,7 +468,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 mod tests {
     use super::*;
     use crate::allocation_data::get_heaps;
-    use crate::auto_ptr::AutoPtr;
+    use crate::ptr::auto_ptr::AutoPtr;
     use bitfield::size_of;
     use core::mem::MaybeUninit;
 
@@ -654,7 +657,7 @@ mod tests {
 
 #[cfg(test)]
 mod track_allocation_tests {
-    use crate::auto_ptr::AutoPtr;
+    use crate::ptr::auto_ptr::AutoPtr;
 
     #[cfg(feature = "track_allocation")]
     #[test]

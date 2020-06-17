@@ -1,5 +1,5 @@
 use crate::{do_aligned_alloc, do_free};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::fmt::Formatter;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
@@ -21,7 +21,7 @@ impl<T> AutoPtr<T> {
         Self { data: ptr }
     }
 
-    /// Takes the data in the pointer, and de-allocates the space in the heap re
+    /// Takes the data in the pointer, and de-allocates the space in the heap
     pub fn take(self) -> T {
         unsafe {
             let Self { data } = &self;
@@ -96,15 +96,29 @@ unsafe impl<T: Sync> Sync for AutoPtr<T> {}
 
 impl<T: Debug> Debug for AutoPtr<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        (*self).fmt(f)
+        self.deref().fmt(f)
+    }
+}
+
+impl<T : Display> Display for AutoPtr<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.deref().fmt(f)
+    }
+}
+
+impl <T : Clone> Clone for AutoPtr<T> {
+    fn clone(&self) -> Self {
+        let data = self.deref();
+        let clone = data.clone();
+        AutoPtr::new(clone)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::auto_ptr::AutoPtr;
     use crate::{allocate_type, do_free};
     use std::fmt::{Debug, Display};
+    use crate::ptr::auto_ptr::AutoPtr;
 
     #[test]
     fn normal_ptr() {
