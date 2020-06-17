@@ -48,6 +48,6 @@ fn test_apf_tuning() {
         "Allocated in cache: {} bytes",
         lrmalloc_rs::IN_CACHE.load(Ordering::Relaxed)
     );
-    panic!();
+    //panic!();
 
 }

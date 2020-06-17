@@ -278,34 +278,37 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
-            set_use_bootstrap(true);
-
-            thread_cache::apf_init.with(|init| {
-                if !*init.borrow() {
-                    thread_cache::init_tuners();
-                    *init.borrow_mut() = true;
+            #[cfg(unix)]
+                {
+                    thread_cache::skip.with(|b| unsafe {
+                        if !*b.get() {
+                            let mut skip = b.get();
+                            *skip = true;
+                            thread_cache::apf_init.with(|init| {
+                                if !*init.borrow() {
+                                    thread_cache::init_tuners();
+                                    *init.borrow_mut() = true;
+                                }
+                                thread_cache::apf_tuners.with(|tuners| {
+                                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
+                                });
+                                assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                                set_use_bootstrap(false);
+                            });
+                            assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                            let _ = thread_cache::thread_init.with(|_| ());
+                        }
+                    })
                 }
-                thread_cache::apf_tuners.with(|tuners| {
-                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
-                });
-                assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
-                set_use_bootstrap(false);
-            });
-            assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+
+            //set_use_bootstrap(true);
+
+
 
             ptr
         });
 
-        #[cfg(unix)]
-            {
-                thread_cache::skip.with(|b| unsafe {
-                    if !*b.get() {
-                        let mut skip = b.get();
-                        *skip = true;
-                        let _ = thread_cache::thread_init.with(|_| ());
-                    }
-                })
-            }
+
 
         ret
     }
@@ -424,8 +427,8 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 /* WARNING -- ELIAS CODE -- WARNING */
 
                 // Should always be initialized at this point
-                if thread_cache::apf_init.with(|init| { *init.borrow() }) {
-                    thread_cache::apf_tuners.with(|tuners| {
+                if thread_cache::apf_init.try_with(|init| { *init.borrow() }).unwrap_or(false){
+                    thread_cache::apf_tuners.try_with(|tuners| {
                         (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
                     });
                 }
