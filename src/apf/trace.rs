@@ -55,7 +55,9 @@ impl Trace {
     }
 
     pub fn add(&mut self, add: Event) -> () {
-        if self.length >= MAX_LENGTH { panic!("ERROR: Trace {:?} exceeded max length", self); }
+        if self.length >= MAX_LENGTH {
+            panic!("ERROR: Trace {:?} exceeded max length", self);
+        }
 
         self.accesses[self.length] = Some(add);
         self.length += 1;
@@ -69,8 +71,10 @@ impl Trace {
 
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
         for i in 0..vec.len() {
-            if self.length >= MAX_LENGTH { panic!("ERROR: Trace exceeded max length"); }
-            
+            if self.length >= MAX_LENGTH {
+                panic!("ERROR: Trace exceeded max length");
+            }
+
             match vec[i] {
                 Alloc(_) => {
                     self.alloc_count += 1;
@@ -97,7 +101,8 @@ impl Trace {
         let mut seen = HashMap::new();
 
         for i in 0..self.length() {
-            match &self.get(i).unwrap() {   // Safe since all indices less than length are Some
+            match &self.get(i).unwrap() {
+                // Safe since all indices less than length are Some
                 Alloc(s) => {
                     if !seen.contains_key(s) {
                         seen.insert(s.clone(), true);

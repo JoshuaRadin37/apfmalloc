@@ -17,7 +17,6 @@ fn allocate_multi_thread_constant_bytes(c: &mut Criterion) {
                 b.iter(|| {
                     let mut vec = Vec::with_capacity(size);
                     for _ in 0..size {
-
                         let clone = ptrs.clone();
                         vec.push(thread::spawn(move || {
                             let mut temp = Vec::with_capacity(10000);
@@ -31,7 +30,6 @@ fn allocate_multi_thread_constant_bytes(c: &mut Criterion) {
                         join.join().unwrap();
                     }
                 });
-
             },
         );
     }
@@ -45,7 +43,6 @@ fn allocate_multi_thread_constant_bytes(c: &mut Criterion) {
                 b.iter(|| {
                     let mut vec = Vec::with_capacity(size);
                     for _ in 0..size {
-
                         let clone = ptrs.clone();
                         vec.push(thread::spawn(move || {
                             let mut temp = Vec::with_capacity(10000);
@@ -59,7 +56,6 @@ fn allocate_multi_thread_constant_bytes(c: &mut Criterion) {
                         join.join().unwrap();
                     }
                 });
-
             },
         );
     }

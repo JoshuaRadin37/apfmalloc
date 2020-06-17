@@ -102,7 +102,6 @@ impl ThreadCacheBin {
     }
 }
 
-
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
 
@@ -132,11 +131,11 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     cache.block_size = Some(size_class_index);
 
     #[cfg(debug_assertions)]
-        {
-            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-            debug_assert!(block_num > 0);
-            debug_assert!(block_num <= sc.cache_block_num as usize);
-        }
+    {
+        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+        debug_assert!(block_num > 0);
+        debug_assert!(block_num <= sc.cache_block_num as usize);
+    }
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
@@ -228,7 +227,6 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     }
 }
 
-
 pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
 
 impl ThreadCache {
@@ -270,7 +268,6 @@ pub struct ThreadEmpty;
 
 #[cfg(unix)]
 impl Drop for ThreadEmpty {
-
     fn drop(&mut self) {
         //info!("Flushing entire thread cache");
         thread_cache.with(|tcache| {
@@ -296,11 +293,11 @@ fn check_blocks(i: usize) -> u32 {
     });
 }
 
-fn fetch(i: usize, c: usize) -> bool{
+fn fetch(i: usize, c: usize) -> bool {
     return false;
 }
 
-fn ret(i: usize, c: u32) -> bool{
+fn ret(i: usize, c: u32) -> bool {
     return false;
 }
 
@@ -323,8 +320,6 @@ fn check(i: usize) -> u32 {
         };
     });
 }
-
-
 
 use crate::apf::ApfTuner;
 #[cfg(not(unix))]

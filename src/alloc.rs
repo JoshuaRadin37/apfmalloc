@@ -11,9 +11,7 @@ use std::sync::atomic::Ordering;
 use crate::pages::page_alloc;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
-
     let list = &heap.partial_list;
-
 
     loop {
         let old_head = list.load(Ordering::Acquire);
@@ -29,26 +27,23 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
                 if let Some(mut new_head_desc) = &mut new_head {
                     new_head_desc.set(None, 0);
                 }
-            },
+            }
             Some(descriptor_node) => {
                 let desc = descriptor_node.get_desc().unwrap();
                 let counter = descriptor_node.get_counter();
                 if let Some(mut new_head_desc) = &mut new_head {
                     new_head_desc.set(Some(desc), counter);
                 }
-            },
+            }
         }
 
         match list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
             Ok(_) => {
                 return Some(old_desc);
-            },
-            Err(_) => {},
+            }
+            Err(_) => {}
         }
     }
-
-
-
 }
 
 pub fn list_push_partial(desc: &'static mut Descriptor) {
@@ -74,9 +69,6 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
 
      */
 
-
-
-
     // let old_head = list.load(Ordering::Acquire).unwrap();
     let mut new_head = DescriptorNode::default();
 
@@ -100,28 +92,28 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
         // debug_assert_ne!(old_head.get_desc(), new_head.get_desc());
         desc.next_partial.store(old_head, Ordering::Release);
 
-
         /*if replace {
             list.store(Some(new_head), Ordering::Acquire);
             break;
         }
          else
          */
-        if list.compare_exchange_weak(
-            old_head,
-            Some(new_head),
-            Ordering::Acquire,
-            Ordering::Relaxed,
-        )
+        if list
+            .compare_exchange_weak(
+                old_head,
+                Some(new_head),
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
             .is_ok()
         {
             /*info!("Heap partial list anchor updated to {:?}", unsafe { &(*heap).partial_list }
-                .load(Ordering::Acquire)
-                .unwrap()
-                .get_desc()
-                .anchor.load(Ordering::Acquire));
+               .load(Ordering::Acquire)
+               .unwrap()
+               .get_desc()
+               .anchor.load(Ordering::Acquire));
 
-             */
+            */
             break;
         }
     }
@@ -140,7 +132,6 @@ pub fn malloc_from_partial(
     cache: &mut ThreadCacheBin,
     block_num: &mut usize,
 ) {
-
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let desc = heap_pop_partial(heap);
 
@@ -177,7 +168,6 @@ pub fn malloc_from_partial(
                     .compare_exchange(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
                     .is_ok()
                 {
-
                     break;
                 }
             }
@@ -292,31 +282,8 @@ pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: *mut u8) {
     update_page_map(heap, super_block, None, 0)
 }
 
-pub fn get_page_info_for_ptr<T : ?Sized>(ptr: *const T) -> PageInfo {
+pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> PageInfo {
     unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
-}
-
-macro_rules! sc {
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, no, yes, $pgs:expr, $lg_delta_lookup:expr) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, yes, yes, $pgs:expr, $lg_delta_lookup:expr) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, yes, yes, $bin:expr, $pgs:expr, no) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, no, yes, $bin:expr, $pgs:expr, no) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
 }
 
 macro_rules! size_classes_match {

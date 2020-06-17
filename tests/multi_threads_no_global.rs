@@ -41,4 +41,3 @@ fn test_multiple_threads() {
         IN_CACHE.load(Ordering::Relaxed)
     );
 }
-

@@ -1,10 +1,10 @@
 use crate::{do_aligned_alloc, do_free};
+use std::fmt::Debug;
+use std::fmt::Formatter;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::drop_in_place;
-use std::fmt::Debug;
-use std::fmt::Formatter;
 
 /// Similar to Box, but directly calls the do_aligned_alloc and free for dropping
 pub struct AutoPtr<T> {
@@ -12,22 +12,17 @@ pub struct AutoPtr<T> {
 }
 
 impl<T> AutoPtr<T> {
-
     /// Creates a new AutoPtr
     pub fn new(data: T) -> Self {
-        let ptr = do_aligned_alloc(std::mem::align_of::<T>(), std::mem::size_of::<T>())
-            as *mut T;
+        let ptr = do_aligned_alloc(std::mem::align_of::<T>(), std::mem::size_of::<T>()) as *mut T;
         unsafe {
             ptr.write(data);
         }
-        Self {
-            data: ptr
-        }
+        Self { data: ptr }
     }
 
     /// Takes the data in the pointer, and de-allocates the space in the heap re
-    pub fn take(self) -> T
-    {
+    pub fn take(self) -> T {
         unsafe {
             let Self { data } = &self;
             let deref = *data;
@@ -39,7 +34,7 @@ impl<T> AutoPtr<T> {
     }
 
     /// Converts the AutoPtr into a normal pointer, and removes the ability to auto deallocate the pointer
-    pub fn into_ptr(self) -> * mut T {
+    pub fn into_ptr(self) -> *mut T {
         let data = self.data;
         std::mem::forget(self);
         data
@@ -69,13 +64,9 @@ impl<T> AutoPtr<T> {
     /// the AutoPtr is finished. This causes data pointed to by the un-managed pointer to be freed, and potentially
     /// double freed as a result
     pub unsafe fn from_ptr(ptr: *mut T) -> Self {
-        Self {
-            data: ptr
-        }
+        Self { data: ptr }
     }
 }
-
-
 
 impl<T> Deref for AutoPtr<T> {
     type Target = T;
@@ -100,21 +91,20 @@ impl<T> Drop for AutoPtr<T> {
     }
 }
 
-unsafe impl <T: Send> Send for AutoPtr<T> {}
-unsafe impl <T: Sync> Sync for AutoPtr<T> {}
+unsafe impl<T: Send> Send for AutoPtr<T> {}
+unsafe impl<T: Sync> Sync for AutoPtr<T> {}
 
-impl <T : Debug> Debug for AutoPtr<T> {
+impl<T: Debug> Debug for AutoPtr<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         (*self).fmt(f)
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::auto_ptr::AutoPtr;
-    use std::fmt::{Display, Debug};
-    use crate::{do_free, allocate_type};
+    use crate::{allocate_type, do_free};
+    use std::fmt::{Debug, Display};
 
     #[test]
     fn normal_ptr() {
@@ -150,7 +140,6 @@ mod test {
 
         let _unused1 = AutoPtr::new(0usize); // used to ensure that the cache bin doesn't empty
 
-
         let (loc1, loc2) = {
             let tree = Tree(AutoPtr::new(0), AutoPtr::new(0));
             (tree.0.data, tree.1.data)
@@ -159,7 +148,6 @@ mod test {
         let tree = Tree(AutoPtr::new(0), AutoPtr::new(0));
         assert!(tree.0.data == loc1 || tree.1.data == loc1);
         assert!(tree.0.data == loc2 || tree.1.data == loc2);
-
     }
 
     #[test]
@@ -182,21 +170,19 @@ mod test {
 
         enum Value {
             Ptr(AutoPtr<Test>),
-            Val(usize)
+            Val(usize),
         }
         use Value::*;
         struct Test(Value);
 
         impl Test {
             fn take(self) -> usize {
-                match self.0  {
+                match self.0 {
                     Ptr(ptr) => {
                         let t = ptr.take();
                         t.take()
-                    },
-                    Val(v) => {
-                        v
-                    },
+                    }
+                    Val(v) => v,
                 }
             }
         }
@@ -207,7 +193,6 @@ mod test {
         };
 
         assert_eq!(val, 3799);
-
     }
 
     #[test]
@@ -217,9 +202,16 @@ mod test {
         let auto_ptr = AutoPtr::new(val);
         let un_managed_ptr = auto_ptr.into_ptr();
         let potential_fail_pointer = AutoPtr::new(0usize); // If the original pointer is dropped for some reason, this will overwrite the original auto ptr
-        assert_eq!(unsafe {*un_managed_ptr }, val, "value should not have changed");
+        assert_eq!(
+            unsafe { *un_managed_ptr },
+            val,
+            "value should not have changed"
+        );
         let un_managed_ptr2 = potential_fail_pointer.into_ptr();
-        assert_ne!(un_managed_ptr2, un_managed_ptr, "Should not point to the same location");
+        assert_ne!(
+            un_managed_ptr2, un_managed_ptr,
+            "Should not point to the same location"
+        );
         do_free(un_managed_ptr);
         do_free(un_managed_ptr2);
     }
@@ -231,8 +223,7 @@ mod test {
         // the managed pointer and allocator is working properly, it will be allocated at the same place.
         let _unused1 = AutoPtr::new(0usize); // used to ensure that the cache bin doesn't empty
         let ptr = allocate_type::<usize>();
-        unsafe
-        {
+        unsafe {
             ptr.write(0xdeadbeaf);
             let managed = AutoPtr::from_ptr(ptr);
             assert_eq!(*managed, 0xdeadbeaf);
@@ -242,7 +233,5 @@ mod test {
         let new_ptr = new_managed.into_ptr();
         assert_eq!(ptr, new_ptr, "The managed ptr should have caused the old pointer to be freed, enabling the next allocation to be at the same location");
         do_free(new_ptr); // must deallocate manually now
-
     }
-
 }

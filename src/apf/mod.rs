@@ -24,11 +24,15 @@ pub struct ApfTuner {
     dapf: u16,
     check: fn(usize) -> u32,
     get: fn(usize, usize) -> bool,
-    ret: fn(usize, u32) -> bool
+    ret: fn(usize, u32) -> bool,
 }
 
 impl ApfTuner {
-    pub fn new(check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner {
+    pub fn new(
+        check: fn(usize) -> u32,
+        get: fn(usize, usize) -> bool,
+        ret: fn(usize, u32) -> bool,
+    ) -> ApfTuner {
         ApfTuner {
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(),
@@ -38,7 +42,7 @@ impl ApfTuner {
             dapf: 0,
             check: check,
             get: get,
-            ret: ret
+            ret: ret,
         }
     }
 
@@ -65,7 +69,7 @@ impl ApfTuner {
 
             (self.get)(0, demand.ceil() as usize);
             self.count_fetch();
-        } 
+        }
         return true;
     }
 

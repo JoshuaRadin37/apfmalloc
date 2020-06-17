@@ -1,9 +1,8 @@
 // extern crate lrmalloc_rs_global;
 
-use std::collections::{BTreeMap, HashMap};
-use rand::thread_rng;
 use rand::seq::SliceRandom;
-use lrmalloc_rs::dump_info;
+use rand::thread_rng;
+use std::collections::BTreeMap;
 
 // ~O(2^n)
 fn slow_fib(n: usize) -> Box<usize> {
@@ -36,10 +35,7 @@ fn fast_fib_no_fail_global() {
         );
     }
 
-
-    assert!(unsafe {
-        lrmalloc_rs_global::OVERRIDE_MALLOC
-    })
+    assert!(unsafe { lrmalloc_rs_global::OVERRIDE_MALLOC })
 }
 
 #[test]
@@ -49,8 +45,6 @@ fn arbitrary_program_main() {
     let mut collect = (0..SIZE).map(|n| fast_fib(n)).collect::<Vec<usize>>();
 
     let option = Some(4);
-    let option_ptr = &option;
-
 
     //collect.reverse();
     collect.shuffle(&mut rng);
