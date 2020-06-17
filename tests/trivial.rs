@@ -23,6 +23,7 @@ fn create_and_destroy() {
 
 mod mass_stress {
     use super::*;
+    use lrmalloc_rs::auto_ptr::AutoPtr;
 
     #[test]
     fn mass_thread_spawn_stress() {
@@ -63,14 +64,16 @@ mod mass_stress {
             let mut vec = vec![];
 
             vec.push(thread::spawn(move || {
+                let mut vec = vec![];
                 for _j in 0..500000 {
-                    do_free(do_malloc(16));
+                    vec.push(AutoPtr::new(3799i16))
                     //println!("Thread {} says hello", j * 8 + i)
                 }
+                vec
             }));
 
             for join in vec {
-                join.join().unwrap();
+                let _v = join.join().unwrap();
             }
         }
     }
@@ -82,14 +85,16 @@ mod mass_stress {
             let mut vec = vec![];
 
             vec.push(thread::spawn(move || {
+                let mut vec = vec![];
                 for _j in 0..500000 {
-                    Box::new((0usize, 0usize));
+                    vec.push(Box::new(3799i16))
                     //println!("Thread {} says hello", j * 8 + i)
                 }
+                vec
             }));
 
             for join in vec {
-                join.join().unwrap();
+                let _v = join.join().unwrap();
             }
         }
     }

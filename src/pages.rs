@@ -249,7 +249,8 @@ impl PageInfoHolder {
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
-        #[cfg(feature = "track_allocation")] {
+        #[cfg(feature = "track_allocation")]
+        {
             crate::info_dump::increase_allocated_from_vm(size);
         }
         self.release();
@@ -351,7 +352,8 @@ impl PageInfoHolder {
                         let mem = std::ptr::replace(page, MemoryOrFreePointer::Free { next: prev });
                         if let MemoryOrFreePointer::Segment(segment) = mem {
                             // deallocate the segment
-                            #[cfg(feature = "track_allocation")] {
+                            #[cfg(feature = "track_allocation")]
+                            {
                                 crate::info_dump::decrease_allocated_from_vm(segment.len());
                             }
                             SEGMENT_ALLOCATOR.deallocate(segment);
@@ -524,6 +526,7 @@ mod test {
     use crate::mem_info::PAGE;
     use crate::pages::{page_alloc, INITIAL_PAGES, PAGE_HOLDER};
     use crate::size_classes::{SizeClassData, SIZE_CLASSES};
+    use crate::{init_malloc, MALLOC_INIT_S};
 
     #[test]
     fn get_page() {
@@ -545,9 +548,7 @@ mod test {
 
     #[test]
     fn mass_allocate() {
-        unsafe {
-            crate::init_malloc();
-        }
+        MALLOC_INIT_S.with(|| unsafe { init_malloc() });
         let sc: &mut SizeClassData = unsafe { &mut SIZE_CLASSES[1] };
         let size = sc.sb_size;
 

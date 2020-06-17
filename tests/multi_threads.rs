@@ -2,6 +2,7 @@ extern crate lrmalloc_rs;
 
 use core::sync::atomic::Ordering;
 use core::time::Duration;
+use lrmalloc_rs::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
 use std::alloc::{GlobalAlloc, Layout};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
@@ -22,6 +23,12 @@ unsafe impl GlobalAlloc for Dummy {
         let _layout = layout;
         do_free(ptr)
     }
+}
+
+#[test]
+fn combo() {
+    multi_test_from_bench();
+    test_multiple_threads();
 }
 
 #[test]
@@ -62,4 +69,23 @@ fn test_multiple_threads() {
         "Allocated in cache: {} bytes",
         IN_CACHE.load(Ordering::Relaxed)
     );
+}
+
+#[test]
+fn multi_test_from_bench() {
+    let size = 32;
+    for t in 0..10 {
+        let mut vec = Vec::with_capacity(size);
+        for _ in 0..size {
+            vec.push(thread::spawn(move || AutoPtr::new(3799i16)));
+        }
+        for (i, join) in vec.into_iter().enumerate() {
+            let _ptr = match join.join() {
+                Ok(_) => {}
+                Err(e) => {
+                    panic!(e);
+                }
+            };
+        }
+    }
 }

@@ -116,7 +116,7 @@ impl<'a> Trace<'a> {
         let mut seen = HashMap::new();
 
         for i in 0..self.length() {
-            match &self.get(i) {   // Safe since all indices less than length are Some
+            match &self.get(i) {
                 Alloc(s) => {
                     if !seen.contains_key(s) {
                         seen.insert(s.clone(), true);

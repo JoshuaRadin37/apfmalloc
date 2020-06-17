@@ -25,7 +25,7 @@ pub struct ApfTuner<'a> {
     dapf: usize,
     check: fn(usize) -> u32,
     get: fn(usize, usize) -> bool,
-    ret: fn(usize, u32) -> bool
+    ret: fn(usize, u32) -> bool,
 }
 
 impl ApfTuner<'_> {
@@ -73,7 +73,7 @@ impl ApfTuner<'_> {
 
             (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
-        } 
+        }
         return true;
     }
 

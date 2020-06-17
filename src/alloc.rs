@@ -12,76 +12,108 @@ use crate::pages::page_alloc;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
-    let ptr = list.load(Ordering::Acquire);
-    if ptr.is_none() {
-        return None;
-    }
-    let old_head = ptr.unwrap();
-    let mut new_head: DescriptorNode;
+
     loop {
-        let old_desc = old_head.get_desc();
-        if old_desc.is_none() {
+        let old_head = list.load(Ordering::Acquire);
+        if old_head.is_none() {
             return None;
         }
-        let old_desc = old_desc.unwrap();
+        let old_desc = old_head.unwrap().get_desc().unwrap();
+        // Lets assume this descriptor exists
 
-        new_head = old_desc.next_partial.load(Ordering::Acquire).unwrap();
-        let desc = old_head.get_desc();
-        let counter = old_head.get_counter().expect("Counter doesn't exist");
-        new_head.set(desc.map(|d| &*d), counter);
+        let mut new_head: Option<DescriptorNode> = old_desc.next_partial.load(Ordering::Acquire);
+        match &mut new_head {
+            None => {
+                if let Some(mut new_head_desc) = &mut new_head {
+                    new_head_desc.set(None, 0);
+                }
+            }
+            Some(descriptor_node) => {
+                let desc = descriptor_node.get_desc().unwrap();
+                let counter = descriptor_node.get_counter();
+                if let Some(mut new_head_desc) = &mut new_head {
+                    new_head_desc.set(Some(desc), counter);
+                }
+            }
+        }
 
-        if list
-            .compare_exchange_weak(ptr, Some(new_head), Ordering::Acquire, Ordering::Release)
-            .is_ok()
-        {
-            break;
+        match list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
+            Ok(_) => {
+                return Some(old_desc);
+            }
+            Err(_) => {}
         }
     }
-
-    old_head.get_desc()
 }
 
 pub fn list_push_partial(desc: &'static mut Descriptor) {
+    //info!("Pushing descriptor (Count = {}) to heap", desc.anchor.load(Ordering::Acquire).count());
     let heap = desc.proc_heap;
     let list = unsafe { &(*heap).partial_list };
 
+    /*
     let mut replace: bool = false;
     let old_head = match list.load(Ordering::Acquire) {
         None => {
             let mut node = DescriptorNode::new();
             node.set(Some(desc), 0);
             replace = true;
+            //info!("Heap is empty, starting descriptor list");
             node
         }
-        Some(list) => list,
+        Some(list) => {
+            //info!("Pushing to start of descriptor list");
+            list
+        },
     };
+
+     */
 
     // let old_head = list.load(Ordering::Acquire).unwrap();
     let mut new_head = DescriptorNode::default();
 
     loop {
+        let old_head = list.load(Ordering::Acquire);
+        /*
         new_head.set(
             Some(desc),
             old_head.get_counter().expect("Old heap should exist") + 1,
         );
-        // debug_assert_ne!(old_head.get_desc(), new_head.get_desc());
-        match new_head.get_desc() {
-            None => panic!("A descriptor should exist"),
-            Some(desc) => desc.next_partial.store(Some(old_head), Ordering::SeqCst),
-        }
 
-        if replace {
+         */
+        new_head.set(
+            Some(desc),
+            if old_head.is_none() {
+                0
+            } else {
+                old_head.unwrap().get_counter() + 1
+            },
+        );
+        // debug_assert_ne!(old_head.get_desc(), new_head.get_desc());
+        desc.next_partial.store(old_head, Ordering::Release);
+
+        /*if replace {
             list.store(Some(new_head), Ordering::Acquire);
             break;
-        } else if list
+        }
+         else
+         */
+        if list
             .compare_exchange_weak(
-                Some(old_head),
+                old_head,
                 Some(new_head),
                 Ordering::Acquire,
                 Ordering::Relaxed,
             )
             .is_ok()
         {
+            /*info!("Heap partial list anchor updated to {:?}", unsafe { &(*heap).partial_list }
+               .load(Ordering::Acquire)
+               .unwrap()
+               .get_desc()
+               .anchor.load(Ordering::Acquire));
+
+            */
             break;
         }
     }
@@ -108,6 +140,7 @@ pub fn malloc_from_partial(
             return;
         }
         Some(desc) => {
+            //info!("Allocating blocks from a partial list...");
             let old_anchor = desc.anchor.load(Ordering::Acquire);
             let mut new_anchor: Anchor;
 
@@ -118,12 +151,13 @@ pub fn malloc_from_partial(
 
             loop {
                 if old_anchor.state() == SuperBlockState::EMPTY {
+                    //info!("Retiring an empty descriptor");
                     desc.retire();
                     return malloc_from_partial(size_class_index, cache, block_num);
                 }
 
                 // debug_assert_eq!(old_anchor.state(), SuperBlockState::PARTIAL);
-
+                //info!("Found old anchor {:?}", old_anchor);
                 new_anchor = old_anchor;
                 new_anchor.set_count(0);
                 new_anchor.set_avail(max_count as u64);
@@ -143,7 +177,7 @@ pub fn malloc_from_partial(
 
             assert!(
                 avail <= max_count as isize,
-                "Avail: {}, Max Count {}",
+                "Avail: {}, Count {}",
                 avail,
                 max_count
             );
@@ -248,31 +282,8 @@ pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: *mut u8) {
     update_page_map(heap, super_block, None, 0)
 }
 
-pub fn get_page_info_for_ptr<T : ?Sized>(ptr: *const T) -> PageInfo {
+pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> PageInfo {
     unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
-}
-
-macro_rules! sc {
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, no, yes, $pgs:expr, $lg_delta_lookup:expr) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, yes, yes, $pgs:expr, $lg_delta_lookup:expr) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, yes, yes, $bin:expr, $pgs:expr, no) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, no, yes, $bin:expr, $pgs:expr, no) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
 }
 
 macro_rules! size_classes_match {
@@ -397,13 +408,15 @@ pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usi
 mod test {
     use super::*;
     use crate::mem_info::MAX_SZ_IDX;
+    use crate::MALLOC_INIT_S;
 
     #[test]
     fn from_new_sb() {
         let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
-        unsafe {
+        MALLOC_INIT_S.with(|| unsafe {
             crate::init_malloc();
-        }
+        });
+
         let cache = &mut tcache[1];
         malloc_from_new_sb(1, cache, &mut 0);
         assert!(cache.block_num > 0);

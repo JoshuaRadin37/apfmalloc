@@ -9,8 +9,9 @@ use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::page_map::S_PAGE_MAP;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
-use crate::bootstrap::{bootstrap_reserve, bootstrap_cache, set_use_bootstrap, use_bootstrap};
+use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, use_bootstrap};
 use crate::pages::{page_alloc, page_free};
+use crate::single_access::SingleAccess;
 use crate::thread_cache::{fill_cache, flush_cache};
 use atomic::{Atomic, Ordering};
 use crossbeam::atomic::AtomicCell;
@@ -24,9 +25,9 @@ use std::thread::ThreadId;
 
 #[macro_export]
 macro_rules! dump_info {
-
     () => {
-        #[cfg(feature = "track_allocation")] $crate::info_dump::print_info_dump()
+        #[cfg(feature = "track_allocation")]
+        $crate::info_dump::print_info_dump()
     };
 }
 
@@ -35,20 +36,20 @@ pub mod macros;
 
 pub mod alloc;
 pub mod allocation_data;
+#[cfg(feature = "track_allocation")]
+pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
 pub mod no_heap_mutex;
 pub mod page_map;
 pub mod pages;
+pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
-#[cfg(feature = "track_allocation")] pub mod info_dump;
-pub mod single_access;
 
 mod bootstrap;
 
 pub mod auto_ptr;
-
 
 mod apf;
 
@@ -63,6 +64,8 @@ pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomici
 
 pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
+
+static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
 pub unsafe fn init_malloc() {
     init_size_class();
@@ -80,9 +83,18 @@ pub unsafe fn init_malloc() {
 
     MALLOC_SKIP = true;
     MALLOC_FINISH_INIT.store(true, Ordering::Release);
+    //info!("Malloc Initialized")
+}
+
+pub fn allocate_type<T>() -> *mut T {
+    let size = std::mem::size_of::<T>();
+    let align = std::mem::align_of::<T>();
+    do_aligned_alloc(align, size) as *mut T
 }
 
 pub fn do_malloc(size: usize) -> *mut u8 {
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
+    /*
     unsafe {
         if !MALLOC_SKIP {
             if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
@@ -91,6 +103,8 @@ pub fn do_malloc(size: usize) -> *mut u8 {
             while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
         }
     }
+
+     */
 
     if size > MAX_SZ {
         let pages = page_ceiling!(size);
@@ -114,7 +128,6 @@ pub fn do_malloc(size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-
     allocate_to_cache(size, size_class_index)
 }
 
@@ -131,14 +144,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let mut size = align_val(size, align);
 
-    unsafe {
-        if !MALLOC_SKIP {
-            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-                init_malloc();
-            }
-            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
-        }
-    }
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -183,7 +189,6 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let size_class_index = get_size_class(size);
 
-
     allocate_to_cache(size, size_class_index)
 }
 
@@ -212,31 +217,31 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
         }
          */
         #[cfg(debug_assertions)]
-            unsafe {
+        unsafe {
             IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
         }
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
         #[cfg(not(unix))]
-            {
-                set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
-                //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
-                thread_cache::thread_init.with(|val| {
-                    // if not initalized, it goes back
-                    if !*val.borrow() {
-                        // the default value of the val is false, which means that the thread cache has not been created yet
-                        thread_cache::thread_cache.with(|tcache| {
-                            // This causes another allocation, hopefully with bootstrap
-                            let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
-                        }); // it repeatedly sets it false, eventually, it will allocate
-                        *val.borrow_mut() = true; // Never has to repeat this code after this
-                    }
-                    set_use_bootstrap(false) // Turns off the bootstrap
-                });
-            }
+        {
+            set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+                                     //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
+            thread_cache::thread_init.with(|val| {
+                // if not initalized, it goes back
+                if !*val.borrow() {
+                    // the default value of the val is false, which means that the thread cache has not been created yet
+                    thread_cache::thread_cache.with(|tcache| {
+                        // This causes another allocation, hopefully with bootstrap
+                        let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
+                    }); // it repeatedly sets it false, eventually, it will allocate
+                    *val.borrow_mut() = true; // Never has to repeat this code after this
+                }
+                set_use_bootstrap(false) // Turns off the bootstrap
+            });
+        }
 
         #[cfg(debug_assertions)]
-            unsafe {
+        unsafe {
             IN_CACHE.fetch_add(size, Ordering::AcqRel);
         }
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
@@ -256,7 +261,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 let ret = cache.pop_block();
                 let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
                 crate::info_dump::log_malloc(size);
-                #[cfg(feature = "show_all_allocations")] dump_info!();
+                #[cfg(feature = "show_all_allocations")]
+                dump_info!();
                 ret
             }
             #[cfg(not(feature = "track_allocation"))]
@@ -283,15 +289,15 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
         });
 
         #[cfg(unix)]
-            {
-                thread_cache::skip.with(|b| unsafe {
-                    if !*b.get() {
-                        let mut skip = b.get();
-                        *skip = true;
-                        let _ = thread_cache::thread_init.with(|_| ());
-                    }
-                })
-            }
+        {
+            thread_cache::skip.with(|b| unsafe {
+                if !*b.get() {
+                    let mut skip = b.get();
+                    *skip = true;
+                    let _ = thread_cache::thread_init.with(|_| ());
+                }
+            })
+        }
 
         ret
     }
@@ -325,70 +331,7 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
     Ok(desc.block_size)
 }
 
-#[allow(unused)]
-fn do_malloc_aligned_from_bootstrap(align: usize, size: usize) -> *mut u8 {
-    if !is_power_of_two(align) {
-        return null_mut();
-    }
-
-    let mut size = align_val(size, align);
-
-    unsafe {
-        if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-            init_malloc();
-        }
-        while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
-    }
-
-    if size > PAGE {
-        size = size.max(MAX_SZ + 1);
-
-        let need_more_pages = align > PAGE;
-        if need_more_pages {
-            size += align;
-        }
-
-        let pages = page_ceiling!(size);
-
-        let desc = unsafe { &mut *Descriptor::alloc() };
-
-        let mut ptr = page_alloc(pages).expect("Error getting pages for aligned allocation");
-
-        desc.proc_heap = null_mut();
-        desc.block_size = pages as u32;
-        desc.max_count = 1;
-        desc.super_block = page_alloc(pages).expect("Should create");
-
-        let mut anchor = Anchor::default();
-        anchor.set_state(SuperBlockState::FULL);
-
-        desc.anchor.store(anchor, Ordering::Release);
-
-        register_desc(desc);
-
-        if need_more_pages {
-            ptr = align_addr(ptr as usize, align) as *mut u8;
-
-            update_page_map(None, ptr, Some(desc), 0);
-        }
-
-        return ptr;
-    }
-
-    let size_class_index = get_size_class(size);
-
-    unsafe {
-        let mut bootstrap_cache_guard = bootstrap_cache.lock();
-        let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
-        if cache.get_block_num() == 0 {
-            fill_cache(size_class_index, cache);
-        }
-
-        cache.pop_block()
-    }
-}
-
-pub fn do_free<T : ?Sized>(ptr: *const T) {
+pub fn do_free<T: ?Sized>(ptr: *const T) {
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe {
         &mut *match info.get_desc() {
@@ -397,7 +340,7 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
                 return; // todo: Band-aid fix
-                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                        // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
         }
     };
@@ -427,14 +370,15 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
             let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
                 || use_bootstrap()
                 || (!cfg!(unix)
-                && match thread_cache::thread_init.try_with(|_| {}) {
-                Ok(_) => false,
-                Err(_) => true,
-            });
+                    && match thread_cache::thread_init.try_with(|_| {}) {
+                        Ok(_) => false,
+                        Err(_) => true,
+                    });
             // todo: remove true
             #[cfg(feature = "track_allocation")]
-                crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
-            #[cfg(feature = "show_all_allocations")] dump_info!();
+            crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+            #[cfg(feature = "show_all_allocations")]
+            dump_info!();
 
             if force_bootstrap {
                 unsafe {
@@ -453,7 +397,6 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
                 }
             } else {
                 #[cfg(not(unix))]
-
                 {
                     set_use_bootstrap(true);
                     thread_cache::thread_init.with(|val| {
@@ -511,16 +454,13 @@ pub fn do_free<T : ?Sized>(ptr: *const T) {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::allocation_data::get_heaps;
+    use crate::auto_ptr::AutoPtr;
     use bitfield::size_of;
     use core::mem::MaybeUninit;
-    use crate::auto_ptr::AutoPtr;
 
     #[test]
     fn heaps_valid() {
@@ -549,12 +489,7 @@ mod tests {
     #[test]
     fn cache_pop_no_fail() {
         const size_class: usize = 16;
-        unsafe {
-            if !MALLOC_INIT.compare_and_swap(false, true, Ordering::AcqRel) {
-                init_malloc();
-            }
-            while !MALLOC_FINISH_INIT.load(Ordering::Relaxed) {}
-        }
+        MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
         let sc = unsafe { &SIZE_CLASSES[size_class] };
         let total_blocks = sc.block_num;
@@ -583,11 +518,13 @@ mod tests {
     fn zero_size_malloc() {
         let v = do_malloc(0);
         assert_ne!(v, null_mut());
-        assert_eq!(get_allocation_size(v as *const c_void).expect("Zero Sized Allocation should act as an 8 byte allocation"), 8);
+        assert_eq!(
+            get_allocation_size(v as *const c_void)
+                .expect("Zero Sized Allocation should act as an 8 byte allocation"),
+            8
+        );
         do_free(v);
     }
-
-
 
     // O(n)
     fn fast_fib(n: usize) -> usize {
@@ -604,17 +541,14 @@ mod tests {
     fn fib_intractable() {
         enum FibTree {
             Val(usize),
-            Sum(AutoPtr<FibTree>, AutoPtr<FibTree>)
+            Sum(AutoPtr<FibTree>, AutoPtr<FibTree>),
         }
 
         impl FibTree {
-
             fn to_val(&self) -> usize {
                 match self {
                     FibTree::Val(v) => *v,
-                    FibTree::Sum(l, r) => {
-                        l.to_val() + r.to_val()
-                    },
+                    FibTree::Sum(l, r) => l.to_val() + r.to_val(),
                 }
             }
 
@@ -626,15 +560,9 @@ mod tests {
 
         fn fib(n: usize) -> FibTree {
             match n {
-                0 => {
-                    FibTree::Val(0)
-                },
-                1 => {
-                    FibTree::Val(1)
-                },
-                n => {
-                    FibTree::Sum(AutoPtr::new(fib(n-1)), AutoPtr::new(fib(n-2)))
-                }
+                0 => FibTree::Val(0),
+                1 => FibTree::Val(1),
+                n => FibTree::Sum(AutoPtr::new(fib(n - 1)), AutoPtr::new(fib(n - 2))),
             }
         }
 
@@ -647,19 +575,16 @@ mod tests {
             );
         }
         dump_info!();
-
     }
 
     #[test]
     fn fib_intractable_multi_thread() {
         enum FibTree {
             Val(usize),
-            Sum(AutoPtr<FibTree>, AutoPtr<FibTree>)
+            Sum(AutoPtr<FibTree>, AutoPtr<FibTree>),
         }
 
         impl FibTree {
-
-
             fn into_val(self) -> usize {
                 dump_info!();
                 match self {
@@ -667,25 +592,19 @@ mod tests {
                     FibTree::Sum(l, r) => {
                         let l = l.take();
                         let r = r.take();
-                        let l_t = thread::spawn( || l.into_val());
-                        let r_t = thread::spawn(|| r.into_val());
-                        l_t.join().unwrap() + r_t.join().unwrap()
-                    },
+                        let l_t = thread::spawn(move || l.into_val()).join().unwrap();
+                        let r_t = thread::spawn(move || r.into_val()).join().unwrap();
+                        l_t + r_t
+                    }
                 }
             }
         }
 
         fn fib(n: usize) -> FibTree {
             match n {
-                0 => {
-                    FibTree::Val(0)
-                },
-                1 => {
-                    FibTree::Val(1)
-                },
-                n => {
-                    FibTree::Sum(AutoPtr::new(fib(n-1)), AutoPtr::new(fib(n-2)))
-                }
+                0 => FibTree::Val(0),
+                1 => FibTree::Val(1),
+                n => FibTree::Sum(AutoPtr::new(fib(n - 1)), AutoPtr::new(fib(n - 2))),
             }
         }
 
@@ -698,13 +617,10 @@ mod tests {
             );
         }
         dump_info!();
-
     }
 
     #[test]
     fn fib_allocation() {
-
-
         fn slow_fib(n: usize) -> AutoPtr<usize> {
             match n {
                 0 => AutoPtr::new(0),
@@ -712,10 +628,9 @@ mod tests {
                 n => {
                     let ret = AutoPtr::new(*slow_fib(n - 1) + *slow_fib(n - 2));
                     ret
-                },
+                }
             }
         }
-
 
         for n in 0..15 {
             assert_eq!(
@@ -727,8 +642,6 @@ mod tests {
         }
 
         dump_info!();
-
-
     }
 }
 

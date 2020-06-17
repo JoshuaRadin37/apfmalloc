@@ -242,7 +242,7 @@ impl PageMap<'_> {
      */
 
     #[inline]
-    pub fn get_page_info<T : ?Sized>(&self, ptr: *const T) -> PageInfo {
+    pub fn get_page_info<T: ?Sized>(&self, ptr: *const T) -> PageInfo {
         let key = self.addr_to_key(ptr);
         //println!("GET KEY: {:?}", key);
         let ptr = &self.page_map[key];
@@ -274,7 +274,7 @@ impl PageMap<'_> {
     }
 
     #[inline]
-    fn addr_to_key<T : ?Sized>(&self, ptr: *const T) -> usize {
+    fn addr_to_key<T: ?Sized>(&self, ptr: *const T) -> usize {
         /*
         println!("ptr: {:x?}", ptr);
         let i = (ptr as usize >> PM_KEY_SHIFT);
@@ -285,7 +285,7 @@ impl PageMap<'_> {
         println!("key: {:?}", key);
 
          */
-        let key = ((ptr as * const u8 as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
+        let key = ((ptr as *const u8 as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
         key
     }
 

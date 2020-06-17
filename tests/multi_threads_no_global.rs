@@ -41,20 +41,3 @@ fn test_multiple_threads() {
         IN_CACHE.load(Ordering::Relaxed)
     );
 }
-
-#[test]
-fn multi_test_from_bench() {
-    let size = 32;
-    for _ in 0..1000 {
-        let mut vec = Vec::with_capacity(size);
-        for _ in 0..size {
-            vec.push(thread::spawn(move || {
-                AutoPtr::new(3799i16)
-            }));
-        }
-        for (i, join) in vec.into_iter().enumerate() {
-            let _ptr = join.join().expect(format!("thread {} panicked", i).as_str());
-        }
-    };
-
-}

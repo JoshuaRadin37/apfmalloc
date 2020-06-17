@@ -1,8 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use lrmalloc_rs::{do_free, do_malloc};
 use std::iter::Iterator;
-use std::thread;
-
 
 fn allocate_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate");
@@ -46,8 +44,6 @@ fn allocate_one_thread(c: &mut Criterion) {
     group.finish()
 }
 
-
-
 fn allocate_and_free_one_thread(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocate and free");
     for bytes in (3..=13).map(|b| 1 << b) {
@@ -66,7 +62,7 @@ fn allocate_and_free_one_thread(c: &mut Criterion) {
     for bytes in (3..=13).map(|b| 1 << b) {
         group.throughput(Throughput::Bytes(bytes));
         group.bench_with_input(
-            BenchmarkId::new("native",bytes as u64),
+            BenchmarkId::new("native", bytes as u64),
             &bytes,
             |b, &size| {
                 b.iter(|| {
@@ -78,7 +74,6 @@ fn allocate_and_free_one_thread(c: &mut Criterion) {
     }
     group.finish()
 }
-
 
 criterion_group!(
     one_thread,
