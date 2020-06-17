@@ -60,7 +60,7 @@ impl LivenessCounter {
 		let i = self.n-k+1;
 		let tmp1 = (self.m-self.free_counts.get(&i)) * i + self.free_sum.get(&i);
 		let tmp2 = self.alloc_counts.get(&k) * k + self.alloc_sum.get(&self.n) - self.alloc_sum.get(&k);
-		((tmp1 - tmp2 + self.m * k) as f32) / i as f32
+		((tmp1 + self.m * k - tmp2) as f32) / i as f32
 	}
 }
 
