@@ -141,6 +141,7 @@ fn is_power_of_two(x: usize) -> bool {
 }
 
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
+
     if !is_power_of_two(align) {
         return null_mut();
     }
@@ -259,8 +260,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     panic!("Cache didn't fill");
                 }
             }
-            #[cfg(feature = "track_allocation")]
-            {
+
+            #[cfg(feature = "track_allocation")] {
                 let ret = cache.pop_block();
                 let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
                 crate::info_dump::log_malloc(size);
@@ -269,7 +270,26 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 ret
             }
             #[cfg(not(feature = "track_allocation"))]
-            cache.pop_block() // Pops the block from the thread cache bin
+                let ptr = cache.pop_block(); // Pops the block from the thread cache bin
+
+            /* WARNING -- ELIAS CODE -- WARNING */
+
+            set_use_bootstrap(true);
+
+            thread_cache::apf_init.with(|init| {
+                if !*init.borrow() {
+                    thread_cache::init_tuners();
+                    *init.borrow_mut() = true;
+                }
+                thread_cache::apf_tuners.with(|tuners| {
+                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
+                });
+                assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                set_use_bootstrap(false);
+            });
+            assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+
+            ptr
         });
 
         #[cfg(unix)]
@@ -396,6 +416,18 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                         set_use_bootstrap(false)
                     });
                 }
+
+                /* WARNING -- ELIAS CODE -- WARNING */
+
+                // Should always be initialized at this point
+                if thread_cache::apf_init.with(|init| { *init.borrow() }) {
+                    thread_cache::apf_tuners.with(|tuners| {
+                        (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                    });
+                }
+
+                /* END ELIAS CODE */
+
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };

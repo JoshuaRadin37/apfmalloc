@@ -104,9 +104,8 @@ impl ThreadCacheBin {
 
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
-
     let mut used_partial = true;
-    //info!("Attempting to fill a cache");
+
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
@@ -285,10 +284,18 @@ impl Drop for ThreadEmpty {
 }
 // APF Functions
 
-fn check_blocks(i: usize) -> u32 {
+pub fn init_tuners() {
+    apf_tuners.with(|tuners| {
+        for i in 0..MAX_SZ_IDX {
+            (*tuners.borrow_mut()).push(ApfTuner::new(i, check, fetch, ret));
+        }
+    });
+}
+
+fn check(i: usize) -> u32 {
     return thread_cache.with(|tcache| {
         unsafe {
-            return (*tcache.get()).get_mut(i).unwrap().get_block_num();
+            return (*tcache.get()).get(i).unwrap().get_block_num();
         };
     });
 }
@@ -299,26 +306,6 @@ fn fetch(i: usize, c: usize) -> bool {
 
 fn ret(i: usize, c: u32) -> bool {
     return false;
-}
-
-/*
-pub fn init_tuners() {
-    for i in 0..MAX_SZ_IDX {
-        apf_tuner.with(|tuners| {
-            (*tuners.borrow_mut()).get_mut(i).unwrap().set_id(i);
-        });
-    }
-
-}
-
- */
-
-fn check(i: usize) -> u32 {
-    return thread_cache.with(|tcache| {
-        unsafe {
-            return (*tcache.get()).get(i).unwrap().get_block_num();
-        };
-    });
 }
 
 use crate::apf::ApfTuner;
@@ -341,7 +328,8 @@ thread_local! {
     #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 
-    pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(check_blocks, fetch, ret); MAX_SZ_IDX]);
+    // Probably don't want a static lifetime here
+    pub static apf_tuners: RefCell<Vec<ApfTuner<'static>>> = RefCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
 
@@ -352,6 +340,7 @@ mod test {
 
     #[test]
     fn check_bin_consistency() {
-        let _bin = ThreadCacheBin::new();
-    }
+
+	let _bin = ThreadCacheBin::new();
+	}
 }

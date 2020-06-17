@@ -11,42 +11,46 @@ mod trace;
 
 /*
         -- APF Tuner --
-    * One for each thread
+    * One for each size container
     * Call malloc() and free() whenever those operations are performed
 */
-#[derive(Copy, Clone)]
-pub struct ApfTuner {
+#[derive(Debug)]
+pub struct ApfTuner<'a> {
+    id: usize,
     l_counter: LivenessCounter,
-    r_counter: ReuseCounter,
-    trace: Trace,
-    time: u16,
-    fetch_count: u16,
-    dapf: u16,
+    r_counter: ReuseCounter<'a>,
+    trace: Trace<'a>,
+    time: usize,
+    fetch_count: usize,
+    dapf: usize,
     check: fn(usize) -> u32,
     get: fn(usize, usize) -> bool,
     ret: fn(usize, u32) -> bool,
 }
 
-impl ApfTuner {
-    pub fn new(
-        check: fn(usize) -> u32,
-        get: fn(usize, usize) -> bool,
-        ret: fn(usize, u32) -> bool,
-    ) -> ApfTuner {
-        ApfTuner {
+impl ApfTuner<'_> {
+    pub fn new<'a>(id: usize, check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner<'a> {
+        let tuner = ApfTuner {
+            id: id,
             l_counter: LivenessCounter::new(),
-            r_counter: ReuseCounter::new(),
+            r_counter: ReuseCounter::new(REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD),
             trace: Trace::new(),
             time: 0,
             fetch_count: 0,
             dapf: 0,
             check: check,
             get: get,
-            ret: ret,
-        }
+            ret: ret
+        };
+        tuner
+    }
+
+    pub fn set_id(&mut self, id: usize) {
+        self.id = id;
     }
 
     pub fn malloc(&mut self, ptr: *mut u8) -> bool {
+        // dbg!("malloc");
         self.time += 1;
 
         self.l_counter.inc_timer();
@@ -56,7 +60,7 @@ impl ApfTuner {
         self.r_counter.inc_timer();
 
         // If out of free blocks, fetch
-        if (self.check)(0) == 0 {
+        if (self.check)(self.id) == 0 {
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -67,7 +71,7 @@ impl ApfTuner {
                 }
             }
 
-            (self.get)(0, demand.ceil() as usize);
+            (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
         }
         return true;
@@ -78,10 +82,17 @@ impl ApfTuner {
     // Ret function returns number of slots to central reserve
     // Returns true if demand can be calculated (reuse counter has completed a burst), false if not
     pub fn free(&mut self, ptr: *mut u8) -> bool {
-        self.l_counter.free();
+        // dbg!("free");
         self.r_counter.free(ptr as usize);
-        if !USE_ALLOCATION_CLOCK {
+        if !USE_ALLOCATION_CLOCK { 
             self.time += 1;
+            self.l_counter.inc_timer();
+        }
+
+        self.l_counter.free();
+
+        if !USE_ALLOCATION_CLOCK {
+            self.r_counter.inc_timer();
         }
 
         let d = self.demand(self.calculate_dapf().into());
@@ -91,7 +102,7 @@ impl ApfTuner {
         let demand = d.unwrap(); // Safe
 
         // If too many free blocks, return some
-        if (self.check)(0) as f32 >= 2.0 * demand + 1.0 {
+        if (self.check)(self.id) as f32 >= 2.0 * demand + 1.0 {
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -102,7 +113,7 @@ impl ApfTuner {
                 }
             }
 
-            (self.ret)(0, demand.ceil() as u32 + 1);
+            (self.ret)(self.id, demand.ceil() as u32 + 1);
         }
         return true;
     }
@@ -111,11 +122,16 @@ impl ApfTuner {
         self.fetch_count += 1;
     }
 
-    fn calculate_dapf(&self) -> u16 {
-        let mut dapf = TARGET_APF * (self.fetch_count + 1) - self.time;
-        if dapf <= 0 {
+    fn calculate_dapf(&self) -> usize {
+        let dapf;
+
+        if self.time >= TARGET_APF * (self.fetch_count + 1) {
             dapf = TARGET_APF;
         }
+        else {
+            dapf = TARGET_APF * (self.fetch_count + 1) - self.time;
+        }
+        
         dapf
     }
 
