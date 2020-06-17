@@ -1,5 +1,6 @@
 [package]
 name = "lrmalloc-rs-global"
+description = "A package that creates FFI bindings for LRMalloc-rs to C programs"
 version = "0.1.0"
 authors = ["Joshua Radin <jradin16@gmail.com>"]
 edition = "2018"
@@ -12,4 +13,6 @@ crate-type = ["staticlib", "rlib", "dylib"]
 [dependencies]
 lrmalloc-rs = { path = "../"}
 libc = "0.2.71"
+
+[dev-dependencies]
 rand = "0.7.3"

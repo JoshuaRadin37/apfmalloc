@@ -67,7 +67,9 @@ pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
-pub unsafe fn init_malloc() {
+/// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
+/// in the central reserve to be lost
+unsafe fn init_malloc() {
     init_size_class();
 
     S_PAGE_MAP.init();
@@ -86,12 +88,14 @@ pub unsafe fn init_malloc() {
     //info!("Malloc Initialized")
 }
 
+/// Performs an aligned allocation for type `T`. Type `T` must be `Sized`
 pub fn allocate_type<T>() -> *mut T {
     let size = std::mem::size_of::<T>();
     let align = std::mem::align_of::<T>();
     do_aligned_alloc(align, size) as *mut T
 }
 
+/// Allocates a space in memory
 pub fn do_malloc(size: usize) -> *mut u8 {
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
     /*
@@ -312,6 +316,9 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
 }
 
 pub fn do_free<T: ?Sized>(ptr: *const T) {
+    if ptr.is_null() {
+        return;
+    }
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe {
         &mut *match info.get_desc() {

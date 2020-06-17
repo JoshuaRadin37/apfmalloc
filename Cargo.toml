@@ -1,15 +1,19 @@
 [package]
 name = "lrmalloc-rs"
+description = "An implementation of (LRMalloc)[https://github.com/ricleite/lrmalloc], but improved with APF tuning (Li et. al., 2019)"
 version = "0.1.0"
-authors = ["Joshua Radin <jradin16@gmail.com>"]
+authors = ["Joshua Radin <jradin2@u.rochester.edu>",
+            "Elias Neuman-Donihue <eneumand@u.rochester.edu>"]
 edition = "2018"
+license-file = "LICENSE"
+readme = "README.md"
+keywords = ["memory", "allocation"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 default = []
 track_allocation = []
-show_all_allocations = []
 
 [workspace]
 members = [
@@ -21,7 +25,6 @@ opt-level = 0
 
 [dependencies]
 bitfield = "0.13.2"
-lazy_static = "1.4.0"
 crossbeam = "0.7.3"
 memmap = "0.7.0"
 libc = "0.2.71"
@@ -29,14 +32,14 @@ atomic = "0.4.5"
 spin = "0.5.2"
 thread_local = "1.0.1"
 
-
-
-
+# Windows Dependencies
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "winnt", "winerror", "memoryapi"] }
 
+# Benchmark Dependencies
 [dev-dependencies]
 criterion = "0.3"
+
 [[bench]]
 name = "allocating_bench"
 harness = false
