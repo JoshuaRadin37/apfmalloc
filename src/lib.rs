@@ -548,10 +548,12 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn fib_intractable() {
         enum FibTree {
             Val(usize),
             Sum(AutoPtr<FibTree>, AutoPtr<FibTree>),
+
         }
 
         impl FibTree {
