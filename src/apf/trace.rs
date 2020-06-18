@@ -76,7 +76,9 @@ impl<'a> Trace<'a> {
     }
 
     pub fn add(&mut self, add: Event) -> () {
-        self.accesses[self.length] = add;
+        unsafe {
+            (&mut self.accesses[self.length] as *mut Event).write(add);
+        }
         self.length += 1;
         match add {
             Alloc(_) => {
@@ -93,7 +95,10 @@ impl<'a> Trace<'a> {
     // For testing only, I hope
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
         for i in 0..vec.len() {
-            self.accesses[self.length] = vec[i];
+            // self.accesses[self.length] = vec[i];
+            unsafe {
+                (&mut self.accesses[self.length] as *mut Event).write(vec[i]);
+            }
             self.length += 1;
             match vec[i] {
                 Alloc(_) => {
