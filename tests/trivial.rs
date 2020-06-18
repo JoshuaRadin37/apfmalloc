@@ -27,11 +27,12 @@ mod mass_stress {
 
     #[test]
     fn mass_thread_spawn_stress() {
+
         for _j in 0..50 {
             let mut vec = vec![];
             for _ in 0..8 {
                 vec.push(thread::spawn(move || {
-                    do_free(do_malloc(8));
+                    let _i = AutoPtr::new(0usize);
                     //println!("Thread {} says hello", j * 8 + i)
                 }));
             }

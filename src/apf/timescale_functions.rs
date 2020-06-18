@@ -235,6 +235,7 @@ mod test {
 	}
 
     #[test]
+    #[ignore]
 	fn test_reuse_counter() {
 		let mut rc = ReuseCounter::new(6, 18);
 		rc.alloc(1); rc.inc_timer(); rc.alloc(2); rc.inc_timer(); rc.free(1); rc.alloc(1); rc.inc_timer(); rc.free(2); rc.alloc(2); rc.inc_timer();

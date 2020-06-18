@@ -34,7 +34,7 @@ impl SingleAccessInternal {
         F2: FnOnce(),
     {
         if !self.skip {
-            if !self.access.compare_and_swap(false, true, Ordering::Acquire) {
+            if !self.access.compare_and_swap(false, true, Ordering::Release) {
                 func();
                 self.wait = false;
                 self.skip = true;

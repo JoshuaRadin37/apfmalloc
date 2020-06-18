@@ -16,6 +16,9 @@ impl SizeClassData {
 pub static mut SIZE_CLASS_LOOK_UP: [usize; MAX_SZ + 1] = [0; MAX_SZ + 1];
 #[inline]
 pub fn get_size_class(size: usize) -> usize {
+    if size > MAX_SZ {
+        return 0;
+    }
     unsafe {
         // using .clone() just in case
         SIZE_CLASS_LOOK_UP[size].clone()

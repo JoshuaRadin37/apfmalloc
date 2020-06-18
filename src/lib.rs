@@ -323,7 +323,9 @@ pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
         }
     };
     let old_size_class = get_size_class(old_size);
-    if old_size_class == new_size_class {
+    if old_size_class != 0 && old_size_class == new_size_class {
+        return ptr;
+    } else if old_size_class == 0 && new_size_class == 0 && size < old_size {
         return ptr;
     }
 
@@ -551,7 +553,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn fib_intractable() {
         enum FibTree {
             Val(usize),
