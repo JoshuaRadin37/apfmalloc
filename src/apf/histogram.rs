@@ -16,11 +16,34 @@ impl Histogram {
     }
 
     pub fn increment(&mut self, key: usize) -> () {
+        crate::thread_cache::skip_tuners.with(
+            |b| unsafe {
+                *b.get() = true;
+            }
+        );
         *self.histogram.entry(key).or_insert(0) += 1;
+        crate::thread_cache::skip_tuners.with(
+            |b| unsafe {
+                *b.get() = false;
+            }
+        );
     }
 
-    pub fn add(&mut self, key: usize, val: usize) -> () {
+    pub fn add(&mut self, key: usize, val: usize) {
+
+        crate::thread_cache::skip_tuners.with(
+            |b| unsafe {
+                *b.get() = true;
+            }
+        );
+
         *self.histogram.entry(key).or_insert(0) += val;
+
+        crate::thread_cache::skip_tuners.with(
+            |b| unsafe {
+                *b.get() = false;
+            }
+        );
     }
 
     pub fn get(&self, key: &usize) -> usize {

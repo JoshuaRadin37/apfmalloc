@@ -6,7 +6,7 @@ use std::thread;
 use core::sync::atomic::Ordering;
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 
-/*
+
 struct Apf;
 
 unsafe impl GlobalAlloc for Apf {
@@ -22,7 +22,7 @@ unsafe impl GlobalAlloc for Apf {
 #[global_allocator]
 static ALLOCATOR: Apf = Apf;
 
- */
+
 
 #[test]
 fn test_apf_tuning() {
