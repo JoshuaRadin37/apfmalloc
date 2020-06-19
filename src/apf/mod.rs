@@ -74,6 +74,10 @@ impl ApfTuner<'_> {
             (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
         }
+        else {
+            let alt = (self.check)(self.id);
+            let dummy: usize;
+        }
         return true;
     }
 
@@ -114,6 +118,10 @@ impl ApfTuner<'_> {
             }
 
             (self.ret)(self.id, demand.ceil() as u32 + 1);
+        }
+        else {
+            let alt = (self.check)(self.id);
+            let dummy: usize;
         }
         return true;
     }

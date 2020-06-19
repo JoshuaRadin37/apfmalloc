@@ -24,11 +24,14 @@ static ALLOCATOR: Apf = Apf;
 fn test_apf_tuning() {
 	let mut vec = vec![];
 
-	for _i in 0..10 {
+	for i in 0..30 {
 		vec.push(thread::spawn(move || {
 			//println!("Thread {}", &i);
-			let b = Box::new(5);
-			println!("{:?}", b);
+			let mut boxes = Vec::<Box::<usize>>::new();
+			for j in 0..10 {
+				boxes.push(Box::new(j));
+				println!("Thread {} made box {}", i, j);
+			}
 		}));
 	}
 

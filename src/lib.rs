@@ -455,9 +455,9 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
                          */
 
-                        if cache.get_block_num() >= sc.cache_block_num {
+                        /* if cache.get_block_num() >= sc.cache_block_num {
                             flush_cache(size_class_index, cache);
-                        }
+                        } */
 
                         return cache.push_block(ptr as *mut u8);
                     })
