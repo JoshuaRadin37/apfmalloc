@@ -2,7 +2,7 @@ use crate::allocation_data::Anchor;
 
 use crate::alloc::{
     compute_index, get_page_info_for_ptr, heap_push_partial, malloc_from_new_sb,
-    malloc_from_partial, unregister_desc,
+    malloc_from_partial, malloc_count_from_new_sb, malloc_count_from_partial, unregister_desc,
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::MAX_SZ_IDX;
@@ -298,20 +298,45 @@ pub fn init_tuners() {
 
 }
 
-fn check(i: usize) -> u32 {
+fn check(size_class_index: usize) -> u32 {
     return thread_cache.with(|tcache| {
         unsafe {
-            return (*tcache.get()).get(i).unwrap().get_block_num();
+            return (*tcache.get()).get(size_class_index).unwrap().get_block_num();
         };
     });
 }
 
-fn fetch(i: usize, c: usize) -> bool {
+fn fetch(size_class_index: usize, count: usize) -> bool {
+    let cache = &mut thread_cache.with(|tcache| {
+        unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() }
+    });
+
+    let mut block_num = 0;
+
+    // Shouldn't need to loop more than once unless fetching *really* large count
+    while block_num < count
+    {
+        malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
+        if block_num == 0 {
+            malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
+        }
+    }
+
     return false;
 }
 
-fn ret(i: usize, c: u32) -> bool {
-    return false;
+fn ret(size_class_index: usize, count: u32) -> bool {
+    let cache = thread_cache.with(|tcache| {
+        unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() }
+    });
+
+    assert!(count <= cache.get_block_num(), "Trying to pop return more blocks than in cache");
+
+    for _i in 0..count {
+        cache.pop_block();
+    }
+
+    return true;
 }
 
 use crate::apf::ApfTuner;

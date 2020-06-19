@@ -231,6 +231,135 @@ pub fn malloc_from_new_sb(
     *block_num += max_count;
 }
 
+/* WARNING -- ELIAS CODE -- WARNING */
+
+pub fn malloc_count_from_partial(
+    size_class_index: usize,
+    cache: &mut ThreadCacheBin,
+    block_num: &mut usize,
+    count: usize
+) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let desc = heap_pop_partial(heap);
+
+    match desc {
+        None => {
+            return;
+        }
+        Some(desc) => {
+            //info!("Allocating blocks from a partial list...");
+            let old_anchor = desc.anchor.load(Ordering::Acquire);
+            let mut new_anchor: Anchor;
+
+            let max_count = desc.max_count;
+            let block_size = desc.block_size;
+
+            let super_block = desc.super_block;
+
+            let avail = old_anchor.avail() as isize;
+            let new_avail = match avail + (count as isize) < max_count as isize {
+                true => avail + count as isize,
+                false => max_count as isize
+            };
+
+            loop {
+                if old_anchor.state() == SuperBlockState::EMPTY {
+                    //info!("Retiring an empty descriptor");
+                    desc.retire();
+                    return malloc_from_partial(size_class_index, cache, block_num);
+                }
+
+                // debug_assert_eq!(old_anchor.state(), SuperBlockState::PARTIAL);
+                //info!("Found old anchor {:?}", old_anchor);
+                new_anchor = old_anchor;
+                new_anchor.set_count(0);
+                new_anchor.set_avail(new_avail as u64);
+                new_anchor.set_state(SuperBlockState::FULL);
+
+                if desc
+                    .anchor
+                    .compare_exchange(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                avail <= max_count as isize,
+                "Avail: {}, Count {}",
+                avail,
+                max_count
+            );
+
+            let c = new_avail - avail;
+
+            for i in 0..c {
+                let block = unsafe { super_block.offset((avail+i as isize) * block_size as isize ) };
+                cache.push_block(block);
+                *block_num += 1;
+            }            
+        }
+    }
+}
+
+pub fn malloc_count_from_new_sb(
+    size_class_index: usize,
+    cache: &mut ThreadCacheBin,
+    block_num: &mut usize,
+    count: usize
+) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+
+    let desc = unsafe { &mut *Descriptor::alloc() };
+    // debug_assert!(!desc.is_null());
+
+    let block_size = sc.block_size;
+    let max_count = sc.get_block_num();
+
+    desc.proc_heap = heap;
+    desc.block_size = block_size;
+    desc.max_count = max_count as u32;
+    desc.super_block = page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
+
+    let super_block = desc.super_block;
+    for idx in 0..(max_count - 1) {
+        unsafe {
+            let block = super_block.offset((idx * block_size as usize) as isize);
+            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
+            *(block as *mut *mut u8) = next;
+        }
+    }
+
+    // Min of max_count and count
+    let c = match max_count > count {
+        true => count,
+        false => max_count
+    };
+
+    for i in 0..c {
+        let block = unsafe { super_block.offset(i as isize * block_size as isize) };
+        cache.push_block(block);
+        *block_num += 1;
+    }
+
+    let mut anchor: Anchor = Anchor::default();
+    anchor.set_avail(count as u64);
+    anchor.set_count(max_count as u64 - count as u64);
+    anchor.set_state(match max_count > count {
+        true =>  SuperBlockState::PARTIAL,
+        false => SuperBlockState::EMPTY
+    });
+   
+
+    desc.anchor.store(anchor, Ordering::SeqCst);
+
+    register_desc(desc);
+}
+
+/* END ELIAS CODE */
+
 pub fn update_page_map(
     heap: Option<&mut ProcHeap>,
     ptr: *mut u8,
