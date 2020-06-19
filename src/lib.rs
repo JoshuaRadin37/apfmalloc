@@ -297,7 +297,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                         }
                     });
                     thread_cache::skip_tuners.with(|b| unsafe {
-                        if !*b.get() {
+                        if *b.get() == 0 {
                             thread_cache::apf_tuners.with(|tuners| {
                                 (&mut *tuners.get()).get_mut(size_class_index).unwrap().malloc(ptr);
                             });

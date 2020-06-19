@@ -35,6 +35,7 @@ atomic = "0.4.5"
 spin = "0.5.2"
 thread_local = "1.0.1"
 errno = "0.2.5"
+lazy_static = "1.4.0"
 
 # Windows Dependencies
 [target.'cfg(windows)'.dependencies]

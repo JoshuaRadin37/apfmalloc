@@ -72,8 +72,11 @@ fn multi_test_from_bench() {
     let size = 32;
     for t in 0..10 {
         let mut vec = Vec::with_capacity(size);
-        for _ in 0..size {
-            vec.push(thread::spawn(move || AutoPtr::new(3799i16)));
+        for i in 0..size {
+            vec.push(thread::spawn(move || {
+                println!("Thread {} says hello", t*10 + i);
+                AutoPtr::new(3799i16)
+            }));
         }
         for (i, join) in vec.into_iter().enumerate() {
             let _ptr = match join.join() {

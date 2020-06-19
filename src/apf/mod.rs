@@ -1,10 +1,11 @@
 use crate::apf::constants::{
-    REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, TARGET_APF, USE_ALLOCATION_CLOCK,
+    REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK,
 };
 use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
 use crate::apf::trace::Trace;
 
 mod constants;
+pub use constants::TARGET_APF;
 mod histogram;
 mod timescale_functions;
 mod trace;
@@ -128,11 +129,11 @@ impl ApfTuner<'_> {
     fn calculate_dapf(&self) -> usize {
         let dapf;
 
-        if self.time >= TARGET_APF * (self.fetch_count + 1) {
-            dapf = TARGET_APF;
+        if self.time >= *TARGET_APF * (self.fetch_count + 1) {
+            dapf = *TARGET_APF;
         }
         else {
-            dapf = TARGET_APF * (self.fetch_count + 1) - self.time;
+            dapf = *TARGET_APF * (self.fetch_count + 1) - self.time;
         }
         
         dapf
