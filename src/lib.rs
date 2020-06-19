@@ -10,7 +10,7 @@ use crate::page_map::S_PAGE_MAP;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, use_bootstrap};
-use crate::pages::{page_alloc, page_free};
+use crate::pages::{page_alloc, page_free, page_alloc_over_commit};
 use crate::single_access::SingleAccess;
 use crate::thread_cache::{fill_cache, flush_cache};
 use atomic::{Atomic, Ordering};
@@ -121,7 +121,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
         desc.max_count = 1;
-        desc.super_block = page_alloc(pages).expect("Should create");
+        desc.super_block = page_alloc_over_commit(pages).expect("Should create");
 
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
@@ -299,7 +299,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     thread_cache::skip_tuners.with(|b| unsafe {
                         if !*b.get() {
                             thread_cache::apf_tuners.with(|tuners| {
-                                (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
+                                (&mut *tuners.get()).get_mut(size_class_index).unwrap().malloc(ptr);
                             });
                         }
                     });
@@ -347,6 +347,8 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
 
     Ok(desc.block_size)
 }
+
+
 
 pub fn do_free<T: ?Sized>(ptr: *const T) {
     if ptr.is_null() {
@@ -435,7 +437,9 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 // Should always be initialized at this point
                 if thread_cache::apf_init.try_with(|init| { *init.borrow() }).unwrap_or(false){
                     thread_cache::apf_tuners.try_with(|tuners| {
-                        (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                        unsafe {
+                            (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                        }
                     });
                 }
 
@@ -506,6 +510,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn cache_pop_no_fail() {
         const size_class: usize = 16;
         MALLOC_INIT_S.with(|| unsafe { init_malloc() });

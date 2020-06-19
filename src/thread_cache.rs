@@ -287,7 +287,9 @@ impl Drop for ThreadEmpty {
 pub fn init_tuners() {
     apf_tuners.with(|tuners| {
         for i in 0..MAX_SZ_IDX {
-            (*tuners.borrow_mut()).push(ApfTuner::new(i, check, fetch, ret));
+            unsafe {
+                (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret));
+            }
         }
     });
     skip_tuners.with(|b| {
@@ -311,7 +313,7 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
         unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() }
     });
 
-    let mut block_num = 0;
+    let mut block_num = 100.max(count);
 
     // Shouldn't need to loop more than once unless fetching *really* large count
     while block_num < count
@@ -363,7 +365,7 @@ thread_local! {
     pub static skip_tuners: UnsafeCell<bool> = UnsafeCell::new(true);
 
     // Probably don't want a static lifetime here
-    pub static apf_tuners: RefCell<Vec<ApfTuner<'static>>> = RefCell::new(Vec::<ApfTuner>::new());
+    pub static apf_tuners: UnsafeCell<Vec<ApfTuner<'static>>> = UnsafeCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
 

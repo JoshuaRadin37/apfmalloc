@@ -57,10 +57,15 @@ impl LivenessCounter {
 
 	// Evaluates liveness for windows of size k
 	pub fn liveness(&self, k: usize) -> f32 {
-		let i = self.n-k+1;
-		let tmp1 = (self.m-self.free_counts.get(&i)) * i + self.free_sum.get(&i);
-		let tmp2 = self.alloc_counts.get(&k) * k + self.alloc_sum.get(&self.n) - self.alloc_sum.get(&k);
-		((tmp1 + self.m * k - tmp2) as f32) / i as f32
+		let i = self.n as isize-k as isize + 1;
+        if i < 0 {
+            return 0.0;
+        } else {
+            let i = i as usize;
+            let tmp1 = (self.m - self.free_counts.get(&i)) * i + self.free_sum.get(&i);
+            let tmp2 = self.alloc_counts.get(&k) * k + self.alloc_sum.get(&self.n) - self.alloc_sum.get(&k);
+            ((tmp1 + self.m * k - tmp2) as f32) / i as f32
+        }
 	}
 }
 

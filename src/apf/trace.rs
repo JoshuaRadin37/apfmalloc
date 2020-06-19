@@ -26,6 +26,9 @@ impl fmt::Debug for Event {
 }
 
 use crate::apf::trace::Event::*;
+use crate::{do_malloc, do_realloc, do_free};
+use crate::pages::external_mem_reservation::AllocationError;
+use std::ffi::c_void;
 
 // Need trace implementation that doesn't call alloc
 #[derive(Debug)]
@@ -42,7 +45,12 @@ pub struct Trace<'a> {
 */
 impl<'a> Trace<'a> {
     pub fn new() -> Trace<'a> {
-        let page = page_alloc_over_commit(INIT_TRACE_LENGTH);
+        let page = do_malloc(INIT_TRACE_LENGTH);//page_alloc_over_commit(INIT_TRACE_LENGTH);
+        let page = if !page.is_null() {
+            Ok(page)
+        } else {
+            Err(AllocationError::AllocationFailed(INIT_TRACE_LENGTH, errno::errno()))
+        };
         match page {
             Ok(page) => {
                 let ptr = page as *mut Event;
@@ -77,6 +85,31 @@ impl<'a> Trace<'a> {
 
     pub fn add(&mut self, add: Event) -> () {
         unsafe {
+            if self.length == self.accesses.len() - 1 {
+                let new_max = self.accesses.len() * 2;
+                let page = do_realloc(self.accesses.as_mut_ptr() as *mut c_void, new_max) as *mut u8;//page_alloc_over_commit(INIT_TRACE_LENGTH);
+                let page = if !page.is_null() {
+                    Ok(page)
+                } else {
+                    Err(AllocationError::AllocationFailed(INIT_TRACE_LENGTH, errno::errno()))
+                };
+                match page {
+                    Ok(page) => {
+                        let ptr = page as *mut Event;
+                        let accesses = unsafe {
+                            from_raw_parts_mut(
+                                ptr,
+                                new_max // Size?
+                            )
+                        };
+
+                        self.ptr = Some(page);
+                        self.accesses = accesses;
+                    }
+                    Err(e) => panic!("Error initializing trace: {:?}", e)
+
+                }
+            }
             (&mut self.accesses[self.length] as *mut Event).write(add);
         }
         self.length += 1;
@@ -222,6 +255,17 @@ impl<'a> Trace<'a> {
         }
 
         return true;
+    }
+}
+
+impl Drop for Trace<'_> {
+    fn drop(&mut self) {
+        match self.ptr {
+            None => {},
+            Some(ptr) => {
+                do_free(ptr);
+            },
+        }
     }
 }
 

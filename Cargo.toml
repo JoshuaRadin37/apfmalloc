@@ -31,6 +31,7 @@ libc = "0.2.71"
 atomic = "0.4.5"
 spin = "0.5.2"
 thread_local = "1.0.1"
+errno = "0.2.5"
 
 # Windows Dependencies
 [target.'cfg(windows)'.dependencies]

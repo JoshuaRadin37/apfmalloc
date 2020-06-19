@@ -142,7 +142,9 @@ impl ApfTuner<'_> {
     // Returns none if reuse counter has not completed a burst yet
     fn demand(&self, k: usize) -> Option<f32> {
         match self.r_counter.reuse(k) {
-            Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
+            Some(r) => {
+                Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r)
+            },
             None => None,
         }
     }

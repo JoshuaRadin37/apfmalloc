@@ -25,5 +25,6 @@ unsafe impl GlobalAlloc for Dummy {
 
 #[test]
 fn no_std_global_allocator() {
-    let _vec = Vec::<usize>::with_capacity(8);
+    let mut vec = Vec::<usize>::with_capacity(8);
+    vec.push(1)
 }
