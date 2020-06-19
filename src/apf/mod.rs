@@ -112,8 +112,11 @@ impl ApfTuner<'_> {
                     return false;
                 }
             }
-
-            (self.ret)(self.id, demand.ceil() as u32 + 1);
+            if demand < 0.0 {
+                return false;
+            }
+            let ciel = demand.ceil() as u32;
+            (self.ret)(self.id, ciel + 1);
         }
         return true;
     }
