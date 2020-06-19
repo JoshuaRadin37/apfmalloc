@@ -7,6 +7,7 @@ const MAX_ALLOCATION_SIZE: usize = 2048;
 const ALLOCATION_BYTES: usize = 512 / 8;
 
 #[test]
+#[ignore]
 fn allocation_hell() {
     let range = (3..(MAX_ALLOCATION_SIZE as f64).log(2.0) as usize);
     let total_allocations =  (range.end - range.start) * ALLOCATIONS;

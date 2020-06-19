@@ -36,7 +36,8 @@ impl DescriptorNode {
             let pointer = (usize_desc | (count & CACHE_LINE_MASK as u64)) as *mut Descriptor;
             self.desc = pointer;
         } else {
-            panic!("descriptor can not be None");
+            // panic!("descriptor can not be None");
+            self.desc = null_mut();
         }
     }
 
@@ -130,7 +131,7 @@ impl Descriptor {
         let old_head = *avail; //AVAILABLE_DESC.load(Ordering::Acquire);
         loop {
             let desc = old_head.get_desc();
-            return if let None = desc {
+            return if desc.is_none() {
                 let ptr =
                     page_alloc(DESCRIPTOR_BLOCK_SZ).expect("Creating a descriptor block failed");
                 let ret = ptr as *mut MaybeUninit<Descriptor>;
@@ -196,7 +197,14 @@ impl Descriptor {
                 match &mut new_head {
                     None => {}
                     Some(new_head) => {
-                        new_head.set(Some(new_head.get_desc().unwrap()), old_head.get_counter());
+                        match new_head.get_desc() {
+                            Some(desc) => {
+                                new_head.set(Some(desc), old_head.get_counter());
+                            }
+                            None => {
+                                new_head.set(None, old_head.get_counter());
+                            }
+                        }
                     }
                 }
 

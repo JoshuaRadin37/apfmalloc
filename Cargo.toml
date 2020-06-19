@@ -23,6 +23,9 @@ members = [
 [profile.test]
 opt-level = 0
 
+[profile.bench]
+opt-level = 3
+
 [dependencies]
 bitfield = "0.13.2"
 crossbeam = "0.7.3"

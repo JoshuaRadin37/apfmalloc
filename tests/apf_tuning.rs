@@ -31,13 +31,12 @@ fn test_apf_tuning() {
 	for _i in 0..10 {
 		vec.push(thread::spawn(move || {
 			//println!("Thread {}", &i);
-			let b = AutoPtr::new(5);
-			println!("{:?}", b);
+			AutoPtr::new(5)
 		}));
 	}
 
 	for join_handle in vec {
-        join_handle.join().unwrap();
+        println!("{}", join_handle.join().unwrap());
     }
 
     println!("test");

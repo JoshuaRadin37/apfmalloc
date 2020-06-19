@@ -292,6 +292,9 @@ pub fn init_tuners() {
             }
         }
     });
+    apf_init.with(|b| {
+        *b.borrow_mut() = true;
+    });
     skip_tuners.with(|b| {
         unsafe {
             *b.get() = false;

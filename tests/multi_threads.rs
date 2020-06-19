@@ -79,7 +79,7 @@ fn multi_test_from_bench() {
             let _ptr = match join.join() {
                 Ok(_) => {}
                 Err(e) => {
-                    panic!(e);
+                    panic!("{}", e.downcast_ref::<&'static str>().unwrap());
                 }
             };
         }
