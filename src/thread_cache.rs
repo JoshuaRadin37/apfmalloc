@@ -290,6 +290,12 @@ pub fn init_tuners() {
             (*tuners.borrow_mut()).push(ApfTuner::new(i, check, fetch, ret));
         }
     });
+    skip_tuners.with(|b| {
+        unsafe {
+            *b.get() = false;
+        }
+    })
+
 }
 
 fn check(i: usize) -> u32 {
@@ -327,6 +333,9 @@ thread_local! {
 
     #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
+
+    #[cfg(unix)]
+    pub static skip_tuners: UnsafeCell<bool> = UnsafeCell::new(true);
 
     // Probably don't want a static lifetime here
     pub static apf_tuners: RefCell<Vec<ApfTuner<'static>>> = RefCell::new(Vec::<ApfTuner>::new());

@@ -289,16 +289,20 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                                     thread_cache::init_tuners();
                                     *init.borrow_mut() = true;
                                 }
-                                thread_cache::apf_tuners.with(|tuners| {
-                                    (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
-                                });
                                 assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
-                                set_use_bootstrap(false);
+                                // set_use_bootstrap(false);
                             });
                             assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
                             let _ = thread_cache::thread_init.with(|_| ());
                         }
-                    })
+                    });
+                    thread_cache::skip_tuners.with(|b| unsafe {
+                        if !*b.get() {
+                            thread_cache::apf_tuners.with(|tuners| {
+                                (*tuners.borrow_mut()).get_mut(size_class_index).unwrap().malloc(ptr);
+                            });
+                        }
+                    });
                 }
 
             //set_use_bootstrap(true);
