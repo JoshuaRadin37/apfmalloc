@@ -334,8 +334,10 @@ pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     }
 
     let ret = do_malloc(size) as *mut c_void;
-    unsafe {
-        libc::memcpy(ret, ptr, old_size);
+    if !ret.is_null() {
+        unsafe {
+            libc::memcpy(ret, ptr, old_size);
+        }
     }
     do_free(ptr);
     ret
