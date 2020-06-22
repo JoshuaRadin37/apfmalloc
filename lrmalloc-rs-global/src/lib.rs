@@ -3,10 +3,6 @@ extern crate lrmalloc_rs;
 use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
 use std::os::raw::c_void;
 
-use lrmalloc_rs::mem_info::{align_val, PAGE};
-use std::mem::size_of;
-use std::cmp::min;
-
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.
 ///
 /// Only works after `malloc` has been called at least once.
@@ -133,6 +129,8 @@ pub extern "C" fn check_override() -> bool {
 }
 
 #[cfg(not(feature = "no-rust-global"))] use std::alloc::{GlobalAlloc, Layout};
+#[cfg(not(feature = "no-rust-global"))] use lrmalloc_rs::mem_info::align_val;
+
 /// Allows Rust to use aligned allocation instead of using malloc when calling alloc, as alignment data would be lost. This is important
 /// for creating the internal structures of the allocator
 #[cfg(not(feature = "no-rust-global"))]
