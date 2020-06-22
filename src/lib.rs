@@ -55,7 +55,7 @@ pub mod ptr {
     rc;
 }
 
-mod apf;
+pub mod apf;
 
 #[macro_use]
 extern crate bitfield;
@@ -70,6 +70,8 @@ pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
+
+static USE_APF: bool = true;
 
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
@@ -285,29 +287,31 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             #[cfg(unix)]
                 {
-                    thread_cache::skip.with(|b| unsafe {
-                        if !*b.get() {
-                            let mut skip = b.get();
-                            *skip = true;
-                            thread_cache::apf_init.with(|init| {
-                                if !*init.borrow() {
-                                    thread_cache::init_tuners();
-                                    *init.borrow_mut() = true;
-                                }
+                    if USE_APF {
+                        thread_cache::skip.with(|b| unsafe {
+                            if !*b.get() {
+                                let mut skip = b.get();
+                                *skip = true;
+                                thread_cache::apf_init.with(|init| {
+                                    if !*init.borrow() {
+                                        thread_cache::init_tuners();
+                                        *init.borrow_mut() = true;
+                                    }
+                                    assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                                    // set_use_bootstrap(false);
+                                });
                                 assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
-                                // set_use_bootstrap(false);
-                            });
-                            assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
-                            let _ = thread_cache::thread_init.with(|_| ());
-                        }
-                    });
-                    thread_cache::skip_tuners.with(|b| unsafe {
-                        if *b.get() == 0 {
-                            thread_cache::apf_tuners.with(|tuners| {
-                                (&mut *tuners.get()).get_mut(size_class_index).unwrap().malloc(ptr);
-                            });
-                        }
-                    });
+                                let _ = thread_cache::thread_init.with(|_| ());
+                            }
+                        });
+                        thread_cache::skip_tuners.with(|b| unsafe {
+                            if *b.get() == 0 {
+                                thread_cache::apf_tuners.with(|tuners| {
+                                    (&mut *tuners.get()).get_mut(size_class_index).unwrap().malloc(ptr);
+                                });
+                            }
+                        });
+                    }
                 }
 
             //set_use_bootstrap(true);
@@ -442,12 +446,14 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 /* WARNING -- ELIAS CODE -- WARNING */
 
                 // Should always be initialized at this point
-                if thread_cache::apf_init.try_with(|init| { *init.borrow() }).unwrap_or(false){
-                    thread_cache::apf_tuners.try_with(|tuners| {
-                        unsafe {
-                            (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
-                        }
-                    });
+                if USE_APF {
+                    if thread_cache::apf_init.try_with(|init| { *init.borrow() }).unwrap_or(false){
+                        thread_cache::apf_tuners.try_with(|tuners| {
+                            unsafe {
+                                (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                            }
+                        });
+                    }
                 }
 
                 /* END ELIAS CODE */

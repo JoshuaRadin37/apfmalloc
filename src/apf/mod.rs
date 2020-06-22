@@ -6,9 +6,9 @@ use crate::apf::trace::Trace;
 
 mod constants;
 pub use constants::TARGET_APF;
-mod histogram;
+pub mod histogram;
 mod timescale_functions;
-mod trace;
+pub mod trace;
 
 /*
         -- APF Tuner --
