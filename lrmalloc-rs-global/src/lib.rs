@@ -1,6 +1,6 @@
 extern crate lrmalloc_rs;
 
-use lrmalloc_rs::{do_aligned_alloc, do_free, do_realloc, do_malloc};
+use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
 use std::os::raw::c_void;
 
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.

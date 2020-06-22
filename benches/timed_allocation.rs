@@ -1,10 +1,10 @@
 use benchmarking_tools::*;
-use criterion::{Criterion, criterion_group, criterion_main, Throughput, BenchmarkId};
+use criterion::measurement::Measurement;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-use std::time::{Instant, Duration};
-use criterion::measurement::Measurement;
+use std::time::{Duration, Instant};
 
 fn set_measurement() -> Criterion<BytesAllocated> {
     Criterion::default().with_measurement(BytesAllocated)
@@ -27,12 +27,10 @@ fn allocate_for_10_sec(c: &mut Criterion<BytesAllocated>) {
                     for _ in 0..size {
                         let b = bytes_allocated.clone();
                         vec.push(thread::spawn(move || {
-
                             let mut temp = Vec::with_capacity(10000);
 
                             let start = Instant::now();
                             while start.elapsed().as_secs() < 10 {
-
                                 temp.push(AutoPtr::new(0usize));
                                 let mut guard = b.lock().unwrap();
                                 *guard += 8;
@@ -63,12 +61,10 @@ fn allocate_for_10_sec(c: &mut Criterion<BytesAllocated>) {
                         let clone = ptrs.clone();
                         let b = bytes_allocated.clone();
                         vec.push(thread::spawn(move || {
-
                             let mut temp = Vec::with_capacity(10000);
 
                             let start = Instant::now();
                             while start.elapsed().as_secs() < 10 {
-
                                 temp.push(Box::new(0usize));
                                 let mut guard = b.lock().unwrap();
                                 *guard += 8;

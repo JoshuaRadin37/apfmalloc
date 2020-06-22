@@ -28,7 +28,6 @@ mod mass_stress {
 
     #[test]
     fn mass_thread_spawn_stress() {
-
         for _j in 0..50 {
             let mut vec = vec![];
             for _ in 0..8 {
@@ -41,14 +40,14 @@ mod mass_stress {
                 match join.join() {
                     Ok(val) => {
                         assert_eq!(val, 0xdeadbeaf);
-                    },
+                    }
                     Err(e) => {
                         if let Some(e) = e.downcast_ref::<&'static str>() {
                             panic!("Received error: {}", e);
                         } else {
                             panic!("Received unknown error: {:?}", e);
                         }
-                    },
+                    }
                 }
             }
         }

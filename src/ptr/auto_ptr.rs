@@ -1,6 +1,6 @@
 use crate::{do_aligned_alloc, do_free};
-use std::fmt::{Debug, Display};
 use std::fmt::Formatter;
+use std::fmt::{Debug, Display};
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -100,13 +100,13 @@ impl<T: Debug> Debug for AutoPtr<T> {
     }
 }
 
-impl<T : Display> Display for AutoPtr<T> {
+impl<T: Display> Display for AutoPtr<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.deref().fmt(f)
     }
 }
 
-impl <T : Clone> Clone for AutoPtr<T> {
+impl<T: Clone> Clone for AutoPtr<T> {
     fn clone(&self) -> Self {
         let data = self.deref();
         let clone = data.clone();
@@ -116,9 +116,9 @@ impl <T : Clone> Clone for AutoPtr<T> {
 
 #[cfg(test)]
 mod test {
+    use crate::ptr::auto_ptr::AutoPtr;
     use crate::{allocate_type, do_free};
     use std::fmt::{Debug, Display};
-    use crate::ptr::auto_ptr::AutoPtr;
 
     #[test]
     fn normal_ptr() {

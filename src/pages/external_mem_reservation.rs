@@ -17,13 +17,13 @@ use winapi::{
 };
 
 use crate::no_heap_mutex::NoHeapMutex;
+use crate::pages::external_mem_reservation::AllocationError::AllocationFailed;
+use errno::Errno;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
 #[cfg(windows)]
 use winapi::shared::minwindef::LPVOID;
-use crate::pages::external_mem_reservation::AllocationError::AllocationFailed;
-use errno::Errno;
 
 #[derive(Debug)]
 pub struct Segment {

@@ -1,24 +1,22 @@
-use std::collections::{VecDeque, HashMap, LinkedList};
-use std::sync::{Arc, RwLock};
+use core::ops::DerefMut;
+use std::collections::{HashMap, LinkedList, VecDeque};
 use std::hash::Hash;
 use std::ops::Deref;
-use core::ops::DerefMut;
 use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 extern crate lrmalloc_rs_global;
 
-
-struct HashedStack<T, H : Hash + Eq = T> {
+struct HashedStack<T, H: Hash + Eq = T> {
     stack: VecDeque<T>,
-    map: HashMap<H, usize>
+    map: HashMap<H, usize>,
 }
 
 impl<T, H: Hash + Eq> HashedStack<T, H> {
-    
     pub fn new() -> Self {
         Self {
             stack: Default::default(),
-            map: Default::default()
+            map: Default::default(),
         }
     }
 
@@ -37,9 +35,7 @@ impl<T, H: Hash + Eq> HashedStack<T, H> {
     }
 
     pub fn remove(&mut self, hash: &H) -> Option<T> {
-        let pos = {
-            *&self.map[hash]
-        };
+        let pos = { *&self.map[hash] };
         self.map.remove(hash);
         self.stack.remove(pos)
     }
@@ -47,13 +43,11 @@ impl<T, H: Hash + Eq> HashedStack<T, H> {
     pub fn len(&self) -> usize {
         self.stack.len()
     }
-
 }
 
 pub type SelfHashedStack<T> = HashedStack<T, T>;
 
-impl <T : Hash + Eq + Clone> SelfHashedStack<T> {
-
+impl<T: Hash + Eq + Clone> SelfHashedStack<T> {
     pub fn push(&mut self, val: T) {
         self.push_hashed(val.clone(), val)
     }
@@ -69,8 +63,4 @@ fn main() {
     assert_eq!(hashed_stack.len(), 1);
     assert_eq!(hashed_stack.pop(), Some("World"));
     assert_eq!(hashed_stack.pop(), None);
-
-
-
-
 }

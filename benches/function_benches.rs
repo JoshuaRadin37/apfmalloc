@@ -30,10 +30,5 @@ fn desc_alloc(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    functions,
-    page_alloc_bench,
-    desc_alloc,
-    thread_cache_fill
-);
+criterion_group!(functions, page_alloc_bench, desc_alloc, thread_cache_fill);
 criterion_main!(functions);

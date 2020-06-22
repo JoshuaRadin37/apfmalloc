@@ -1,9 +1,9 @@
-use crate::pages::page_alloc_over_commit;
 use crate::apf::constants::INIT_TRACE_LENGTH;
+use crate::pages::page_alloc_over_commit;
 use atomic::Atomic;
-use std::slice::from_raw_parts_mut;
 use std::collections::HashMap;
 use std::fmt;
+use std::slice::from_raw_parts_mut;
 use std::vec::Vec;
 
 /*
@@ -26,8 +26,8 @@ impl fmt::Debug for Event {
 }
 
 use crate::apf::trace::Event::*;
-use crate::{do_malloc, do_realloc, do_free, allocate_type};
 use crate::pages::external_mem_reservation::AllocationError;
+use crate::{allocate_type, do_free, do_malloc, do_realloc};
 use std::ffi::c_void;
 use std::mem::size_of;
 
@@ -46,11 +46,14 @@ pub struct Trace<'a> {
 */
 impl<'a> Trace<'a> {
     pub fn new() -> Trace<'a> {
-        let page = allocate_type::<[Event; INIT_TRACE_LENGTH]>() as * mut Event as *mut u8; //;do_malloc(INIT_TRACE_LENGTH * size_of::<Event>);//page_alloc_over_commit(INIT_TRACE_LENGTH);
+        let page = allocate_type::<[Event; INIT_TRACE_LENGTH]>() as *mut Event as *mut u8; //;do_malloc(INIT_TRACE_LENGTH * size_of::<Event>);//page_alloc_over_commit(INIT_TRACE_LENGTH);
         let page = if !page.is_null() {
             Ok(page)
         } else {
-            Err(AllocationError::AllocationFailed(INIT_TRACE_LENGTH, errno::errno()))
+            Err(AllocationError::AllocationFailed(
+                INIT_TRACE_LENGTH,
+                errno::errno(),
+            ))
         };
         match page {
             Ok(page) => {
@@ -58,7 +61,7 @@ impl<'a> Trace<'a> {
                 let accesses = unsafe {
                     from_raw_parts_mut(
                         ptr,
-                        INIT_TRACE_LENGTH // Size?
+                        INIT_TRACE_LENGTH, // Size?
                     )
                 };
 
@@ -69,11 +72,8 @@ impl<'a> Trace<'a> {
                     alloc_count: 0,
                 }
             }
-            Err(e) => panic!("Error initializing trace: {:?}", e)
-
+            Err(e) => panic!("Error initializing trace: {:?}", e),
         }
-
-       
     }
 
     pub fn length(&self) -> usize {
@@ -88,7 +88,10 @@ impl<'a> Trace<'a> {
         unsafe {
             if self.length == self.accesses.len() - 1 {
                 let new_max = self.accesses.len() * 2;
-                let page = do_realloc(self.accesses.as_mut_ptr() as *mut c_void, new_max * size_of::<Event>()) as *mut u8;//page_alloc_over_commit(INIT_TRACE_LENGTH);
+                let page = do_realloc(
+                    self.accesses.as_mut_ptr() as *mut c_void,
+                    new_max * size_of::<Event>(),
+                ) as *mut u8; //page_alloc_over_commit(INIT_TRACE_LENGTH);
                 let page = if !page.is_null() {
                     Ok(page)
                 } else {
@@ -99,16 +102,14 @@ impl<'a> Trace<'a> {
                         let ptr = page as *mut Event;
                         let accesses = unsafe {
                             from_raw_parts_mut(
-                                ptr,
-                                new_max // Size?
+                                ptr, new_max, // Size?
                             )
                         };
 
                         self.ptr = Some(page);
                         self.accesses = accesses;
                     }
-                    Err(e) => panic!("Error initializing trace: {:?}", e)
-
+                    Err(e) => panic!("Error initializing trace: {:?}", e),
                 }
             }
             (&mut self.accesses[self.length] as *mut Event).write(add);
@@ -265,10 +266,10 @@ impl<'a> Trace<'a> {
 impl Drop for Trace<'_> {
     fn drop(&mut self) {
         match self.ptr {
-            None => {},
+            None => {}
             Some(ptr) => {
                 do_free(ptr);
-            },
+            }
         }
     }
 }

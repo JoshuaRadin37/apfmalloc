@@ -25,8 +25,6 @@ unsafe impl GlobalAlloc for Dummy {
     }
 }
 
-
-
 #[test]
 fn test_multiple_threads() {
     let mut vec = vec![];
@@ -74,7 +72,7 @@ fn multi_test_from_bench() {
         let mut vec = Vec::with_capacity(size);
         for i in 0..size {
             vec.push(thread::spawn(move || {
-                println!("Thread {} says hello", t*10 + i);
+                println!("Thread {} says hello", t * 10 + i);
                 AutoPtr::new(3799i16)
             }));
         }
