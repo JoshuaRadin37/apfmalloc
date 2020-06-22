@@ -7,7 +7,7 @@ use crate::apf::trace::Trace;
 mod constants;
 pub use constants::TARGET_APF;
 pub mod histogram;
-mod timescale_functions;
+pub mod timescale_functions;
 pub mod trace;
 
 /*
