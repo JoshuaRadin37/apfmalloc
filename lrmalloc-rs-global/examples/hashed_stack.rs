@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 
 extern crate lrmalloc_rs_global;
 
-struct HashedStack<T, H: Hash + Eq = T> {
+pub struct HashedStack<T, H: Hash + Eq = T> {
     stack: VecDeque<T>,
     map: HashMap<H, usize>,
 }
@@ -55,12 +55,14 @@ impl<T: Hash + Eq + Clone> SelfHashedStack<T> {
 
 fn main() {
     let mut hashed_stack = HashedStack::new();
+    hashed_stack.push("w00t");
     hashed_stack.push("Hello");
     hashed_stack.push("World");
 
     let value = hashed_stack.remove(&"Hello").unwrap();
     assert_eq!(value, "Hello");
-    assert_eq!(hashed_stack.len(), 1);
+    assert_eq!(hashed_stack.len(), 2);
     assert_eq!(hashed_stack.pop(), Some("World"));
-    assert_eq!(hashed_stack.pop(), None);
+    assert_eq!(hashed_stack.pop(), Some("w00t"));
+    assert_eq!(hashed_stack.peak(), None);
 }

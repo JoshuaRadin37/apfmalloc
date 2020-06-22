@@ -108,6 +108,7 @@ pub fn allocate_val<T>(val: T) -> *mut T {
 
 /// Allocates a space in memory
 pub fn do_malloc(size: usize) -> *mut u8 {
+
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
     /*
     unsafe {
@@ -170,12 +171,14 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
         let pages = page_ceiling!(size);
 
-        let desc = unsafe { &mut *Descriptor::alloc() };
-
         let mut ptr = match page_alloc(pages) {
             Ok(ptr) => ptr,
-            Err(_) => null_mut(),
+            Err(_) => {
+                return null_mut();
+            },
         };
+
+        let desc = unsafe { &mut *Descriptor::alloc() };
 
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
@@ -196,6 +199,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         }
 
         return ptr;
+
     }
 
     let size_class_index = get_size_class(size);
@@ -228,31 +232,31 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
         }
          */
         #[cfg(debug_assertions)]
-        unsafe {
+            unsafe {
             IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
         }
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
         #[cfg(not(unix))]
-        {
-            set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
-                                     //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
-            thread_cache::thread_init.with(|val| {
-                // if not initalized, it goes back
-                if !*val.borrow() {
-                    // the default value of the val is false, which means that the thread cache has not been created yet
-                    thread_cache::thread_cache.with(|tcache| {
-                        // This causes another allocation, hopefully with bootstrap
-                        let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
-                    }); // it repeatedly sets it false, eventually, it will allocate
-                    *val.borrow_mut() = true; // Never has to repeat this code after this
-                }
-                set_use_bootstrap(false) // Turns off the bootstrap
-            });
-        }
+            {
+                set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+                //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
+                thread_cache::thread_init.with(|val| {
+                    // if not initalized, it goes back
+                    if !*val.borrow() {
+                        // the default value of the val is false, which means that the thread cache has not been created yet
+                        thread_cache::thread_cache.with(|tcache| {
+                            // This causes another allocation, hopefully with bootstrap
+                            let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
+                        }); // it repeatedly sets it false, eventually, it will allocate
+                        *val.borrow_mut() = true; // Never has to repeat this code after this
+                    }
+                    set_use_bootstrap(false) // Turns off the bootstrap
+                });
+            }
 
         #[cfg(debug_assertions)]
-        unsafe {
+            unsafe {
             IN_CACHE.fetch_add(size, Ordering::AcqRel);
         }
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
@@ -268,51 +272,51 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 }
             }
             #[cfg(feature = "track_allocation")]
-            {
-                let ret = cache.pop_block();
-                let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
-                crate::info_dump::log_malloc(size);
-                #[cfg(feature = "show_all_allocations")]
-                dump_info!();
-                ret
-            }
+                {
+                    let ret = cache.pop_block();
+                    let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
+                    crate::info_dump::log_malloc(size);
+                    #[cfg(feature = "show_all_allocations")]
+                    dump_info!();
+                    ret
+                }
             #[cfg(not(feature = "track_allocation"))]
-            let ptr = cache.pop_block(); // Pops the block from the thread cache bin
+                let ptr = cache.pop_block(); // Pops the block from the thread cache bin
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
             #[cfg(unix)]
-            {
-                thread_cache::skip.with(|b| unsafe {
-                    if !*b.get() {
-                        let mut skip = b.get();
-                        *skip = true;
-                        thread_cache::apf_init.with(|init| {
-                            if !*init.borrow() {
-                                thread_cache::init_tuners();
-                                *init.borrow_mut() = true;
-                            }
-                            assert_eq!(
-                                thread_cache::apf_init.with(|init| { *init.borrow() }),
-                                true
-                            );
-                            // set_use_bootstrap(false);
-                        });
-                        assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
-                        let _ = thread_cache::thread_init.with(|_| ());
-                    }
-                });
-                thread_cache::skip_tuners.with(|b| unsafe {
-                    if *b.get() == 0 {
-                        thread_cache::apf_tuners.with(|tuners| {
-                            (&mut *tuners.get())
-                                .get_mut(size_class_index)
-                                .unwrap()
-                                .malloc(ptr);
-                        });
-                    }
-                });
-            }
+                {
+                    thread_cache::skip.with(|b| unsafe {
+                        if !*b.get() {
+                            let mut skip = b.get();
+                            *skip = true;
+                            thread_cache::apf_init.with(|init| {
+                                if !*init.borrow() {
+                                    thread_cache::init_tuners();
+                                    *init.borrow_mut() = true;
+                                }
+                                assert_eq!(
+                                    thread_cache::apf_init.with(|init| { *init.borrow() }),
+                                    true
+                                );
+                                // set_use_bootstrap(false);
+                            });
+                            assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
+                            let _ = thread_cache::thread_init.with(|_| ());
+                        }
+                    });
+                    thread_cache::skip_tuners.with(|b| unsafe {
+                        if *b.get() == 0 {
+                            thread_cache::apf_tuners.with(|tuners| {
+                                (&mut *tuners.get())
+                                    .get_mut(size_class_index)
+                                    .unwrap()
+                                    .malloc(ptr);
+                            });
+                        }
+                    });
+                }
 
             //set_use_bootstrap(true);
 
@@ -367,7 +371,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
                 return; // todo: Band-aid fix
-                        // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
         }
     };
@@ -397,13 +401,13 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
                 || use_bootstrap()
                 || (!cfg!(unix)
-                    && match thread_cache::thread_init.try_with(|_| {}) {
-                        Ok(_) => false,
-                        Err(_) => true,
-                    });
+                && match thread_cache::thread_init.try_with(|_| {}) {
+                Ok(_) => false,
+                Err(_) => true,
+            });
             // todo: remove true
             #[cfg(feature = "track_allocation")]
-            crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+                crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
             dump_info!();
 
@@ -424,18 +428,18 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 }
             } else {
                 #[cfg(not(unix))]
-                {
-                    set_use_bootstrap(true);
-                    thread_cache::thread_init.with(|val| {
-                        if !*val.borrow() {
-                            thread_cache::thread_cache.with(|tcache| {
-                                let _tcache = tcache;
-                            });
-                            *val.borrow_mut() = true;
-                        }
-                        set_use_bootstrap(false)
-                    });
-                }
+                    {
+                        set_use_bootstrap(true);
+                        thread_cache::thread_init.with(|val| {
+                            if !*val.borrow() {
+                                thread_cache::thread_cache.with(|tcache| {
+                                    let _tcache = tcache;
+                                });
+                                *val.borrow_mut() = true;
+                            }
+                            set_use_bootstrap(false)
+                        });
+                    }
 
                 /* WARNING -- ELIAS CODE -- WARNING */
 

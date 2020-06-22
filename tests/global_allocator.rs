@@ -2,6 +2,7 @@ use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc};
 use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
 use std::thread;
+use std::collections::HashMap;
 
 struct Dummy;
 
@@ -24,6 +25,11 @@ unsafe impl GlobalAlloc for Dummy {
 #[test]
 fn global_allocator() {
     let mut vec: Vec<_> = (0..100).collect::<Vec<usize>>();
+
+    let mut tuple = HashMap::new();
+    *tuple.entry(0).or_insert(1) += 1;
+    tuple.insert(1, 5);
+    tuple.insert(3, 7);
 
     for i in 0usize..100 {
         assert_eq!(i, vec[i])
