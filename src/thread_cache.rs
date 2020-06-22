@@ -285,10 +285,20 @@ impl Drop for ThreadEmpty {
 // APF Functions
 
 pub fn init_tuners() {
-    apf_tuners.with(|tuners| {
-        for i in 0..MAX_SZ_IDX {
-            (*tuners.borrow_mut()).push(ApfTuner::new(i, check, fetch, ret));
-        }
+    no_tuning(|| {
+        apf_tuners.with(|tuners| {
+            for i in 0..MAX_SZ_IDX {
+                unsafe {
+                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret));
+                }
+            }
+        });
+        apf_init.with(|b| {
+            *b.borrow_mut() = true;
+        });
+        skip_tuners.with(|s| unsafe {
+            *s.get() = 0;
+        })
     });
 }
 
@@ -305,7 +315,7 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
         unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() }
     });
 
-    let mut block_num = 0;
+    let mut block_num = 100.max(count);
 
     
     malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
@@ -353,10 +363,32 @@ thread_local! {
     #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 
+    #[cfg(unix)]
+    pub static skip_tuners: UnsafeCell<usize> = UnsafeCell::new(1);
+
     // Probably don't want a static lifetime here
-    pub static apf_tuners: RefCell<Vec<ApfTuner<'static>>> = RefCell::new(Vec::<ApfTuner>::new());
+    pub static apf_tuners: UnsafeCell<Vec<ApfTuner<'static>>> = UnsafeCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
 }
+
+#[inline]
+pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
+    crate::thread_cache::skip_tuners.with(
+        |b| unsafe {
+            *b.get() += 1;
+        }
+    );
+    let ret = func();
+    crate::thread_cache::skip_tuners.with(
+        |b| unsafe {
+            if *b.get() > 0 {
+                *b.get() -= 1;
+            }
+        }
+    );
+    ret
+}
+
 
 #[cfg(test)]
 mod test {

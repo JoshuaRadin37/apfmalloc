@@ -17,11 +17,15 @@ track_allocation = []
 
 [workspace]
 members = [
-    "lrmalloc-rs-global"
+    "lrmalloc-rs-global",
+    "benchmarking-tools"
 ]
 
 [profile.test]
 opt-level = 0
+
+[profile.bench]
+opt-level = 3
 
 [dependencies]
 bitfield = "0.13.2"
@@ -31,6 +35,8 @@ libc = "0.2.71"
 atomic = "0.4.5"
 spin = "0.5.2"
 thread_local = "1.0.1"
+errno = "0.2.5"
+lazy_static = "1.4.0"
 
 # Windows Dependencies
 [target.'cfg(windows)'.dependencies]
@@ -39,6 +45,7 @@ winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "w
 # Benchmark Dependencies
 [dev-dependencies]
 criterion = "0.3"
+benchmarking-tools = { path = "benchmarking-tools"}
 
 [[bench]]
 name = "allocating_bench"
@@ -47,6 +54,10 @@ harness = false
 # [[bench]]
 # name = "function_benches"
 # harness = false
+
+[[bench]]
+name = "timed_allocation"
+harness = false
 
 
 [[bench]]

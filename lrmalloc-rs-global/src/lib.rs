@@ -1,4 +1,6 @@
-use lrmalloc_rs::{do_aligned_alloc, do_free, do_realloc};
+extern crate lrmalloc_rs;
+
+use lrmalloc_rs::{do_aligned_alloc, do_free, do_realloc, do_malloc};
 use std::os::raw::c_void;
 
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.
@@ -32,7 +34,7 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_MALLOC = true;
     }
-    do_aligned_alloc(8, size) as *mut c_void
+    do_malloc(size) as *mut c_void
 }
 
 /// Allocates memory for an array of num objects of size and initializes all bytes in the allocated storage to zero.

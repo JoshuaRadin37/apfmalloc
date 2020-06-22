@@ -22,6 +22,8 @@ use std::fmt::Formatter;
 use std::ptr::null_mut;
 #[cfg(windows)]
 use winapi::shared::minwindef::LPVOID;
+use crate::pages::external_mem_reservation::AllocationError::AllocationFailed;
+use errno::Errno;
 
 #[derive(Debug)]
 pub struct Segment {
@@ -60,8 +62,7 @@ pub enum AllocationError {
     NoHeap,
     #[cfg(windows)]
     HeapNotCreated(usize),
-    #[cfg(windows)]
-    AllocationFailed(usize),
+    AllocationFailed(usize, Errno),
 }
 
 impl Display for AllocationError {
@@ -188,7 +189,11 @@ impl SegAllocator for SegmentAllocator {
                 0,
             )
         };
-        Ok(Segment::new(mmap, size))
+        if mmap as usize == std::usize::MAX {
+            Err(AllocationFailed(size, errno::errno()))
+        } else {
+            Ok(Segment::new(mmap, size))
+        }
     }
 
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
@@ -202,7 +207,12 @@ impl SegAllocator for SegmentAllocator {
                 0,
             )
         };
-        Ok(Segment::new(mmap, size))
+
+        if mmap == libc::MAP_FAILED {
+            Err(AllocationFailed(size, errno::errno()))
+        } else {
+            Ok(Segment::new(mmap, size))
+        }
     }
 
     fn deallocate(&self, segment: Segment) -> bool {

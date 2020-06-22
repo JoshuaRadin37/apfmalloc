@@ -24,19 +24,32 @@ fn create_and_destroy() {
 mod mass_stress {
     use super::*;
     use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+    use std::thread::Result;
 
     #[test]
     fn mass_thread_spawn_stress() {
+
         for _j in 0..50 {
             let mut vec = vec![];
             for _ in 0..8 {
                 vec.push(thread::spawn(move || {
-                    do_free(do_malloc(8));
-                    //println!("Thread {} says hello", j * 8 + i)
+                    let i = AutoPtr::new(0xdeadbeafusize);
+                    *i
                 }));
             }
             for join in vec {
-                join.join().unwrap();
+                match join.join() {
+                    Ok(val) => {
+                        assert_eq!(val, 0xdeadbeaf);
+                    },
+                    Err(e) => {
+                        if let Some(e) = e.downcast_ref::<&'static str>() {
+                            panic!("Received error: {}", e);
+                        } else {
+                            panic!("Received unknown error: {:?}", e);
+                        }
+                    },
+                }
             }
         }
     }

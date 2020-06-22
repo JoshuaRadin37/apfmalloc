@@ -26,6 +26,10 @@ impl fmt::Debug for Event {
 }
 
 use crate::apf::trace::Event::*;
+use crate::{do_malloc, do_realloc, do_free, allocate_type};
+use crate::pages::external_mem_reservation::AllocationError;
+use std::ffi::c_void;
+use std::mem::size_of;
 
 // Need trace implementation that doesn't call alloc
 #[derive(Debug)]
@@ -42,7 +46,12 @@ pub struct Trace<'a> {
 */
 impl<'a> Trace<'a> {
     pub fn new() -> Trace<'a> {
-        let page = page_alloc_over_commit(INIT_TRACE_LENGTH);
+        let page = allocate_type::<[Event; INIT_TRACE_LENGTH]>() as * mut Event as *mut u8; //;do_malloc(INIT_TRACE_LENGTH * size_of::<Event>);//page_alloc_over_commit(INIT_TRACE_LENGTH);
+        let page = if !page.is_null() {
+            Ok(page)
+        } else {
+            Err(AllocationError::AllocationFailed(INIT_TRACE_LENGTH, errno::errno()))
+        };
         match page {
             Ok(page) => {
                 let ptr = page as *mut Event;
@@ -76,7 +85,34 @@ impl<'a> Trace<'a> {
     }
 
     pub fn add(&mut self, add: Event) -> () {
-        self.accesses[self.length] = add;
+        unsafe {
+            if self.length == self.accesses.len() - 1 {
+                let new_max = self.accesses.len() * 2;
+                let page = do_realloc(self.accesses.as_mut_ptr() as *mut c_void, new_max * size_of::<Event>()) as *mut u8;//page_alloc_over_commit(INIT_TRACE_LENGTH);
+                let page = if !page.is_null() {
+                    Ok(page)
+                } else {
+                    Err(AllocationError::AllocationFailed(new_max, errno::errno()))
+                };
+                match page {
+                    Ok(page) => {
+                        let ptr = page as *mut Event;
+                        let accesses = unsafe {
+                            from_raw_parts_mut(
+                                ptr,
+                                new_max // Size?
+                            )
+                        };
+
+                        self.ptr = Some(page);
+                        self.accesses = accesses;
+                    }
+                    Err(e) => panic!("Error initializing trace: {:?}", e)
+
+                }
+            }
+            (&mut self.accesses[self.length] as *mut Event).write(add);
+        }
         self.length += 1;
         match add {
             Alloc(_) => {
@@ -93,7 +129,10 @@ impl<'a> Trace<'a> {
     // For testing only, I hope
     pub fn extend(&mut self, vec: Vec<Event>) -> () {
         for i in 0..vec.len() {
-            self.accesses[self.length] = vec[i];
+            // self.accesses[self.length] = vec[i];
+            unsafe {
+                (&mut self.accesses[self.length] as *mut Event).write(vec[i]);
+            }
             self.length += 1;
             match vec[i] {
                 Alloc(_) => {
@@ -217,6 +256,17 @@ impl<'a> Trace<'a> {
         }
 
         return true;
+    }
+}
+
+impl Drop for Trace<'_> {
+    fn drop(&mut self) {
+        match self.ptr {
+            None => {},
+            Some(ptr) => {
+                do_free(ptr);
+            },
+        }
     }
 }
 

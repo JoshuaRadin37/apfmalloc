@@ -1,10 +1,11 @@
 use crate::apf::constants::{
-    REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, TARGET_APF, USE_ALLOCATION_CLOCK,
+    REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK,
 };
 use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
 use crate::apf::trace::Trace;
 
 mod constants;
+pub use constants::TARGET_APF;
 mod histogram;
 mod timescale_functions;
 mod trace;
@@ -116,8 +117,11 @@ impl ApfTuner<'_> {
                     return false;
                 }
             }
-
-            (self.ret)(self.id, demand.ceil() as u32 + 1);
+            if demand < 0.0 {
+                return false;
+            }
+            let ciel = demand.ceil() as u32;
+            (self.ret)(self.id, ciel + 1);
         }
         else {
             let alt = (self.check)(self.id);
@@ -133,11 +137,11 @@ impl ApfTuner<'_> {
     fn calculate_dapf(&self) -> usize {
         let dapf;
 
-        if self.time >= TARGET_APF * (self.fetch_count + 1) {
-            dapf = TARGET_APF;
+        if self.time >= *TARGET_APF * (self.fetch_count + 1) {
+            dapf = *TARGET_APF;
         }
         else {
-            dapf = TARGET_APF * (self.fetch_count + 1) - self.time;
+            dapf = *TARGET_APF * (self.fetch_count + 1) - self.time;
         }
         
         dapf
@@ -151,7 +155,9 @@ impl ApfTuner<'_> {
         }
 
         match self.r_counter.reuse(k) {
-            Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
+            Some(r) => {
+                Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r)
+            },
             None => None,
         }
     }

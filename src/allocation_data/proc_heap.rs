@@ -8,6 +8,7 @@ use atomic::Atomic;
 use bitfield::size_of;
 use memmap::MmapMut;
 use std::mem::MaybeUninit;
+use crate::single_access::SingleAccess;
 
 #[repr(align(64))]
 pub struct ProcHeap {
@@ -98,6 +99,7 @@ impl Heaps {
 static mut HEAPS: Heaps = Heaps::uninit();
 static mut HEAP_INIT: AtomicBool = AtomicBool::new(false);
 
+
 unsafe fn init_heaps() {
     let mut map = MmapMut::map_anon(size_of::<ProcHeap>() * MAX_SZ_IDX)
         .expect("Should be able to get the map");
@@ -111,11 +113,17 @@ unsafe fn init_heaps() {
 }
 
 pub fn get_heaps() -> &'static mut Heaps {
+    static HEAPS_INIT_S: SingleAccess = SingleAccess::new();
+
     unsafe {
+        /*
         if !HEAP_INIT.compare_and_swap(false, true, Ordering::Acquire) {
             init_heaps();
             //HEAP_INIT.store(true, Ordering::Release)
         }
+
+         */
+        HEAPS_INIT_S.with(|| unsafe { init_heaps() } );
 
         &mut HEAPS
     }

@@ -1,6 +1,7 @@
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_free, do_malloc};
 use std::thread;
+use std::time::{Duration, Instant};
 
 #[test]
 fn multi_test_from_bench_no_global() {
@@ -23,14 +24,21 @@ fn multi_test_from_bench_no_global() {
 
 #[test]
 fn allocation() {
-    let mut vec: Vec<*const u8> = vec![];
-    for _ in 0..75000 {
+    let _ = AutoPtr::new(0usize);
+
+    let mut time_sum = Duration::from_secs(0);
+    let runs = 500;
+    for i in 0..runs {
+        let mut vec: Vec<AutoPtr<usize>> = vec![];
+        let start = Instant::now();
         for _ in 0..256 {
-            vec.push(do_malloc(16usize));
+            vec.push(AutoPtr::new(0));
         }
+        let end = start.elapsed();
+        time_sum += end;
+        println!("Run {} took {} ms", i, end.as_micros())
     }
 
-    for ptr in vec {
-        do_free(ptr);
-    }
+    let avg = time_sum / runs;
+    println!("Average run time: {} ms", avg.as_micros());
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::thread_cache::no_tuning;
 
 /*
     Histogram class -- really just a Hashmap
@@ -16,11 +17,14 @@ impl Histogram {
     }
 
     pub fn increment(&mut self, key: usize) -> () {
-        *self.histogram.entry(key).or_insert(0) += 1;
+
+        no_tuning(|| *self.histogram.entry(key).or_insert(0) += 1);
     }
 
-    pub fn add(&mut self, key: usize, val: usize) -> () {
-        *self.histogram.entry(key).or_insert(0) += val;
+    pub fn add(&mut self, key: usize, val: usize) {
+
+        no_tuning( || *self.histogram.entry(key).or_insert(0) += val);
+
     }
 
     pub fn get(&self, key: &usize) -> usize {

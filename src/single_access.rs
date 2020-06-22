@@ -34,7 +34,7 @@ impl SingleAccessInternal {
         F2: FnOnce(),
     {
         if !self.skip {
-            if !self.access.compare_and_swap(false, true, Ordering::Acquire) {
+            if !self.access.compare_and_swap(false, true, Ordering::Release) {
                 func();
                 self.wait = false;
                 self.skip = true;
@@ -99,7 +99,7 @@ mod test {
 
     #[test]
     fn only_once() {
-        let _ = LOCK_TEST.lock();
+        let _m = LOCK_TEST.lock();
         let access = SingleAccess::new();
         let start = get_counter();
         access.with(increase_counter);
@@ -110,7 +110,7 @@ mod test {
 
     #[test]
     fn multiple_at_once() {
-        let _ = LOCK_TEST.lock();
+        let _m = LOCK_TEST.lock();
         let access = Arc::new(SingleAccess::new());
         let barrier = Arc::new(Barrier::new(4));
 

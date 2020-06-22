@@ -16,6 +16,9 @@ impl SizeClassData {
 pub static mut SIZE_CLASS_LOOK_UP: [usize; MAX_SZ + 1] = [0; MAX_SZ + 1];
 #[inline]
 pub fn get_size_class(size: usize) -> usize {
+    if size > MAX_SZ {
+        return 0;
+    }
     unsafe {
         // using .clone() just in case
         SIZE_CLASS_LOOK_UP[size].clone()
@@ -45,7 +48,8 @@ pub unsafe fn init_size_class() {
     for sc_index in 1..MAX_SZ_IDX {
         let sc = &mut SIZE_CLASSES[sc_index];
         let mut sb_size = sc.sb_size;
-        while sb_size < (PAGE * PAGE) as u32 {
+        let max = page_ceiling!(*crate::apf::TARGET_APF * sc.block_size as usize) as u32;
+        while sb_size < max {
             sb_size += sc.sb_size;
         }
 
