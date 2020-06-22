@@ -99,6 +99,14 @@ pub fn allocate_type<T>() -> *mut T {
     do_aligned_alloc(align, size) as *mut T
 }
 
+pub fn allocate_val<T>(val: T) -> *mut T {
+    let ret = allocate_type::<T>();
+    unsafe {
+        ret.write(val);
+    }
+    ret
+}
+
 /// Allocates a space in memory
 pub fn do_malloc(size: usize) -> *mut u8 {
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
@@ -174,10 +182,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
         desc.max_count = 1;
-        desc.super_block = match page_alloc(pages) {
-            Ok(ptr) => ptr,
-            Err(_) => null_mut(),
-        };
+        desc.super_block = ptr;
 
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
