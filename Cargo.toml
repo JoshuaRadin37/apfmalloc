@@ -51,9 +51,9 @@ benchmarking-tools = { path = "benchmarking-tools"}
 name = "allocating_bench"
 harness = false
 
-# [[bench]]
-# name = "function_benches"
-# harness = false
+[[bench]]
+name = "function_benches"
+harness = false
 
 [[bench]]
 name = "timed_allocation"

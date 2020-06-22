@@ -4,7 +4,7 @@ use memmap::MmapMut;
 use std::io::ErrorKind;
 use std::os::raw::c_void;
 
-use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR, AllocationError};
 use crate::pages::MemoryOrFreePointer::Free;
 use atomic::Ordering;
 use bitfield::fmt::{Debug, Display, Formatter};
@@ -12,6 +12,8 @@ use std::mem::MaybeUninit;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
 use std::{fmt, io};
+use errno::Errno;
+use std::collections::HashMap;
 
 pub mod external_mem_reservation;
 
@@ -27,6 +29,7 @@ struct PageInfoHolder {
     capacity: usize,
     head: Option<usize>,
     lock: AtomicBool,
+    tree: Option<HashMap<*const u8, usize>>
 }
 
 #[derive(Debug)]
@@ -59,6 +62,7 @@ impl PageInfoHolder {
             capacity: 0,
             head: None,
             lock: AtomicBool::new(false),
+            tree: None
         }
     }
 
@@ -81,6 +85,7 @@ impl PageInfoHolder {
             capacity: 0,
             head: None,
             lock: AtomicBool::new(false),
+            tree: Some(HashMap::new())
         };
         let ptr = self.internals.as_mut().unwrap().as_mut_ptr();
         unsafe {
@@ -111,8 +116,8 @@ impl PageInfoHolder {
                 self.internals.as_mut().unwrap().as_mut_ptr() as *mut MemoryOrFreePointer,
                 *self.get_capacity(),
             )
-            .as_mut()
-            .unwrap()
+                .as_mut()
+                .unwrap()
         }
     }
 
@@ -138,7 +143,7 @@ impl PageInfoHolder {
             if first {
                 prev = Some(index + self.capacity);
                 first = false;
-            // first_index = Some(index + self.capacity);
+                // first_index = Some(index + self.capacity);
             } else {
                 prev = Some(prev.unwrap() - 1);
             }
@@ -195,7 +200,7 @@ impl PageInfoHolder {
         // self.release();
     }
 
-    pub fn alloc(&mut self, size: usize) -> Result<*mut u8, io::Error> {
+    pub fn alloc(&mut self, size: usize) -> Result<*mut u8, AllocationError> {
         self.grab();
         if self.count == self.capacity - 1 {
             // println!("Growing Page Holder");
@@ -218,8 +223,7 @@ impl PageInfoHolder {
             {
              */
             let segment = SEGMENT_ALLOCATOR
-                .allocate(size)
-                .expect("Should be able to allocate a space");
+                .allocate(size)?;
             let ptr = segment.get_ptr() as *mut u8;
             let combo = MemoryOrFreePointer::Segment(segment);
             //self.release();
@@ -229,20 +233,22 @@ impl PageInfoHolder {
         };
         unsafe {
             let head = self.head;
+            let index = head.unwrap();
             if let MemoryOrFreePointer::Free { next: prev_pointer } =
-                self.get_at_index(head.unwrap()).unwrap()
+            self.get_at_index(index).unwrap()
             {
                 if prev_pointer.is_none() {
                     panic!("Previous pointer should not be null");
                 }
                 // println!("Previous pointer: {:x?}", *prev_pointer);
                 self.head = *prev_pointer;
-            // self.head.store(*prev_pointer, Ordering::SeqCst);
+                // self.head.store(*prev_pointer, Ordering::SeqCst);
             } else {
                 // eprintln!("Head is {:?}", head);
                 panic!("No more space in page container")
             }
-            *self.get_at_index(head.unwrap()).unwrap() = memory;
+            *self.get_at_index(index).unwrap() = memory;
+            self.tree.as_mut().unwrap().insert(ptr, index);
             assert_ne!(self.head, head, "Head should not be the same");
             self.count += 1;
         }
@@ -250,9 +256,9 @@ impl PageInfoHolder {
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
         #[cfg(feature = "track_allocation")]
-        {
-            crate::info_dump::increase_allocated_from_vm(size);
-        }
+            {
+                crate::info_dump::increase_allocated_from_vm(size);
+            }
         self.release();
         Ok(ptr)
     }
@@ -271,7 +277,7 @@ impl PageInfoHolder {
         }
     }
 
-    pub fn alloc_overcommit(&mut self, size: usize) -> Result<*mut u8, io::Error> {
+    pub fn alloc_overcommit(&mut self, size: usize) -> Result<*mut u8, AllocationError> {
         self.grab();
         if self.count == self.capacity - 1 {
             // println!("Growing Page Holder");
@@ -286,8 +292,7 @@ impl PageInfoHolder {
 
         let (memory, ptr) = {
             let segment = SEGMENT_ALLOCATOR
-                .allocate_massive(size)
-                .expect("Should be able to allocate a space");
+                .allocate_massive(size)?;
             let ptr = segment.get_ptr() as *mut u8;
             let combo = MemoryOrFreePointer::Segment(segment);
 
@@ -296,17 +301,18 @@ impl PageInfoHolder {
         unsafe {
             let head = self.head.unwrap();
             if let MemoryOrFreePointer::Free { next: prev_pointer } =
-                self.get_at_index(head).unwrap()
+            self.get_at_index(head).unwrap()
             {
                 if prev_pointer.is_none() {
                     panic!("Previous pointer should not be null");
                 }
                 self.head = *prev_pointer;
-            // self.head.store(*prev_pointer, Ordering::SeqCst);
+                // self.head.store(*prev_pointer, Ordering::SeqCst);
             } else {
                 panic!("No more space in page container")
             }
             *self.get_at_index(head).unwrap() = memory;
+            self.tree.as_mut().unwrap().insert(ptr, head);
             //*head = memory;
             self.count += 1;
         }
@@ -321,8 +327,10 @@ impl PageInfoHolder {
     pub fn dealloc(&mut self, page_ptr: *const u8) -> bool {
         self.grab();
         let prev = { self.head.clone() };
-        let mut found_mem = None;
+
         let new_head = {
+
+            /*
             for page in self.get_maps() {
                 match page {
                     MemoryOrFreePointer::Map(map) => {
@@ -342,7 +350,12 @@ impl PageInfoHolder {
                 }
             }
 
-            let output = match found_mem {
+             */
+            // let mut mapping = self.tree.as_ref().unwrap();
+            let index = self.tree.as_ref().unwrap().get(&page_ptr).expect("Pointer must exist in map");
+            let found_mem = self.get_at_index(*index);
+
+            match found_mem {
                 None => return false,
                 Some(page) => {
                     // println!("De-allocating a page");
@@ -364,12 +377,18 @@ impl PageInfoHolder {
                     //    .store(page as *mut MemoryOrFreePointer, Ordering::Release);
                 }
             };
+
+
+            //let index = self.tree.as_ref().unwrap().get(&page_ptr).expect("Pointer must exist in map");
+            let ptr = self.get_at_index(*index).unwrap();
+
+            let output = ptr;
             output
         };
         self.head = self.get_index_from_pointer(new_head);
         self.count -= 1;
         // println!("{:?}", self);
-
+        self.tree.as_mut().unwrap().remove(&page_ptr);
         self.release();
         true
     }
@@ -470,10 +489,11 @@ impl Display for PageMaskError {
 }
 
 /// Returns a set of continuous pages, totaling to size bytes
-pub fn page_alloc(size: usize) -> Result<*mut u8, io::Error> {
+pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
     if size & PAGE_MASK != 0 {
-        return Err(io::Error::new(ErrorKind::InvalidData, PageMaskError));
+        return Err(AllocationError::AllocationFailed(size, errno::errno()));
     }
+
 
     unsafe {
         //println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
@@ -489,14 +509,16 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, io::Error> {
         }
         PAGE_HOLDER.alloc(size)
     }
+
+
 }
 
 /// Explicitly allow overcommitting
 ///
 /// Used for array-based page map
-pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, io::Error> {
+pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
     if size & PAGE_MASK != 0 {
-        return Err(io::Error::new(ErrorKind::InvalidData, PageMaskError));
+        return Err(AllocationError::AllocationFailed(size, errno::errno()));
     }
 
     unsafe {
@@ -513,6 +535,9 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, io::Error> {
         }
         PAGE_HOLDER.alloc_overcommit(size)
     }
+
+
+    // SEGMENT_ALLOCATOR.allocate_massive(size).map(|ptr| ptr.get_ptr() as *mut u8)
 }
 
 /// Altered version of the lralloc free, which uses the drop method
@@ -595,3 +620,4 @@ mod test {
         }
     }
 }
+
