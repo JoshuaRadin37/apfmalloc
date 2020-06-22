@@ -34,7 +34,7 @@ impl ThreadCacheBin {
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
         unsafe {
-            *(block as *mut *mut u8) = self.block;
+            (block as *mut *mut u8).write(self.block);
         }
         self.block = block;
         self.block_num += 1;

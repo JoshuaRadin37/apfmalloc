@@ -129,7 +129,6 @@ impl Descriptor {
     pub unsafe fn alloc() -> *mut Descriptor {
         let mut avail = AVAILABLE_DESC.lock();
         let old_head = *avail; //AVAILABLE_DESC.load(Ordering::Acquire);
-        loop {
             let desc = old_head.get_desc();
             return if desc.is_none() {
                 let ptr =
@@ -222,7 +221,7 @@ impl Descriptor {
                 *avail = new_head.unwrap_or(DescriptorNode::new());
                 desc
             };
-        }
+
     }
 }
 

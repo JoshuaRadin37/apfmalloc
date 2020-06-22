@@ -1,27 +1,28 @@
 #![allow(non_upper_case_globals)]
 
-use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
-use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
-use std::ptr::null_mut;
+#[macro_use]
+extern crate bitfield;
 
-use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
+use std::{
+    ffi::c_void,
+    ptr::null_mut,
+    sync::atomic::{AtomicBool, AtomicUsize},
+    thread,
+    thread::ThreadId
+};
 
-use crate::page_map::S_PAGE_MAP;
+use atomic::{Ordering};
+use spin::Mutex;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
-use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, use_bootstrap};
+use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
+use crate::bootstrap::{bootstrap_reserve, set_use_bootstrap, use_bootstrap};
+use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
+use crate::page_map::S_PAGE_MAP;
 use crate::pages::{page_alloc, page_alloc_over_commit, page_free};
 use crate::single_access::SingleAccess;
+use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::thread_cache::{fill_cache, flush_cache};
-use atomic::{Atomic, Ordering};
-use crossbeam::atomic::AtomicCell;
-use spin::Mutex;
-use std::ffi::c_void;
-use std::fs::read;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::thread;
-use std::thread::ThreadId;
 
 #[macro_export]
 macro_rules! dump_info {
@@ -55,9 +56,6 @@ pub mod ptr {
 }
 
 mod apf;
-
-#[macro_use]
-extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
@@ -98,6 +96,8 @@ pub fn allocate_type<T>() -> *mut T {
     do_aligned_alloc(align, size) as *mut T
 }
 
+
+/// Moves the value to the heap at a properly aligned location and returns a pointer
 pub fn allocate_val<T>(val: T) -> *mut T {
     let ret = allocate_type::<T>();
     unsafe {
@@ -207,6 +207,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     allocate_to_cache(size, size_class_index)
 }
 
+#[doc(hidden)]
 pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     // Because of how rust creates thread locals, we have to assume the thread local does not exist yet
     // We also can't tell if a thread local exists without causing it to initialize, and when using
@@ -327,7 +328,22 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     }
 }
 
+/// Reallocates the memory at the ptr to a new location based of the size parameter. Returns a null pointer if no memory of size `size` could
+/// be made
+///
+/// # Example
+/// ```rust
+/// use lrmalloc_rs::{do_malloc, allocate_val, do_realloc};
+/// use std::ffi::c_void;
+/// let ptr = allocate_val(3799usize);
+/// assert_eq!(unsafe { *ptr }, 3799usize);
+/// let ptr = do_realloc(ptr as *mut c_void, 16) as *const usize;
+/// assert_eq!(unsafe { *ptr }, 3799usize)
+/// ```
 pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    if ptr.is_null() {
+        return null_mut();
+    }
     let new_size_class = get_size_class(size);
     let old_size = match get_allocation_size(ptr) {
         Ok(size) => size as usize,
@@ -336,9 +352,8 @@ pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
         }
     };
     let old_size_class = get_size_class(old_size);
-    if old_size_class != 0 && old_size_class == new_size_class {
-        return ptr;
-    } else if old_size_class == 0 && new_size_class == 0 && size < old_size {
+    if old_size_class != 0 && old_size_class == new_size_class ||
+        old_size_class == 0 && new_size_class == 0 && size < old_size {
         return ptr;
     }
 
@@ -352,6 +367,7 @@ pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     ret
 }
 
+#[doc(hidden)]
 pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe { &*info.get_desc().ok_or(())? };
@@ -359,6 +375,11 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
     Ok(desc.block_size)
 }
 
+/// Frees a location in memory so that it can be reused at a later time. A free to a `NULL` pointer has no effect.
+///
+/// # Warning
+///
+/// If a pointer has already been freed, a second free to that pointer will cause undefined behavior
 pub fn do_free<T: ?Sized>(ptr: *const T) {
     if ptr.is_null() {
         return;
@@ -370,8 +391,8 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             None => {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
-                return; // todo: Band-aid fix
-                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                //return; // todo: Band-aid fix
+                panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
         }
     };
@@ -482,9 +503,11 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                             flush_cache(size_class_index, cache);
                         }
 
-                        return cache.push_block(ptr as *mut u8);
+                        cache.push_block(ptr as *mut u8)
                     })
                     .expect("Freeing to cache failed");
+
+
             }
         }
     }
@@ -492,11 +515,14 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use core::mem::MaybeUninit;
+
+    use bitfield::size_of;
+
     use crate::allocation_data::get_heaps;
     use crate::ptr::auto_ptr::AutoPtr;
-    use bitfield::size_of;
-    use core::mem::MaybeUninit;
+
+    use super::*;
 
     #[test]
     fn heaps_valid() {
@@ -679,6 +705,14 @@ mod tests {
         }
 
         dump_info!();
+    }
+
+    #[test]
+    #[should_panic]
+    fn double_free() {
+        let ptr = allocate_val(0usize);
+        do_free(ptr);
+        do_free(ptr);
     }
 }
 
