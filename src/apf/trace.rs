@@ -121,9 +121,12 @@ impl<'a> Trace<'a> {
             Free(_) => {}
         };
 
+        /* Unnecessary, as trace now extends in size
         if self.length >= INIT_TRACE_LENGTH {
             panic!("ERROR: Exceeded trace length");
         }
+
+         */
     }
 
     // For testing only, I hope
