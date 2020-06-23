@@ -40,7 +40,6 @@ pub mod allocation_data;
 pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
-pub mod no_heap_mutex;
 pub mod page_map;
 pub mod pages;
 pub mod single_access;
@@ -486,9 +485,9 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
                          */
 
-                        /* if cache.get_block_num() >= sc.cache_block_num {
+                        if cache.get_block_num() >= sc.cache_block_num {
                             flush_cache(size_class_index, cache);
-                        } */
+                        }
 
                         cache.push_block(ptr as *mut u8)
                     })
