@@ -41,7 +41,7 @@ impl<'a> Histogram<'a> {
     }
 
     pub fn increment(&mut self, key: usize) -> () {
-        if key == self.max_key - 1 {
+        if key >= self.max_key - 1 {
             self.grow();
         }
 
@@ -49,7 +49,7 @@ impl<'a> Histogram<'a> {
     }
 
     pub fn add(&mut self, key: usize, val: usize) {
-        if key == self.max_key - 1 {
+        if key >= self.max_key - 1 {
             self.grow();
         }
 
@@ -71,7 +71,7 @@ impl<'a> Histogram<'a> {
 
     pub fn grow(&mut self) {
         let new_max = self.max_key * 2;
-        let page = do_realloc(self.histogram.as_mut_ptr() as *mut c_void, new_max * size_of::<usize>()) as *mut u8;
+        let page = no_tuning(|| do_realloc(self.histogram.as_mut_ptr() as *mut c_void, new_max * size_of::<usize>()) as *mut u8);
         assert!(!page.is_null(), "Error initializing histogram: {:?}", AllocationError::AllocationFailed(new_max, errno::errno()));
 
         let ptr = page as *mut usize;
