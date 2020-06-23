@@ -45,6 +45,7 @@ pub mod pages;
 pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
+pub mod independent_collections;
 
 mod bootstrap;
 
@@ -485,9 +486,9 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
                          */
 
-                        if cache.get_block_num() >= sc.cache_block_num {
+                        /* if cache.get_block_num() >= sc.cache_block_num {
                             flush_cache(size_class_index, cache);
-                        }
+                        } */
 
                         cache.push_block(ptr as *mut u8)
                     })
