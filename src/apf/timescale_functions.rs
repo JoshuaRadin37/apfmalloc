@@ -13,17 +13,17 @@ use crate::thread_cache::no_tuning;
     Update timestep with inc_timer()
 */
 #[derive(Debug)]
-pub struct LivenessCounter {
+pub struct LivenessCounter<'a> {
     n: usize,                     // Timer
     m: usize,                     // Number of objects
-    alloc_sum: Histogram,    // Sum of allocation times before time
-    alloc_counts: Histogram, // Number of allocations before time
-    free_sum: Histogram,     // Sum of free times before time
-    free_counts: Histogram,  // Number of frees before time
+    alloc_sum: Histogram<'a>,    // Sum of allocation times before time
+    alloc_counts: Histogram<'a>, // Number of allocations before time
+    free_sum: Histogram<'a>,     // Sum of free times before time
+    free_counts: Histogram<'a>,  // Number of frees before time
 }
 
-impl LivenessCounter {
-	pub fn new() -> LivenessCounter {
+impl LivenessCounter<'_> {
+	pub fn new<'a>() -> LivenessCounter<'a> {
 		LivenessCounter {
 			n: 0,		// Start at 1 or 0?
 			m: 0,
@@ -50,10 +50,10 @@ impl LivenessCounter {
 	// According to the paper, the timestep can be updated after either every operation or only allocations
 	pub fn inc_timer(&mut self) {
 		self.n += 1;
-		self.alloc_counts.add(self.n, self.alloc_counts.get(&(self.n-1)));
-		self.alloc_sum.add(self.n, self.alloc_sum.get(&(self.n-1)));
-		self.free_counts.add(self.n, self.free_counts.get(&(self.n-1)));
-		self.free_sum.add(self.n, self.free_sum.get(&(self.n-1)));
+		self.alloc_counts.add(self.n, self.alloc_counts.get(self.n-1));
+		self.alloc_sum.add(self.n, self.alloc_sum.get(self.n-1));
+		self.free_counts.add(self.n, self.free_counts.get(self.n-1));
+		self.free_sum.add(self.n, self.free_sum.get(self.n-1));
 	}
 
 	// Evaluates liveness for windows of size k
@@ -63,8 +63,8 @@ impl LivenessCounter {
             return 0.0;
         } else {
             let i = i as usize;
-            let tmp1 = (self.m - self.free_counts.get(&i)) * i + self.free_sum.get(&i);
-            let tmp2 = self.alloc_counts.get(&k) * k + self.alloc_sum.get(&self.n) - self.alloc_sum.get(&k);
+            let tmp1 = (self.m - self.free_counts.get(i)) * i + self.free_sum.get(i);
+            let tmp2 = self.alloc_counts.get(k) * k + self.alloc_sum.get(self.n) - self.alloc_sum.get(k);
             ((tmp1 + self.m * k - tmp2) as f32) / i as f32
         }
 	}

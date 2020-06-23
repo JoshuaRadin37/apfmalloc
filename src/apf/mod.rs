@@ -18,7 +18,7 @@ pub mod trace;
 #[derive(Debug)]
 pub struct ApfTuner<'a> {
     id: usize,
-    l_counter: LivenessCounter,
+    l_counter: LivenessCounter<'a>,
     r_counter: ReuseCounter<'a>,
     trace: Trace<'a>,
     time: usize,

@@ -1,5 +1,5 @@
 pub const INIT_TRACE_LENGTH: usize = 1 << 14;
-pub const INIT_HISTOGRAM_LENGTH: usize = 1 << 8;
+pub const INIT_HISTOGRAM_LENGTH: usize = 1 << 5;
 pub const REUSE_BURST_LENGTH: usize = 20000;
 pub const REUSE_HIBERNATION_PERIOD: usize = 40000;
 pub const USE_ALLOCATION_CLOCK: bool = true;
