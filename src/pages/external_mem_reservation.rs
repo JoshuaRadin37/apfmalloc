@@ -221,7 +221,7 @@ impl SegAllocator for SegmentAllocator {
 
     fn deallocate(&self, segment: Segment) -> bool {
         while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
-        let ret = true; // unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
+        let ret =  unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
         LOCK.store(false, Ordering::Release);
         ret
     }

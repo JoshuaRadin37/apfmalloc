@@ -10,7 +10,7 @@ use std::fmt::Formatter;
 use std::ptr::drop_in_place;
 use crate::mem_info::align_val;
 
-pub struct RawArray<T> {
+struct RawArray<T> {
     segment: Option<Segment>,
     _phantom: PhantomData<T>
 }
@@ -44,7 +44,7 @@ impl<T> RawArray<T> {
                 }
                 let old = std::mem::replace(&mut self.segment, Some(new_ptr));
                 if let Some(segment) = old {
-                    SEGMENT_ALLOCATOR.deallocate(segment);
+                    // SEGMENT_ALLOCATOR.deallocate(segment);
                 }
             },
         }
@@ -69,11 +69,7 @@ impl<T> RawArray<T> {
         self.segment.as_ref().map_or(0, |s| s.len() / std::mem::size_of::<T>())
     }
 
-
-}
-
-impl<T> Drop for RawArray<T> {
-    fn drop(&mut self) {
+    pub fn clear(&mut self) {
         match std::mem::replace(&mut self.segment, None) {
             None => {},
             Some(segment) => {
@@ -81,8 +77,8 @@ impl<T> Drop for RawArray<T> {
             },
         }
     }
-}
 
+}
 
 
 impl<T> Index<usize> for RawArray<T> {
@@ -194,9 +190,7 @@ impl<T> Array<T> {
     }
 
     pub fn clear(&mut self) {
-        unsafe {
-            drop_in_place(self.deref_mut())
-        }
+        self.array.clear();
         self.size = 0;
     }
 
@@ -246,6 +240,16 @@ impl<T> Array<T> {
         ret
     }
 
+    pub fn iter(&self) -> ArrayIterator<&T> {
+        let mut arr = Array::new();
+        for i in 0..self.size {
+            arr.push(&self[i])
+        }
+        ArrayIterator {
+            index: 0,
+            array: arr
+        }
+    }
 }
 
 impl<T> Index<usize> for Array<T>{

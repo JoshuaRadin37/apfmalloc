@@ -1,5 +1,5 @@
 use std::hash::{Hash, BuildHasher, Hasher};
-use crate::independent_collections::Array;
+use crate::independent_collections::{Array, ArrayIterator};
 use std::hash::BuildHasherDefault;
 use std::collections::hash_map::DefaultHasher;
 use std::marker::PhantomData;
@@ -157,7 +157,7 @@ impl<K, V> HashMap<K, V> where
         }
 
         let mut old_index = None;
-        for (index, bucket) in buckets.iter().enumerate() {
+        for (index, bucket) in Array::iter(&buckets).enumerate() {
             if bucket.key.eq(&key) {
                 old_index = Some(index);
             }
@@ -255,6 +255,8 @@ impl<K, V> HashMap<K, V> where
         }
         false
     }
+
+
 
 
 }
