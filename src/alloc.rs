@@ -11,78 +11,14 @@ use std::sync::atomic::Ordering;
 use crate::pages::page_alloc;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
-
     let list = &heap.partial_list;
-    /*
-    let mut ptr =
-
-        if let Some(list) = list.load(Ordering::Acquire) {
-            Some(list)
-        } else {
-            None
-        };
-    if ptr.is_none() {
-        return None;
-    }
-    loop {
-
-        //info!("Popping from partial heap");
-        let old_head = ptr.unwrap();
-        let mut new_head: Option<DescriptorNode>;
-
-        let old_desc = old_head.get_desc();
-        //info!("Old head desc anchor = {:?}", old_desc.anchor.load(Ordering::Acquire));
-        new_head = old_desc.next_partial.load(Ordering::Acquire);
-        new_head = if let Some(mut new_head) = new_head {
-            if new_head.get_desc() as *mut Descriptor != null_mut() {
-                let desc = old_head.get_desc();
-                let counter = old_head.get_counter();
-                new_head.set(Some(desc), counter);
-                Some(new_head)
-            } else {
-                None
-            }
-        } else {
-            new_head
-        };
-        //info!("New head desc anchor  = {:?}", new_head.get_desc().anchor.load(Ordering::Acquire));
-        if list
-            .compare_exchange_weak(ptr, new_head, Ordering::Acquire, Ordering::Release)
-            .is_ok()
-        {
-
-            if match &heap.partial_list.load(Ordering::Acquire){
-                None => {
-                    //info!("Heap partial list anchor updated to none");
-                    true
-                },
-                Some(node) => {
-                    /*info!("Heap partial list anchor updated to {:?}", &heap.partial_list
-                        .load(Ordering::Acquire)
-                        .unwrap()
-                        .get_desc()
-                        .anchor.load(Ordering::Acquire));
-
-                     */
-                    true
-                    //node.get_desc().anchor.load(Ordering::Acquire).state() == SuperBlockState::PARTIAL
-                },
-            } {
-                return Some(old_head.get_desc());
-            } else {
-                // error!("Heap partial contained non partial descriptor")
-            }
-        }
-    }
-
-     */
 
     loop {
         let old_head = list.load(Ordering::Acquire);
         if old_head.is_none() {
             return None;
         }
-        let old_desc = old_head.unwrap().get_desc();
+        let old_desc = old_head.unwrap().get_desc().unwrap();
         // Lets assume this descriptor exists
 
         let mut new_head: Option<DescriptorNode> = old_desc.next_partial.load(Ordering::Acquire);
@@ -91,26 +27,23 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
                 if let Some(mut new_head_desc) = &mut new_head {
                     new_head_desc.set(None, 0);
                 }
-            },
+            }
             Some(descriptor_node) => {
-                let desc = descriptor_node.get_desc();
+                let desc = descriptor_node.get_desc().unwrap();
                 let counter = descriptor_node.get_counter();
                 if let Some(mut new_head_desc) = &mut new_head {
                     new_head_desc.set(Some(desc), counter);
                 }
-            },
+            }
         }
 
         match list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
             Ok(_) => {
                 return Some(old_desc);
-            },
-            Err(_) => {},
+            }
+            Err(_) => {}
         }
     }
-
-
-
 }
 
 pub fn list_push_partial(desc: &'static mut Descriptor) {
@@ -136,15 +69,11 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
 
      */
 
-    let old_head = list.load(Ordering::Acquire);
-    if old_head.is_none() {
-        // info!("Pushing to empty Proc Heap")
-    }
-
     // let old_head = list.load(Ordering::Acquire).unwrap();
     let mut new_head = DescriptorNode::default();
 
     loop {
+        let old_head = list.load(Ordering::Acquire);
         /*
         new_head.set(
             Some(desc),
@@ -163,31 +92,29 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
         // debug_assert_ne!(old_head.get_desc(), new_head.get_desc());
         desc.next_partial.store(old_head, Ordering::Release);
 
-
         /*if replace {
             list.store(Some(new_head), Ordering::Acquire);
             break;
         }
          else
          */
-        if list.compare_exchange_weak(
-            old_head,
-            Some(new_head),
-            Ordering::Acquire,
-            Ordering::Relaxed,
-        )
+        if list
+            .compare_exchange_weak(
+                old_head,
+                Some(new_head),
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
             .is_ok()
         {
             /*info!("Heap partial list anchor updated to {:?}", unsafe { &(*heap).partial_list }
-                .load(Ordering::Acquire)
-                .unwrap()
-                .get_desc()
-                .anchor.load(Ordering::Acquire));
+               .load(Ordering::Acquire)
+               .unwrap()
+               .get_desc()
+               .anchor.load(Ordering::Acquire));
 
-             */
+            */
             break;
-        } else {
-            warn!("Failed to push new head, repeating...")
         }
     }
 }
@@ -205,7 +132,6 @@ pub fn malloc_from_partial(
     cache: &mut ThreadCacheBin,
     block_num: &mut usize,
 ) {
-
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let desc = heap_pop_partial(heap);
 
@@ -242,10 +168,7 @@ pub fn malloc_from_partial(
                     .compare_exchange(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
                     .is_ok()
                 {
-
                     break;
-                } else {
-                    warn!("Failed to replace old anchor, reattempting...")
                 }
             }
 
@@ -308,6 +231,136 @@ pub fn malloc_from_new_sb(
     *block_num += max_count;
 }
 
+/* WARNING -- ELIAS CODE -- WARNING */
+
+pub fn malloc_count_from_partial(
+    size_class_index: usize,
+    cache: &mut ThreadCacheBin,
+    block_num: &mut usize,
+    count: usize,
+) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let desc = heap_pop_partial(heap);
+
+    match desc {
+        None => {
+            return;
+        }
+        Some(desc) => {
+            //info!("Allocating blocks from a partial list...");
+            let old_anchor = desc.anchor.load(Ordering::Acquire);
+            let mut new_anchor: Anchor;
+
+            let max_count = desc.max_count;
+            let block_size = desc.block_size;
+
+            let super_block = desc.super_block;
+
+            let avail = old_anchor.avail() as isize;
+            let new_avail = match avail + (count as isize) < max_count as isize {
+                true => avail + count as isize,
+                false => max_count as isize,
+            };
+
+            loop {
+                if old_anchor.state() == SuperBlockState::EMPTY {
+                    //info!("Retiring an empty descriptor");
+                    desc.retire();
+                    return malloc_from_partial(size_class_index, cache, block_num);
+                }
+
+                // debug_assert_eq!(old_anchor.state(), SuperBlockState::PARTIAL);
+                //info!("Found old anchor {:?}", old_anchor);
+                new_anchor = old_anchor;
+                new_anchor.set_count(0);
+                new_anchor.set_avail(new_avail as u64);
+                new_anchor.set_state(SuperBlockState::FULL);
+
+                if desc
+                    .anchor
+                    .compare_exchange(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                avail <= max_count as isize,
+                "Avail: {}, Count {}",
+                avail,
+                max_count
+            );
+
+            let c = new_avail - avail;
+
+            for i in 0..c {
+                let block =
+                    unsafe { super_block.offset((avail + i as isize) * block_size as isize) };
+                cache.push_block(block);
+                *block_num += 1;
+            }
+        }
+    }
+}
+
+pub fn malloc_count_from_new_sb(
+    size_class_index: usize,
+    cache: &mut ThreadCacheBin,
+    block_num: &mut usize,
+    count: usize,
+) {
+    let heap = get_heaps().get_heap_at_mut(size_class_index);
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+
+    let desc = unsafe { &mut *Descriptor::alloc() };
+    // debug_assert!(!desc.is_null());
+
+    let block_size = sc.block_size;
+    let max_count = sc.get_block_num();
+
+    desc.proc_heap = heap;
+    desc.block_size = block_size;
+    desc.max_count = max_count as u32;
+    desc.super_block = page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
+
+    let super_block = desc.super_block;
+    for idx in 0..(max_count - 1) {
+        unsafe {
+            let block = super_block.offset((idx * block_size as usize) as isize);
+            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
+            *(block as *mut *mut u8) = next;
+        }
+    }
+
+    // Min of max_count and count
+    let c = match max_count > count {
+        true => count,
+        false => max_count,
+    };
+
+    for i in 0..c {
+        let block = unsafe { super_block.offset(i as isize * block_size as isize) };
+        cache.push_block(block);
+        *block_num += 1;
+    }
+
+    let mut anchor: Anchor = Anchor::default();
+    anchor.set_avail(c as u64);
+    anchor.set_count(max_count as u64 - c as u64);
+    
+    anchor.set_state(match max_count > count {
+        true => SuperBlockState::PARTIAL,
+        false => SuperBlockState::EMPTY,
+    });
+
+    desc.anchor.store(anchor, Ordering::SeqCst);
+
+    register_desc(desc);
+}
+
+/* END ELIAS CODE */
+
 pub fn update_page_map(
     heap: Option<&mut ProcHeap>,
     ptr: *mut u8,
@@ -359,31 +412,8 @@ pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: *mut u8) {
     update_page_map(heap, super_block, None, 0)
 }
 
-pub fn get_page_info_for_ptr<T : ?Sized>(ptr: *const T) -> PageInfo {
+pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> PageInfo {
     unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
-}
-
-macro_rules! sc {
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, no, yes, $pgs:expr, $lg_delta_lookup:expr) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, yes, yes, $pgs:expr, $lg_delta_lookup:expr) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, yes, yes, $bin:expr, $pgs:expr, no) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
-    ($index:expr, $lg_grp:expr, $lg_delta:expr, $ndelta:expr, no, yes, $bin:expr, $pgs:expr, no) => {{
-        let index = $index + 1;
-        let block_size = (1 << $lg_grp) + ($ndelta << $lg_delta);
-        (index, block_size)
-    }};
 }
 
 macro_rules! size_classes_match {

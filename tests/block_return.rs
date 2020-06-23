@@ -1,8 +1,8 @@
 use lrmalloc_rs::allocation_data::get_heaps;
+use lrmalloc_rs::{do_free, do_malloc, dump_info};
+use std::fmt::Display;
 use std::sync::atomic::Ordering;
 use std::thread;
-use lrmalloc_rs::{do_malloc, do_free, dump_info};
-use std::fmt::Display;
 
 #[test]
 fn threads_return_extra_to_heap() {
@@ -11,14 +11,12 @@ fn threads_return_extra_to_heap() {
     let handle = thread::spawn(move || {
         let ret = do_malloc(8);
         assert!(heaps.partial_list.load(Ordering::Acquire).is_none());
-        unsafe {&*ret }
+        unsafe { &*ret }
     });
 
     let ptr = handle.join().expect("Didn't acquire a pointer");
     do_free(ptr);
-    let new_ptr = unsafe {
-        &* do_malloc(8)
-    };
-    assert_eq!(new_ptr as * const u8, ptr as * const u8);
+    let new_ptr = unsafe { &*do_malloc(8) };
+    assert_eq!(new_ptr as *const u8, ptr as *const u8);
     dump_info!();
 }

@@ -2,19 +2,18 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use lrmalloc_rs::alloc::malloc_from_new_sb;
 use lrmalloc_rs::allocation_data::{get_heaps, Descriptor};
 use lrmalloc_rs::mem_info::{MAX_SZ_IDX, PAGE};
-use lrmalloc_rs::pages::page_alloc;
+use lrmalloc_rs::pages::{page_alloc, page_free};
 use lrmalloc_rs::size_classes::SIZE_CLASSES;
 use lrmalloc_rs::thread_cache::{fill_cache, ThreadCacheBin};
 use lrmalloc_rs::{allocate_to_cache, do_malloc};
-
-fn init_malloc(c: &mut Criterion) {
-    c.bench_function("init malloc", |b| {
-        b.iter(|| unsafe { lrmalloc_rs::init_malloc() });
-    });
-}
+use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+use std::time::Duration;
+use std::time::Instant;
+use std::io::{stdout, Write};
 
 fn thread_cache_fill(c: &mut Criterion) {
     let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
+    let ptr = AutoPtr::new(8);
     c.bench_function("cache fill", |b| {
         let cache = &mut tcache[1];
         b.iter(|| {
@@ -24,52 +23,74 @@ fn thread_cache_fill(c: &mut Criterion) {
     });
 }
 
-fn page_alloc_bench(c: &mut Criterion) {
-    c.bench_function("page get", |b| {
-        b.iter(|| page_alloc(PAGE));
-    });
-}
-
-fn from_new_sb(c: &mut Criterion) {
-    let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
-    unsafe {
-        lrmalloc_rs::init_malloc();
-    }
-    c.bench_function("malloc from new super block", |b| {
-        let cache = &mut tcache[1];
+fn alloc_from_super_block(c: &mut Criterion) {
+    let ptr = AutoPtr::new(8usize);
+    c.bench_function("alloc from super block", |b| {
         b.iter(|| {
-            malloc_from_new_sb(1, cache, &mut 0);
-            cache.pop_list(cache.peek_block(), cache.get_block_num());
+            let mut cache = ThreadCacheBin::new();
+            let mut block_num = 0;
+            malloc_from_new_sb(3, &mut cache, &mut block_num);
+            let ptr = cache.peek_block();
+            cache.pop_list(ptr, cache.get_block_num());
+            page_free(ptr);
         });
     });
 }
 
-fn initialize_sb(c: &mut Criterion) {
-    unsafe {
-        lrmalloc_rs::init_malloc();
-    }
-    let size_class_index = 1;
-    c.bench_function("initialize super block", |b| {
+fn alloc_from_super_block_no_free(c: &mut Criterion) {
+    let ptr = AutoPtr::new(8usize);
+    let mut ptrs = vec![];
+    c.bench_function("alloc from super block no free", |b| {
         b.iter(|| {
-            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-
-            // debug_assert!(!desc.is_null());
-
-            let block_size = sc.block_size;
-            let max_count = sc.get_block_num();
-
-            let super_block =
-                page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
-
-            for idx in 0..(max_count - 1) {
-                unsafe {
-                    let block = super_block.offset((idx * block_size as usize) as isize);
-                    let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
-                    *(block as *mut *mut u8) = next;
-                }
-            }
-        })
+            let mut cache = ThreadCacheBin::new();
+            let mut block_num = 0;
+            malloc_from_new_sb(3, &mut cache, &mut block_num);
+            let ptr = cache.peek_block();
+            cache.pop_list(ptr, cache.get_block_num());
+            ptrs.push(ptr);
+        });
     });
+    for ptr in ptrs {
+        page_free(ptr);
+    }
+}
+
+fn page_free_time(c: &mut Criterion) {
+    let ptr = AutoPtr::new(8usize);
+    c.bench_function("page free", |b| {
+        b.iter_custom(|iters| {
+            let mut cache = ThreadCacheBin::new();
+            let mut block_num = 0;
+            let mut output = Duration::from_secs(0);
+            let mut ptrs = vec![];
+            for _ in 0..iters {
+                malloc_from_new_sb(3, &mut cache, &mut block_num);
+                let ptr = cache.peek_block();
+                ptrs.push(ptr);
+                cache.pop_list(ptr, cache.get_block_num());
+            }
+            for ptr in ptrs {
+                let dur = Instant::now();
+
+                page_free(ptr);
+                output += dur.elapsed();
+            }
+            output
+        });
+    });
+}
+
+fn page_alloc_bench(c: &mut Criterion) {
+    let mut ptrs = vec![];
+    c.bench_function("page get", |b| {
+        b.iter(|| ptrs.push(page_alloc(PAGE).unwrap()));
+    });
+    print!("Freeing pages ({}) from page get bench... ", ptrs.len());
+    stdout().flush();
+    for ptr in ptrs {
+        page_free(ptr);
+    }
+    println!("done")
 }
 
 fn desc_alloc(c: &mut Criterion) {
@@ -78,13 +99,6 @@ fn desc_alloc(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    functions,
-    init_malloc,
-    page_alloc_bench,
-    initialize_sb,
-    from_new_sb,
-    desc_alloc,
-    thread_cache_fill
-);
-criterion_main!(functions);
+criterion_group!(paging, /*page_alloc_bench, */ page_free_time);
+criterion_group!(functions, desc_alloc, thread_cache_fill, alloc_from_super_block, alloc_from_super_block_no_free);
+criterion_main!(paging, functions);

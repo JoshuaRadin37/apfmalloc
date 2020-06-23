@@ -4,6 +4,7 @@ use crate::size_classes::{SizeClassData, SIZE_CLASSES};
 use std::ptr::slice_from_raw_parts_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::single_access::SingleAccess;
 use atomic::Atomic;
 use bitfield::size_of;
 use memmap::MmapMut;
@@ -111,11 +112,17 @@ unsafe fn init_heaps() {
 }
 
 pub fn get_heaps() -> &'static mut Heaps {
+    static HEAPS_INIT_S: SingleAccess = SingleAccess::new();
+
     unsafe {
+        /*
         if !HEAP_INIT.compare_and_swap(false, true, Ordering::Acquire) {
             init_heaps();
             //HEAP_INIT.store(true, Ordering::Release)
         }
+
+         */
+        HEAPS_INIT_S.with(|| unsafe { init_heaps() });
 
         &mut HEAPS
     }

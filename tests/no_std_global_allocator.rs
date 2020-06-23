@@ -5,6 +5,7 @@ use lrmalloc_rs::{do_aligned_alloc, do_free};
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 struct Dummy;
@@ -25,5 +26,13 @@ unsafe impl GlobalAlloc for Dummy {
 
 #[test]
 fn no_std_global_allocator() {
-    let _vec = Vec::<usize>::with_capacity(8);
+    let mut vec: Vec<_> = (0..100).map(|i| Box::new(i)).collect::<Vec<Box<usize>>>();
+
+    for i in 0usize..100 {
+        assert_eq!(i, *vec[i])
+    }
+
+    let v: Vec<_> = vec.drain(0..100).collect();
+    assert_eq!(vec.len(), 0);
+    assert_eq!(v.len(), 100);
 }

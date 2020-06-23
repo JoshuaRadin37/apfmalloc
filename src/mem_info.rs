@@ -25,7 +25,13 @@ pub const MIN_ALIGN: usize = LG_PTR;
 pub const DESCRIPTOR_BLOCK_SZ: usize = 16 * PAGE;
 
 pub fn align_val(val: usize, align: usize) -> usize {
+
     (val + align - 1) & (!align + 1)
+}
+
+/// Given a size and an alignment, gives an adjusted alignment
+pub fn align_size(size: usize, align: usize) -> usize {
+    align_val(size, align)
 }
 
 pub fn align_addr(addr: usize, align: usize) -> *const usize {

@@ -1,10 +1,15 @@
 [package]
 name = "lrmalloc-rs-global"
-version = "0.1.0"
+description = "A package that creates FFI bindings for LRMalloc-rs to C programs"
+version = "1.0.0"
 authors = ["Joshua Radin <jradin16@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+no-rust-global = []
 
 [lib]
 crate-type = ["staticlib", "rlib", "dylib"]
@@ -12,4 +17,6 @@ crate-type = ["staticlib", "rlib", "dylib"]
 [dependencies]
 lrmalloc-rs = { path = "../"}
 libc = "0.2.71"
+
+[dev-dependencies]
 rand = "0.7.3"

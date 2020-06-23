@@ -1,49 +1,72 @@
 [package]
 name = "lrmalloc-rs"
+description = "An implementation of (LRMalloc)[https://github.com/ricleite/lrmalloc], but improved with APF tuning (Li et. al., 2019)"
 version = "0.1.0"
-authors = ["Joshua Radin <jradin16@gmail.com>"]
+authors = ["Joshua Radin <jradin2@u.rochester.edu>",
+            "Elias Neuman-Donihue <eneumand@u.rochester.edu>"]
 edition = "2018"
+license-file = "LICENSE"
+readme = "README.md"
+keywords = ["memory", "allocation"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 default = []
 track_allocation = []
-show_all_allocations = []
 
 [workspace]
 members = [
-    "lrmalloc-rs-global"
+    "lrmalloc-rs-global",
+    "benchmarking-tools"
 ]
+
+[profile.test]
+opt-level = 0
+
+[profile.bench]
+opt-level = 3
 
 [dependencies]
 bitfield = "0.13.2"
-lazy_static = "1.4.0"
 crossbeam = "0.7.3"
 memmap = "0.7.0"
 libc = "0.2.71"
 atomic = "0.4.5"
 spin = "0.5.2"
 thread_local = "1.0.1"
-log = "0.4.8"
-log4rs = "0.12.0"
+errno = "0.2.5"
+lazy_static = "1.4.0"
 
+[lib]
+bench = false
 
-
+# Windows Dependencies
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "winnt", "winerror", "memoryapi"] }
 
+# Benchmark Dependencies
 [dev-dependencies]
 criterion = "0.3"
+benchmarking-tools = { path = "benchmarking-tools"}
+
 [[bench]]
 name = "allocating_bench"
 harness = false
 
-# [[bench]]
-# name = "function_benches"
-# harness = false
+[[bench]]
+name = "function_benches"
+harness = false
+
+[[bench]]
+name = "timed_allocation"
+harness = false
 
 
 [[bench]]
 name = "multiple_threads"
+harness = false
+
+[[bench]]
+name = "apf_benches"
 harness = false

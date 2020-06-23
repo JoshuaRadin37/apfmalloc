@@ -1,8 +1,8 @@
 use crate::allocation_data::Anchor;
 
 use crate::alloc::{
-    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_from_new_sb,
-    malloc_from_partial, unregister_desc,
+    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb,
+    malloc_count_from_partial, malloc_from_new_sb, malloc_from_partial, unregister_desc,
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::MAX_SZ_IDX;
@@ -102,12 +102,10 @@ impl ThreadCacheBin {
     }
 }
 
-
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
-
     let mut used_partial = true;
-    //info!("Attempting to fill a cache");
+
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
@@ -132,11 +130,11 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     cache.block_size = Some(size_class_index);
 
     #[cfg(debug_assertions)]
-        {
-            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-            debug_assert!(block_num > 0);
-            debug_assert!(block_num <= sc.cache_block_num as usize);
-        }
+    {
+        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+        debug_assert!(block_num > 0);
+        debug_assert!(block_num <= sc.cache_block_num as usize);
+    }
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
@@ -200,9 +198,6 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
                 new_anchor.set_count(desc.max_count as u64 - 1);
                 new_anchor.set_state(SuperBlockState::EMPTY);
             } else {
-                if block_count == 0 {
-                    error!("Setting new anchor to have a block count of 0");
-                }
                 new_anchor.set_count(block_count as u64);
             }
 
@@ -230,7 +225,6 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         }
     }
 }
-
 
 pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
 
@@ -273,7 +267,6 @@ pub struct ThreadEmpty;
 
 #[cfg(unix)]
 impl Drop for ThreadEmpty {
-
     fn drop(&mut self) {
         //info!("Flushing entire thread cache");
         thread_cache.with(|tcache| {
@@ -291,43 +284,68 @@ impl Drop for ThreadEmpty {
 }
 // APF Functions
 
-fn check_blocks(i: usize) -> u32 {
+pub fn init_tuners() {
+    no_tuning(|| {
+        apf_tuners.with(|tuners| {
+            for i in 0..MAX_SZ_IDX {
+                unsafe {
+                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret));
+                }
+            }
+        });
+        apf_init.with(|b| {
+            *b.borrow_mut() = true;
+        });
+        skip_tuners.with(|s| unsafe {
+            *s.get() = 0;
+        })
+    });
+}
+
+fn check(size_class_index: usize) -> u32 {
     return thread_cache.with(|tcache| {
         unsafe {
-            return (*tcache.get()).get_mut(i).unwrap().get_block_num();
+            return (*tcache.get())
+                .get(size_class_index)
+                .unwrap()
+                .get_block_num();
         };
     });
 }
 
-fn fetch(i: usize, c: usize) -> bool{
-    return false;
-}
+fn fetch(size_class_index: usize, count: usize) -> bool {
+    let cache = &mut thread_cache
+        .with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
-fn ret(i: usize, c: u32) -> bool{
-    return false;
-}
+    let mut block_num = 100.max(count);
 
-/*
-pub fn init_tuners() {
-    for i in 0..MAX_SZ_IDX {
-        apf_tuner.with(|tuners| {
-            (*tuners.borrow_mut()).get_mut(i).unwrap().set_id(i);
-        });
+    
+    malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
+
+    // Handles no partial block and insufficient partial block cases
+    // Shouldn't need to loop more than once unless fetching *really* large count
+    while block_num < count {
+        malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
     }
 
+    return false;
 }
 
- */
+fn ret(size_class_index: usize, count: u32) -> bool {
+    let cache =
+        thread_cache.with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
-fn check(i: usize) -> u32 {
-    return thread_cache.with(|tcache| {
-        unsafe {
-            return (*tcache.get()).get(i).unwrap().get_block_num();
-        };
-    });
+    assert!(
+        count <= cache.get_block_num(),
+        "Trying to pop return more blocks than in cache"
+    );
+
+    for _i in 0..count {
+        cache.pop_block();
+    }
+
+    return true;
 }
-
-
 
 use crate::apf::ApfTuner;
 #[cfg(not(unix))]
@@ -349,8 +367,26 @@ thread_local! {
     #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 
-    pub static apf_tuner: RefCell<[ApfTuner; MAX_SZ_IDX]> = RefCell::new([ApfTuner::new(check_blocks, fetch, ret); MAX_SZ_IDX]);
+    #[cfg(unix)]
+    pub static skip_tuners: UnsafeCell<usize> = UnsafeCell::new(1);
+
+    // Probably don't want a static lifetime here
+    pub static apf_tuners: UnsafeCell<Vec<ApfTuner<'static>>> = UnsafeCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
+}
+
+#[inline]
+pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
+    crate::thread_cache::skip_tuners.with(|b| unsafe {
+        *b.get() += 1;
+    });
+    let ret = func();
+    crate::thread_cache::skip_tuners.with(|b| unsafe {
+        if *b.get() > 0 {
+            *b.get() -= 1;
+        }
+    });
+    ret
 }
 
 #[cfg(test)]
