@@ -4,9 +4,9 @@ use crate::apf::trace::Trace;
 
 mod constants;
 pub use constants::TARGET_APF;
-mod histogram;
-mod timescale_functions;
-mod trace;
+pub mod histogram;
+pub mod timescale_functions;
+pub mod trace;
 
 /*
         -- APF Tuner --
@@ -78,6 +78,10 @@ impl ApfTuner<'_> {
             (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
         }
+        else {
+            let alt = (self.check)(self.id);
+            let dummy: usize;
+        }
         return true;
     }
 
@@ -122,6 +126,10 @@ impl ApfTuner<'_> {
             let ciel = demand.ceil() as u32;
             (self.ret)(self.id, ciel + 1);
         }
+        else {
+            let alt = (self.check)(self.id);
+            let dummy: usize;
+        }
         return true;
     }
 
@@ -144,6 +152,10 @@ impl ApfTuner<'_> {
     // Average demand in windows of length k
     // Returns none if reuse counter has not completed a burst yet
     fn demand(&self, k: usize) -> Option<f32> {
+        if k > self.time {
+            return None;
+        }
+
         match self.r_counter.reuse(k) {
             Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
             None => None,

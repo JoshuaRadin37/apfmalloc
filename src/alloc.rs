@@ -346,12 +346,9 @@ pub fn malloc_count_from_new_sb(
     }
 
     let mut anchor: Anchor = Anchor::default();
-    anchor.set_avail(count as u64);
-    anchor.set_count(if count < max_count {
-        max_count as u64 - count as u64
-    } else {
-        count as u64
-    });
+    anchor.set_avail(c as u64);
+    anchor.set_count(max_count as u64 - c as u64);
+    
     anchor.set_state(match max_count > count {
         true => SuperBlockState::PARTIAL,
         false => SuperBlockState::EMPTY,

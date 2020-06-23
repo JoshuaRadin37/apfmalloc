@@ -41,12 +41,12 @@ pub mod allocation_data;
 pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
-pub mod no_heap_mutex;
 pub mod page_map;
 pub mod pages;
 pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
+pub mod independent_collections;
 
 mod bootstrap;
 
@@ -55,7 +55,7 @@ pub mod ptr {
     pub mod rc;
 }
 
-mod apf;
+pub mod apf;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
@@ -67,6 +67,8 @@ pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
+
+static USE_APF: bool = true;
 
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
@@ -288,35 +290,37 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             #[cfg(unix)]
                 {
-                    thread_cache::skip.with(|b| unsafe {
-                        if !*b.get() {
-                            let mut skip = b.get();
-                            *skip = true;
-                            thread_cache::apf_init.with(|init| {
-                                if !*init.borrow() {
-                                    thread_cache::init_tuners();
-                                    *init.borrow_mut() = true;
-                                }
-                                assert_eq!(
-                                    thread_cache::apf_init.with(|init| { *init.borrow() }),
-                                    true
-                                );
-                                // set_use_bootstrap(false);
-                            });
-                            assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
-                            let _ = thread_cache::thread_init.with(|_| ());
-                        }
-                    });
-                    thread_cache::skip_tuners.with(|b| unsafe {
-                        if *b.get() == 0 {
-                            thread_cache::apf_tuners.with(|tuners| {
-                                (&mut *tuners.get())
-                                    .get_mut(size_class_index)
-                                    .unwrap()
-                                    .malloc(ptr);
-                            });
-                        }
-                    });
+                    if USE_APF {
+                        thread_cache::skip.with(|b| unsafe {
+                            if !*b.get() {
+                                let mut skip = b.get();
+                                *skip = true;
+                                thread_cache::apf_init.with(|init| {
+                                    if !*init.borrow() {
+                                        thread_cache::init_tuners();
+                                        *init.borrow_mut() = true;
+                                    }
+                                    assert_eq!(
+                                        thread_cache::apf_init.with(|init| { *init.borrow() }),
+                                        true
+                                    );
+                                    // set_use_bootstrap(false);
+                                });
+                                assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
+                                let _ = thread_cache::thread_init.with(|_| ());
+                            }
+                        });
+                        thread_cache::skip_tuners.with(|b| unsafe {
+                            if *b.get() == 0 {
+                                thread_cache::apf_tuners.with(|tuners| {
+                                    (&mut *tuners.get())
+                                        .get_mut(size_class_index)
+                                        .unwrap()
+                                        .malloc(ptr);
+                                });
+                            }
+                        });
+                    }
                 }
 
             //set_use_bootstrap(true);
@@ -422,7 +426,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
                 || use_bootstrap()
                 || (!cfg!(unix)
-                && match thread_cache::thread_init.try_with(|_| {}) {
+                && match thread_cache::thread_init.try_with(|_| {()} ) {
                 Ok(_) => false,
                 Err(_) => true,
             });
@@ -499,9 +503,9 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
                          */
 
-                        if cache.get_block_num() >= sc.cache_block_num {
+                        /* if cache.get_block_num() >= sc.cache_block_num {
                             flush_cache(size_class_index, cache);
-                        }
+                        } */
 
                         cache.push_block(ptr as *mut u8)
                     })
@@ -709,6 +713,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[ignore]
     fn double_free() {
         let ptr = allocate_val(0usize);
         do_free(ptr);
