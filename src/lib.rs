@@ -41,7 +41,6 @@ pub mod allocation_data;
 pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
-pub mod no_heap_mutex;
 pub mod page_map;
 pub mod pages;
 pub mod single_access;

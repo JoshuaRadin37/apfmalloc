@@ -13,7 +13,8 @@ use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
 use std::{fmt, io};
 use errno::Errno;
-use std::collections::HashMap;
+use crate::independent_collections::HashMap;
+
 
 pub mod external_mem_reservation;
 

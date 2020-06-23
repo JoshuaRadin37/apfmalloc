@@ -16,7 +16,6 @@ use winapi::{
     },
 };
 
-use crate::no_heap_mutex::NoHeapMutex;
 use crate::pages::external_mem_reservation::AllocationError::AllocationFailed;
 use errno::Errno;
 use std::fmt::Display;
