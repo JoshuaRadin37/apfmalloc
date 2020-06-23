@@ -121,24 +121,23 @@ impl<K, V> HashMap<K, V> where
             new_array.push(Array::new())
         }
 
-        let old_buckets: Array<Bucket<K, V>> =
-            std::mem::replace(&mut self.inner, HashMapInner {
-                buckets: new_array
-            })
-                .buckets
-                .into_iter()
-                .flatten()
-                .collect();
+        let old = std::mem::replace(&mut self.inner, HashMapInner {
+            buckets: new_array
+        });
+
         self.containers_used = 0;
-        for mut bucket in old_buckets {
-            let new_hash = self.get_rehash(&bucket.key, new_capacity);
-            bucket.hash = new_hash;
-            let index = new_hash as usize;
-            let array = &mut self.inner.buckets[index];
-            if array.is_empty() {
-                self.containers_used += 1;
+
+        for old_buckets in old.buckets {
+            for mut bucket in old_buckets {
+                let new_hash = self.get_rehash(&bucket.key, new_capacity);
+                bucket.hash = new_hash;
+                let index = new_hash as usize;
+                let array = &mut self.inner.buckets[index];
+                if array.is_empty() {
+                    self.containers_used += 1;
+                }
+                array.push(bucket);
             }
-            array.push(bucket);
         }
     }
 

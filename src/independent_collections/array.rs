@@ -8,6 +8,7 @@ use std::iter::FromIterator;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::ptr::drop_in_place;
+use crate::mem_info::align_val;
 
 pub struct RawArray<T> {
     segment: Option<Segment>,
@@ -27,7 +28,8 @@ impl<T> RawArray<T> {
             return;
         }
 
-        let actual_size = new_capacity * std::mem::size_of::<T>();
+        let initial_size = new_capacity * std::mem::size_of::<T>();
+        let actual_size = align_val(initial_size, std::mem::align_of::<T>());
         let new_ptr = SEGMENT_ALLOCATOR.allocate(actual_size).unwrap();
         match &mut self.segment {
             None => {
@@ -80,6 +82,8 @@ impl<T> Drop for RawArray<T> {
         }
     }
 }
+
+
 
 impl<T> Index<usize> for RawArray<T> {
     type Output = T;
@@ -282,12 +286,14 @@ impl <T> Iterator for ArrayIterator<T>{
         if self.index >= self.array.len() {
             None
         } else {
-            let ret = &self.array[self.index] as *const T;
-            let ret =unsafe {
-                ret.read()
-            };
-            self.index += 1;
-            Some(ret)
+            unsafe {
+                let ret = &self.array[self.index] as *const T;
+                let ret =
+                    ret.read_unaligned();
+
+                self.index += 1;
+                Some(ret)
+            }
         }
     }
 }
@@ -323,12 +329,6 @@ impl <T> Deref for Array<T> {
 
 impl <T> DerefMut for Array<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
-    }
-}
-
-impl <T> AsMut<[T]> for Array<T> {
-    fn as_mut(&mut self) -> &mut [T] {
         let ptr = self.array.get_ptr();
         if ptr.is_null() {
             &mut []
