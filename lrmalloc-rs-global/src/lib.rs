@@ -1,10 +1,3 @@
-//! This crate allows for rust and non-rust projects to use the lrmalloc-rs library functions for allocation and de-allocation. The library
-//! overrides 4 libc functions: `malloc`, `calloc`, `realloc`, and `free`. It also provides bindings for a C function `aligned_alloc`. In
-//! addition to these 5 functions, in order to work better with Rust allocations, this crate provides the `RustAllocator` struct, which
-//! implements the global allocator. By default, it is included in the library. However, it can be disabled by passing the `no-rust-global`
-//! feature to cargo. If you want to have access to the `RustAllocator`, but don't want it be selected as the global allocator by default,
-//! pass the `no_preset` feature flag to cargo.
-
 extern crate lrmalloc_rs;
 
 use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
@@ -100,9 +93,6 @@ pub extern "C" fn free(ptr: *mut c_void) {
     do_free(ptr)
 }
 
-/// Allocates `size` bytes of memory, and ensures that the pointer is aligned to `alignment`
-///
-/// If the alignment is not a power of 2, then a NULL pointer is returned
 #[no_mangle]
 pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     unsafe {
@@ -111,7 +101,7 @@ pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     do_aligned_alloc(alignment, size) as *mut c_void
 }
 
-/// Runs a few quick tests to see if the malloc(), calloc(), realloc(), and free() functions are routed through this library
+
 #[no_mangle]
 pub extern "C" fn check_override() -> bool {
     unsafe {
@@ -142,9 +132,7 @@ pub extern "C" fn check_override() -> bool {
 #[cfg(not(feature = "no-rust-global"))] use lrmalloc_rs::mem_info::align_val;
 
 /// Allows Rust to use aligned allocation instead of using malloc when calling alloc, as alignment data would be lost. This is important
-/// for creating the internal structures of the allocator. This structure implements the `GlobalAlloc` trait, and therefore can be used
-/// as a global allocator. By default, it is set as the global allocator, but this behavior can be disabled by setting the feature flag
-/// `no_preset`.
+/// for creating the internal structures of the allocator
 #[cfg(not(feature = "no-rust-global"))]
 pub struct RustAllocator;
 
@@ -168,8 +156,8 @@ unsafe impl GlobalAlloc for RustAllocator {
     }
 }
 
-/// The global allocator using the lrmalloc-rs library functions
-#[cfg(all(not(feature = "no-rust-global"), feature="no_preset"))]
+// The global allocator structure
+#[cfg(not(feature = "no-rust-global"))]
 #[global_allocator]
 pub static ALLOCATOR: RustAllocator = RustAllocator;
 

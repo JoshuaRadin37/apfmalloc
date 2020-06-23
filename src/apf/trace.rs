@@ -1,4 +1,6 @@
 use crate::apf::constants::INIT_TRACE_LENGTH;
+use crate::pages::page_alloc_over_commit;
+use atomic::Atomic;
 use std::collections::HashMap;
 use std::fmt;
 use std::slice::from_raw_parts_mut;
