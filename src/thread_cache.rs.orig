@@ -325,7 +325,14 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
     // Handles no partial block and insufficient partial block cases
     // Shouldn't need to loop more than once unless fetching *really* large count
     while block_num < count {
+<<<<<<< HEAD
+        malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
+        if block_num == 0 {
+            malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
+        }
+=======
         malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
+>>>>>>> apf-tuning
     }
 
     return false;

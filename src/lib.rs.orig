@@ -47,7 +47,6 @@ pub mod pages;
 pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
-pub mod independent_collections;
 
 mod bootstrap;
 
@@ -291,6 +290,37 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             #[cfg(unix)]
                 {
+<<<<<<< HEAD
+                    thread_cache::skip.with(|b| unsafe {
+                        if !*b.get() {
+                            let mut skip = b.get();
+                            *skip = true;
+                            thread_cache::apf_init.with(|init| {
+                                if !*init.borrow() {
+                                    thread_cache::init_tuners();
+                                    *init.borrow_mut() = true;
+                                }
+                                assert_eq!(
+                                    thread_cache::apf_init.with(|init| { *init.borrow() }),
+                                    true
+                                );
+                                // set_use_bootstrap(false);
+                            });
+                            assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
+                            let _ = thread_cache::thread_init.with(|_| ());
+                        }
+                    });
+                    thread_cache::skip_tuners.with(|b| unsafe {
+                        if *b.get() == 0 {
+                            thread_cache::apf_tuners.with(|tuners| {
+                                (&mut *tuners.get())
+                                    .get_mut(size_class_index)
+                                    .unwrap()
+                                    .malloc(ptr);
+                            });
+                        }
+                    });
+=======
                     if USE_APF {
                         thread_cache::skip.with(|b| unsafe {
                             if !*b.get() {
@@ -301,27 +331,22 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                                         thread_cache::init_tuners();
                                         *init.borrow_mut() = true;
                                     }
-                                    assert_eq!(
-                                        thread_cache::apf_init.with(|init| { *init.borrow() }),
-                                        true
-                                    );
+                                    assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
                                     // set_use_bootstrap(false);
                                 });
-                                assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
+                                assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
                                 let _ = thread_cache::thread_init.with(|_| ());
                             }
                         });
                         thread_cache::skip_tuners.with(|b| unsafe {
                             if *b.get() == 0 {
                                 thread_cache::apf_tuners.with(|tuners| {
-                                    (&mut *tuners.get())
-                                        .get_mut(size_class_index)
-                                        .unwrap()
-                                        .malloc(ptr);
+                                    (&mut *tuners.get()).get_mut(size_class_index).unwrap().malloc(ptr);
                                 });
                             }
                         });
                     }
+>>>>>>> apf-tuning
                 }
 
             //set_use_bootstrap(true);
@@ -427,7 +452,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
                 || use_bootstrap()
                 || (!cfg!(unix)
-                && match thread_cache::thread_init.try_with(|_| {()} ) {
+                && match thread_cache::thread_init.try_with(|_| {}) {
                 Ok(_) => false,
                 Err(_) => true,
             });
@@ -470,6 +495,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 /* WARNING -- ELIAS CODE -- WARNING */
 
                 // Should always be initialized at this point
+<<<<<<< HEAD
                 if thread_cache::apf_init
                     .try_with(|init| *init.borrow())
                     .unwrap_or(false)
@@ -480,6 +506,16 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                             .unwrap()
                             .free(ptr as *mut u8);
                     });
+=======
+                if USE_APF {
+                    if thread_cache::apf_init.try_with(|init| { *init.borrow() }).unwrap_or(false){
+                        thread_cache::apf_tuners.try_with(|tuners| {
+                            unsafe {
+                                (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                            }
+                        });
+                    }
+>>>>>>> apf-tuning
                 }
 
                 /* END ELIAS CODE */
@@ -714,7 +750,6 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[ignore]
     fn double_free() {
         let ptr = allocate_val(0usize);
         do_free(ptr);
