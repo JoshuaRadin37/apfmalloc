@@ -24,7 +24,7 @@ static ALLOCATOR: Apf = Apf;
 
 #[test]
 fn test_apf_tuning() {
-    test();
+    test().expect("Unable to draw test!");
     let mut vec = vec![];
 
     for _i in 0..10 {
