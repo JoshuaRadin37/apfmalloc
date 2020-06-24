@@ -13,6 +13,7 @@ use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, us
 use crate::pages::{page_alloc, page_alloc_over_commit, page_free};
 use crate::single_access::SingleAccess;
 use crate::thread_cache::{fill_cache, flush_cache};
+use crate::visualization::*;
 use atomic::{Atomic, Ordering};
 use crossbeam::atomic::AtomicCell;
 use spin::Mutex;
@@ -55,6 +56,8 @@ pub mod ptr {
 }
 
 pub mod apf;
+
+pub mod visualization;
 
 #[macro_use]
 extern crate bitfield;
