@@ -1,13 +1,17 @@
 use crate::apf::constants::{
     REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK,
 };
-use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
+// use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
+use crate::apf::liveness_counter::LivenessCounter;
+use crate::apf::reuse_counter::ReuseCounter;
 use crate::apf::trace::Trace;
 
 mod constants;
 pub use constants::TARGET_APF;
 pub mod histogram;
-pub mod timescale_functions;
+// pub mod timescale_functions;
+pub mod reuse_counter;
+pub mod liveness_counter;
 pub mod trace;
 
 /*
