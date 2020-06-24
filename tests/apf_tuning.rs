@@ -3,6 +3,7 @@ extern crate lrmalloc_rs;
 use core::sync::atomic::Ordering;
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free};
+use lrmalloc_rs::visualization::test;
 use std::alloc::{GlobalAlloc, Layout};
 use std::thread;
 
@@ -23,6 +24,7 @@ static ALLOCATOR: Apf = Apf;
 
 #[test]
 fn test_apf_tuning() {
+    test();
     let mut vec = vec![];
 
     for _i in 0..10 {
@@ -35,25 +37,4 @@ fn test_apf_tuning() {
     for join_handle in vec {
         println!("{}", join_handle.join().unwrap());
     }
-
-    println!("test");
-    println!(
-        "{}",
-        lrmalloc_rs::thread_cache::apf_init.with(|init| { *init.borrow() })
-    );
-    println!(
-        "{}",
-        lrmalloc_rs::thread_cache::skip_tuners.with(|init| unsafe { *init.get() })
-    );
-
-    println!(
-        "Allocated in bootstrap: {} bytes",
-        lrmalloc_rs::IN_BOOTSTRAP.load(Ordering::Relaxed)
-    );
-
-    println!(
-        "Allocated in cache: {} bytes",
-        lrmalloc_rs::IN_CACHE.load(Ordering::Relaxed)
-    );
-    //panic!();
 }
