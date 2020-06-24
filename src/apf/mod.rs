@@ -34,7 +34,12 @@ pub struct ApfTuner<'a> {
 }
 
 impl ApfTuner<'_> {
-    pub fn new<'a>(id: usize, check: fn(usize) -> u32, get: fn(usize, usize) -> bool, ret: fn(usize, u32) -> bool) -> ApfTuner<'a> {
+    pub fn new<'a>(
+        id: usize,
+        check: fn(usize) -> u32,
+        get: fn(usize, usize) -> bool,
+        ret: fn(usize, u32) -> bool,
+    ) -> ApfTuner<'a> {
         let tuner = ApfTuner {
             id: id,
             l_counter: LivenessCounter::new(),
@@ -45,7 +50,7 @@ impl ApfTuner<'_> {
             dapf: 0,
             check: check,
             get: get,
-            ret: ret
+            ret: ret,
         };
         tuner
     }
@@ -93,7 +98,7 @@ impl ApfTuner<'_> {
     pub fn free(&mut self, ptr: *mut u8) -> bool {
         // dbg!("free");
         self.r_counter.free(ptr as usize);
-        if !USE_ALLOCATION_CLOCK { 
+        if !USE_ALLOCATION_CLOCK {
             self.time += 1;
             self.l_counter.inc_timer();
         }
@@ -143,11 +148,10 @@ impl ApfTuner<'_> {
 
         if self.time >= *TARGET_APF * (self.fetch_count + 1) {
             dapf = *TARGET_APF;
-        }
-        else {
+        } else {
             dapf = *TARGET_APF * (self.fetch_count + 1) - self.time;
         }
-        
+
         dapf
     }
 
@@ -159,9 +163,7 @@ impl ApfTuner<'_> {
         }
 
         match self.r_counter.reuse(k) {
-            Some(r) => {
-                Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r)
-            },
+            Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
             None => None,
         }
     }

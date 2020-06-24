@@ -38,7 +38,12 @@ impl ValueFormatter for BytesFormatter {
         "bytes"
     }
 
-    fn scale_throughputs(&self, typical_value: f64, throughput: &Throughput, values: &mut [f64]) -> &'static str {
+    fn scale_throughputs(
+        &self,
+        typical_value: f64,
+        throughput: &Throughput,
+        values: &mut [f64],
+    ) -> &'static str {
         "bytes"
     }
 

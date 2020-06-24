@@ -19,7 +19,7 @@ pub struct ReuseCounter<'a> {
     burst_length: usize,                // Length of bursts
     hibernation_period: usize,          // Length of hibernation
     n: usize,                           // Current time counter
-    trace: Option<Trace<'a>>,               // Optional current trace -- none if hibernating
+    trace: Option<Trace<'a>>,           // Optional current trace -- none if hibernating
     reuse: Option<HashMap<usize, f32>>, // Last calculated reuse -- none if not initialized (?)
 }
 
@@ -77,12 +77,12 @@ impl ReuseCounter<'_> {
     }
 
     pub fn reuse(&self, k: usize) -> Option<f32> {
-    	// if k > self.burst_length { panic!("ERROR: k exceeds burst length"); }
+        // if k > self.burst_length { panic!("ERROR: k exceeds burst length"); }
         match &self.reuse {
             Some(reuse) => match reuse.get(&k) {
-            	Some(n) => Some(*n),
-            	None => Some(0.0)
-            }
+                Some(n) => Some(*n),
+                None => Some(0.0),
+            },
             None => None,
         }
     }
@@ -91,7 +91,7 @@ impl ReuseCounter<'_> {
 // Offline Functions
 
 fn reuse(t: &Trace) -> HashMap<usize, f32> {
-    no_tuning( || {
+    no_tuning(|| {
         let intervals = t.free_intervals();
         let n = t.alloc_length();
 
@@ -148,7 +148,10 @@ fn reuse(t: &Trace) -> HashMap<usize, f32> {
 
         let mut result = HashMap::<usize, f32>::new();
         for k in 1..n + 1 {
-            result.insert(k, (x[k - 1] + z[k - 1] - y[k - 1]) as f32 / (n - k + 1) as f32);
+            result.insert(
+                k,
+                (x[k - 1] + z[k - 1] - y[k - 1]) as f32 / (n - k + 1) as f32,
+            );
         }
 
         result
@@ -172,42 +175,102 @@ mod test {
     #[test]
     fn test_reuse_function() {
         let mut t = Trace::new();
-        t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[&1], 2.0/6.0);
+        t.extend(vec![
+            Event::Alloc(1),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(1),
+            Event::Free(2),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(3),
+            Event::Alloc(1),
+        ]);
+        assert_eq!(reuse(&t)[&1], 2.0 / 6.0);
     }
 
     #[test]
     fn test_reuse_function_2() {
         let mut t = Trace::new();
-        t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
+        t.extend(vec![
+            Event::Alloc(1),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(1),
+            Event::Free(2),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(3),
+            Event::Alloc(1),
+        ]);
         assert_eq!(reuse(&t)[&2], 1.0);
     }
 
     #[test]
     fn test_reuse_function_3() {
         let mut t = Trace::new();
-        t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[&3], 7.0/4.0);
+        t.extend(vec![
+            Event::Alloc(1),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(1),
+            Event::Free(2),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(3),
+            Event::Alloc(1),
+        ]);
+        assert_eq!(reuse(&t)[&3], 7.0 / 4.0);
     }
 
     #[test]
     fn test_reuse_function_4() {
         let mut t = Trace::new();
-        t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[&4], 7.0/3.0);
+        t.extend(vec![
+            Event::Alloc(1),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(1),
+            Event::Free(2),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(3),
+            Event::Alloc(1),
+        ]);
+        assert_eq!(reuse(&t)[&4], 7.0 / 3.0);
     }
 
     #[test]
     fn test_reuse_function_5() {
         let mut t = Trace::new();
-        t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
-        assert_eq!(reuse(&t)[&5], 5.0/2.0);
+        t.extend(vec![
+            Event::Alloc(1),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(1),
+            Event::Free(2),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(3),
+            Event::Alloc(1),
+        ]);
+        assert_eq!(reuse(&t)[&5], 5.0 / 2.0);
     }
 
     #[test]
     fn test_reuse_function_6() {
         let mut t = Trace::new();
-        t.extend(vec![Event::Alloc(1), Event::Alloc(2), Event::Free(1), Event::Alloc(1), Event::Free(2), Event::Alloc(2), Event::Free(1), Event::Alloc(3), Event::Alloc(1)]);
+        t.extend(vec![
+            Event::Alloc(1),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(1),
+            Event::Free(2),
+            Event::Alloc(2),
+            Event::Free(1),
+            Event::Alloc(3),
+            Event::Alloc(1),
+        ]);
         assert_eq!(reuse(&t)[&6], 3.0);
     }
 }

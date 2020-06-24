@@ -1,7 +1,7 @@
 use crate::ptr::auto_ptr::AutoPtr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use core::ptr::drop_in_place;
 use core::ptr::NonNull;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /*
 pub struct Rc<T> {

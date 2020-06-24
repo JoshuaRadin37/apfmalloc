@@ -4,7 +4,7 @@ use crate::pages::external_mem_reservation::AllocationError;
 use crate::{ do_realloc, allocate_type };
 
 use std::slice::from_raw_parts_mut;
-use std::collections::HashMap;
+
 use std::ffi::c_void;
 use std::mem::size_of;
 
@@ -99,14 +99,11 @@ impl Histogram {
     }
 
     pub fn increment(&mut self, key: usize) -> () {
-
         no_tuning(|| *self.histogram.entry(key).or_insert(0) += 1);
     }
 
     pub fn add(&mut self, key: usize, val: usize) {
-
-        no_tuning( || *self.histogram.entry(key).or_insert(0) += val);
-
+        no_tuning(|| *self.histogram.entry(key).or_insert(0) += val);
     }
 
     pub fn get(&self, key: &usize) -> usize {

@@ -1,8 +1,8 @@
 use crate::allocation_data::Anchor;
 
 use crate::alloc::{
-    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_from_new_sb,
-    malloc_from_partial, malloc_count_from_new_sb, malloc_count_from_partial, unregister_desc,
+    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb,
+    malloc_count_from_partial, malloc_from_new_sb, malloc_from_partial, unregister_desc,
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::MAX_SZ_IDX;
@@ -305,15 +305,17 @@ pub fn init_tuners() {
 fn check(size_class_index: usize) -> u32 {
     return thread_cache.with(|tcache| {
         unsafe {
-            return (*tcache.get()).get(size_class_index).unwrap().get_block_num();
+            return (*tcache.get())
+                .get(size_class_index)
+                .unwrap()
+                .get_block_num();
         };
     });
 }
 
 fn fetch(size_class_index: usize, count: usize) -> bool {
-    let cache = &mut thread_cache.with(|tcache| {
-        unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() }
-    });
+    let cache = &mut thread_cache
+        .with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
     let mut block_num = 100.max(count);
 
@@ -330,11 +332,13 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
 }
 
 fn ret(size_class_index: usize, count: u32) -> bool {
-    let cache = thread_cache.with(|tcache| {
-        unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() }
-    });
+    let cache =
+        thread_cache.with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
-    assert!(count <= cache.get_block_num(), "Trying to pop return more blocks than in cache");
+    assert!(
+        count <= cache.get_block_num(),
+        "Trying to pop return more blocks than in cache"
+    );
 
     for _i in 0..count {
         cache.pop_block();
@@ -373,22 +377,17 @@ thread_local! {
 
 #[inline]
 pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
-    crate::thread_cache::skip_tuners.with(
-        |b| unsafe {
-            *b.get() += 1;
-        }
-    );
+    crate::thread_cache::skip_tuners.with(|b| unsafe {
+        *b.get() += 1;
+    });
     let ret = func();
-    crate::thread_cache::skip_tuners.with(
-        |b| unsafe {
-            if *b.get() > 0 {
-                *b.get() -= 1;
-            }
+    crate::thread_cache::skip_tuners.with(|b| unsafe {
+        if *b.get() > 0 {
+            *b.get() -= 1;
         }
-    );
+    });
     ret
 }
-
 
 #[cfg(test)]
 mod test {
@@ -397,7 +396,6 @@ mod test {
 
     #[test]
     fn check_bin_consistency() {
-
-	let _bin = ThreadCacheBin::new();
-	}
+        let _bin = ThreadCacheBin::new();
+    }
 }

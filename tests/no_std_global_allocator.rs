@@ -5,8 +5,8 @@ use lrmalloc_rs::{do_aligned_alloc, do_free};
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 struct Dummy;
 

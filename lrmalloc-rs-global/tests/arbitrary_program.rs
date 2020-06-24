@@ -3,6 +3,8 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::BTreeMap;
+use std::sync::{Mutex, RwLock, Arc};
+use std::cell::RefCell;
 
 // ~O(2^n)
 fn slow_fib(n: usize) -> Box<usize> {
@@ -15,12 +17,23 @@ fn slow_fib(n: usize) -> Box<usize> {
 
 // O(n)
 fn fast_fib(n: usize) -> usize {
-    let mut saved = vec![0usize, 1];
+    let mut saved = vec![];
 
-    for i in 2..=n {
-        saved.push(saved[i - 1] + saved[i - 2]);
+    for i in 0..=n {
+        let mut guard = &mut saved;
+        if guard.len() <= i {
+            if i < 2 {
+                guard.push(i)
+            } else {
+                let n_1 = guard[i - 1];
+                let n_2 = guard[i - 2];
+                guard.push(n_1 + n_2);
+            }
+        } else {
+            break;
+        }
+
     }
-
     saved[n]
 }
 
@@ -35,16 +48,15 @@ fn fast_fib_no_fail_global() {
         );
     }
 
-    assert!(unsafe { lrmalloc_rs_global::OVERRIDE_MALLOC })
+    assert!(unsafe { lrmalloc_rs_global::OVERRIDE_MALLOC || lrmalloc_rs_global::OVERRIDE_ALIGNED_ALLOC })
 }
 
 #[test]
 fn arbitrary_program_main() {
-    const SIZE: usize = 4;
+    const SIZE: usize = 64;
     let mut rng = thread_rng();
     let mut collect = (0..SIZE).map(|n| fast_fib(n)).collect::<Vec<usize>>();
 
-    let option = Some(4);
 
     //collect.reverse();
     collect.shuffle(&mut rng);

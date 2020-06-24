@@ -10,7 +10,7 @@ use crate::page_map::S_PAGE_MAP;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, use_bootstrap};
-use crate::pages::{page_alloc, page_free, page_alloc_over_commit};
+use crate::pages::{page_alloc, page_alloc_over_commit, page_free};
 use crate::single_access::SingleAccess;
 use crate::thread_cache::{fill_cache, flush_cache};
 use atomic::{Atomic, Ordering};
@@ -40,19 +40,18 @@ pub mod allocation_data;
 pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
-pub mod no_heap_mutex;
 pub mod page_map;
 pub mod pages;
 pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
+pub mod independent_collections;
 
 mod bootstrap;
 
 pub mod ptr {
     pub mod auto_ptr;
-    pub mod
-    rc;
+    pub mod rc;
 }
 
 pub mod apf;
@@ -111,6 +110,7 @@ pub fn allocate_val<T>(val: T) -> *mut T {
 
 /// Allocates a space in memory
 pub fn do_malloc(size: usize) -> *mut u8 {
+
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
     /*
     unsafe {
@@ -155,7 +155,6 @@ fn is_power_of_two(x: usize) -> bool {
 }
 
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
-
     if !is_power_of_two(align) {
         return null_mut();
     }
@@ -174,12 +173,14 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
         let pages = page_ceiling!(size);
 
-        let desc = unsafe { &mut *Descriptor::alloc() };
-
         let mut ptr = match page_alloc(pages) {
             Ok(ptr) => ptr,
-            Err(_) => null_mut(),
+            Err(_) => {
+                return null_mut();
+            },
         };
+
+        let desc = unsafe { &mut *Descriptor::alloc() };
 
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
@@ -200,6 +201,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         }
 
         return ptr;
+
     }
 
     let size_class_index = get_size_class(size);
@@ -232,7 +234,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
         }
          */
         #[cfg(debug_assertions)]
-        unsafe {
+            unsafe {
             IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
         }
         unsafe { bootstrap_reserve.lock().allocate(size) }
@@ -256,7 +258,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             }
 
         #[cfg(debug_assertions)]
-        unsafe {
+            unsafe {
             IN_CACHE.fetch_add(size, Ordering::AcqRel);
         }
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
@@ -297,17 +299,23 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                                         thread_cache::init_tuners();
                                         *init.borrow_mut() = true;
                                     }
-                                    assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                                    assert_eq!(
+                                        thread_cache::apf_init.with(|init| { *init.borrow() }),
+                                        true
+                                    );
                                     // set_use_bootstrap(false);
                                 });
-                                assert_eq!(thread_cache::apf_init.with(|init| {*init.borrow()}), true);
+                                assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
                                 let _ = thread_cache::thread_init.with(|_| ());
                             }
                         });
                         thread_cache::skip_tuners.with(|b| unsafe {
                             if *b.get() == 0 {
                                 thread_cache::apf_tuners.with(|tuners| {
-                                    (&mut *tuners.get()).get_mut(size_class_index).unwrap().malloc(ptr);
+                                    (&mut *tuners.get())
+                                        .get_mut(size_class_index)
+                                        .unwrap()
+                                        .malloc(ptr);
                                 });
                             }
                         });
@@ -316,12 +324,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             //set_use_bootstrap(true);
 
-
-
             ptr
         });
-
-
 
         ret
     }
@@ -336,9 +340,8 @@ pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
         }
     };
     let old_size_class = get_size_class(old_size);
-    if old_size_class != 0 && old_size_class == new_size_class {
-        return ptr;
-    } else if old_size_class == 0 && new_size_class == 0 && size < old_size {
+    if old_size_class != 0 && old_size_class == new_size_class ||
+        old_size_class == 0 && new_size_class == 0 && size < old_size {
         return ptr;
     }
 
@@ -359,8 +362,11 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
     Ok(desc.block_size)
 }
 
-
-
+/// Frees a location in memory so that it can be reused at a later time. A free to a `NULL` pointer has no effect.
+///
+/// # Warning
+///
+/// If a pointer has already been freed, a second free to that pointer will cause undefined behavior
 pub fn do_free<T: ?Sized>(ptr: *const T) {
     if ptr.is_null() {
         return;
@@ -372,8 +378,8 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             None => {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
-                return; // todo: Band-aid fix
-                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                //return; // todo: Band-aid fix
+                panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
         }
     };
@@ -403,7 +409,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
                 || use_bootstrap()
                 || (!cfg!(unix)
-                && match thread_cache::thread_init.try_with(|_| {}) {
+                && match thread_cache::thread_init.try_with(|_| {()} ) {
                 Ok(_) => false,
                 Err(_) => true,
             });
@@ -454,13 +460,6 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                             });
                         }
                     });
-                    /* if thread_cache::apf_init.try_with(|init| { *init.borrow() }).unwrap_or(false) {
-                        thread_cache::apf_tuners.try_with(|tuners| {
-                            unsafe {
-                                (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
-                            }
-                        });
-                    } */
                 }
 
                 /* END ELIAS CODE */
@@ -489,7 +488,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                             flush_cache(size_class_index, cache);
                         } */
 
-                        return cache.push_block(ptr as *mut u8);
+                        cache.push_block(ptr as *mut u8)
                     })
                     .expect("Freeing to cache failed");
             }
@@ -586,7 +585,6 @@ mod tests {
         enum FibTree {
             Val(usize),
             Sum(AutoPtr<FibTree>, AutoPtr<FibTree>),
-
         }
 
         impl FibTree {
@@ -687,6 +685,15 @@ mod tests {
         }
 
         dump_info!();
+    }
+
+    #[test]
+    #[should_panic]
+    #[ignore]
+    fn double_free() {
+        let ptr = allocate_val(0usize);
+        do_free(ptr);
+        do_free(ptr);
     }
 }
 

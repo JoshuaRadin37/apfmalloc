@@ -196,16 +196,14 @@ impl Descriptor {
 
                 match &mut new_head {
                     None => {}
-                    Some(new_head) => {
-                        match new_head.get_desc() {
-                            Some(desc) => {
-                                new_head.set(Some(desc), old_head.get_counter());
-                            }
-                            None => {
-                                new_head.set(None, old_head.get_counter());
-                            }
+                    Some(new_head) => match new_head.get_desc() {
+                        Some(desc) => {
+                            new_head.set(Some(desc), old_head.get_counter());
                         }
-                    }
+                        None => {
+                            new_head.set(None, old_head.get_counter());
+                        }
+                    },
                 }
 
                 /*

@@ -237,7 +237,7 @@ pub fn malloc_count_from_partial(
     size_class_index: usize,
     cache: &mut ThreadCacheBin,
     block_num: &mut usize,
-    count: usize
+    count: usize,
 ) {
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let desc = heap_pop_partial(heap);
@@ -259,7 +259,7 @@ pub fn malloc_count_from_partial(
             let avail = old_anchor.avail() as isize;
             let new_avail = match avail + (count as isize) < max_count as isize {
                 true => avail + count as isize,
-                false => max_count as isize
+                false => max_count as isize,
             };
 
             loop {
@@ -295,10 +295,11 @@ pub fn malloc_count_from_partial(
             let c = new_avail - avail;
 
             for i in 0..c {
-                let block = unsafe { super_block.offset((avail+i as isize) * block_size as isize ) };
+                let block =
+                    unsafe { super_block.offset((avail + i as isize) * block_size as isize) };
                 cache.push_block(block);
                 *block_num += 1;
-            }            
+            }
         }
     }
 }
@@ -307,7 +308,7 @@ pub fn malloc_count_from_new_sb(
     size_class_index: usize,
     cache: &mut ThreadCacheBin,
     block_num: &mut usize,
-    count: usize
+    count: usize,
 ) {
     let heap = get_heaps().get_heap_at_mut(size_class_index);
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
@@ -335,7 +336,7 @@ pub fn malloc_count_from_new_sb(
     // Min of max_count and count
     let c = match max_count > count {
         true => count,
-        false => max_count
+        false => max_count,
     };
 
     for i in 0..c {
@@ -349,10 +350,9 @@ pub fn malloc_count_from_new_sb(
     anchor.set_count(max_count as u64 - c as u64);
     
     anchor.set_state(match max_count > count {
-        true =>  SuperBlockState::PARTIAL,
-        false => SuperBlockState::EMPTY
+        true => SuperBlockState::PARTIAL,
+        false => SuperBlockState::EMPTY,
     });
-   
 
     desc.anchor.store(anchor, Ordering::SeqCst);
 
