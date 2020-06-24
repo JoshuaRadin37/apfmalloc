@@ -9,6 +9,7 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::ptr::drop_in_place;
 use crate::mem_info::align_val;
+use crate::ptr::auto_ptr::AutoPtr;
 
 struct RawArray<T> {
     segment: Option<Segment>,
@@ -44,7 +45,9 @@ impl<T> RawArray<T> {
                 }
                 let old = std::mem::replace(&mut self.segment, Some(new_ptr));
                 if let Some(segment) = old {
-                    // SEGMENT_ALLOCATOR.deallocate(segment);
+                    if segment.get_ptr() != self.segment.as_ref().unwrap().get_ptr() {
+                        SEGMENT_ALLOCATOR.deallocate(segment);
+                    }
                 }
             },
         }
@@ -73,7 +76,7 @@ impl<T> RawArray<T> {
         match std::mem::replace(&mut self.segment, None) {
             None => {},
             Some(segment) => {
-                SEGMENT_ALLOCATOR.deallocate(segment);
+                //SEGMENT_ALLOCATOR.deallocate(segment);
             },
         }
     }
@@ -123,10 +126,6 @@ impl <T : Default> Array<T> {
     }
 }
 
-impl <T : Clone> Array<T> {
-
-}
-
 impl<T> Array<T> {
 
     pub const fn new() -> Self {
@@ -134,6 +133,20 @@ impl<T> Array<T> {
             size: 0,
             array: RawArray::new()
         }
+    }
+
+    pub fn with_capacity_using<F>(default: F, size: usize) -> Self where F : Fn() -> T {
+        let mut ret = Self {
+            size,
+            array: RawArray::with_capacity(size)
+        };
+        for i in 0..size {
+            let ptr = &mut ret.array[i] as *mut T;
+            unsafe {
+                ptr.write(default());
+            }
+        }
+        ret
     }
 
     pub fn len(&self) -> usize {
@@ -190,6 +203,11 @@ impl<T> Array<T> {
     }
 
     pub fn clear(&mut self) {
+        unsafe {
+            for element in self.deref_mut() {
+                std::ptr::drop_in_place(element);
+            }
+        }
         self.array.clear();
         self.size = 0;
     }
@@ -226,19 +244,7 @@ impl<T> Array<T> {
         ret
     }
 
-    pub fn with_capacity_using<F>(default: F, size: usize) -> Self where F : Fn() -> T {
-        let mut ret = Self {
-            size,
-            array: RawArray::with_capacity(size)
-        };
-        for i in 0..size {
-            let ptr = &mut ret.array[i] as *mut T;
-            unsafe {
-                ptr.write(default());
-            }
-        }
-        ret
-    }
+
 
     pub fn iter(&self) -> ArrayIterator<&T> {
         let mut arr = Array::new();
@@ -251,6 +257,54 @@ impl<T> Array<T> {
         }
     }
 }
+
+impl Array<u8> {
+
+    /// Receives a bit index and returns (the index of the byte, the index of the bit within the byte)
+    fn byte_index(bit_index: usize) -> (usize, u8) {
+        (bit_index % 8, bit_index as u8 / 8)
+    }
+
+    pub fn get_byte(&self, index: usize) -> Option<&u8> {
+        self.get(index)
+    }
+    pub fn get_byte_mut(&mut self, index: usize) -> Option<&mut u8> {
+        self.get_mut(index)
+    }
+
+    fn bit_mask(index: u8) -> u8 {
+        let mut mask = 0b1u8;
+        mask = mask << index;
+        mask
+    }
+
+    pub fn get_bit(&self, bit_index: usize) -> Option<bool> {
+        let (byte_index, bit_index) = Self::byte_index(bit_index);
+        match self.get_byte(byte_index) {
+            None => { None },
+            Some(byte) => {
+                let mask = Self::bit_mask(bit_index);
+                Some((byte & mask) != 0)
+            },
+        }
+    }
+
+    pub fn set_bit(&mut self, bit_index: usize, bit: bool) {
+        let (byte_index, bit_index) = Self::byte_index(bit_index);
+        match self.get_byte_mut(byte_index) {
+            None => {
+                panic!("Index {} out of bounds", bit_index)
+            },
+            Some(byte) => {
+                let mask = !Self::bit_mask(bit_index);
+                let shifted = (bit as u8) << bit_index;
+                *byte = (*byte & mask) | shifted;
+            },
+        }
+    }
+}
+
+
 
 impl<T> Index<usize> for Array<T>{
     type Output = T;
@@ -346,16 +400,6 @@ impl <T> DerefMut for Array<T> {
     }
 }
 
-impl <T, I> From<I> for Array<T>
-    where I : Iterator<Item=T> {
-    fn from(mut iter: I) -> Self {
-        let mut output = Array::new();
-        while let Some(val) = iter.next() {
-            output.push(val);
-        }
-        output
-    }
-}
 
 impl <T> FromIterator<T> for Array<T> {
     fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
@@ -473,6 +517,7 @@ mod test {
         assert_eq!(arr, array![1, 2, 3, 5, 6, 7]);
         println!("{:?}", arr);
     }
+
 }
 
 

@@ -180,7 +180,7 @@ impl SegAllocator for SegmentAllocator {
 #[cfg(unix)]
 impl SegAllocator for SegmentAllocator {
     fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        //while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -191,7 +191,7 @@ impl SegAllocator for SegmentAllocator {
                 0,
             )
         };
-        LOCK.store(false, Ordering::Release);
+        //LOCK.store(false, Ordering::Release);
         if mmap as usize == std::usize::MAX {
             Err(AllocationFailed(size, errno::errno()))
         } else {
@@ -200,7 +200,7 @@ impl SegAllocator for SegmentAllocator {
     }
 
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        //while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -211,7 +211,7 @@ impl SegAllocator for SegmentAllocator {
                 0,
             )
         };
-        LOCK.store(false, Ordering::Release);
+        //LOCK.store(false, Ordering::Release);
         if mmap == libc::MAP_FAILED {
             Err(AllocationFailed(size, errno::errno()))
         } else {
@@ -220,9 +220,9 @@ impl SegAllocator for SegmentAllocator {
     }
 
     fn deallocate(&self, segment: Segment) -> bool {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        // while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
         let ret =  unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
-        LOCK.store(false, Ordering::Release);
+        // LOCK.store(false, Ordering::Release);
         ret
     }
 }

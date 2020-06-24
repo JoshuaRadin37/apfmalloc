@@ -2,8 +2,7 @@ use std::hash::{Hash, BuildHasher, Hasher};
 use crate::independent_collections::{Array, ArrayIterator};
 use std::hash::BuildHasherDefault;
 use std::collections::hash_map::DefaultHasher;
-use std::marker::PhantomData;
-use std::iter::{Iterator, IntoIterator};
+use std::iter::{Iterator};
 use std::ops::{Index, IndexMut, Deref};
 
 struct Bucket<K, V>
@@ -256,8 +255,9 @@ impl<K, V> HashMap<K, V> where
         false
     }
 
-
-
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 
 }
 
@@ -334,7 +334,7 @@ mod test {
         assert_eq!(map.len(), 1);
         let val = map.remove(&5).expect("If gotten here, the value must exist");
         assert!(!map.contains(&5));
-        assert_eq!(map.len(), 0);
+        assert!(map.is_empty());
         assert_eq!(val, "Hello World!")
 
     }

@@ -88,7 +88,7 @@ impl PageInfoHolder {
             capacity: 0,
             head: None,
             lock: AtomicBool::new(false),
-            tree: Some(HashMap::new())
+            tree: Some(HashMap::with_capacity(10_001))
         };
         let ptr = self.internals.as_mut().unwrap().as_mut_ptr();
         unsafe {
