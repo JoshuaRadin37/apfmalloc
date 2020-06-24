@@ -453,13 +453,18 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
                 // Should always be initialized at this point
                 if USE_APF {
-                    thread_cache::skip_tuners.with(|b| unsafe {
-                        if *b.get() == 0 {
-                            thread_cache::apf_tuners.with(|tuners| {
-                                (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
-                            });
-                        }
-                    });
+                    if thread_cache::apf_init
+                    .try_with(|init| *init.borrow())
+                    .unwrap_or(false)
+                    {
+                        let _r1 = thread_cache::skip_tuners.try_with(|b| unsafe {
+                            if *b.get() == 0 {
+                                let _r2 = thread_cache::apf_tuners.try_with(|tuners| {
+                                    (&mut *tuners.get()).get_mut(size_class_index).unwrap().free(ptr as *mut u8);
+                                });
+                            }
+                        });
+                    }
                 }
 
                 /* END ELIAS CODE */
