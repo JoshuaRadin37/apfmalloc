@@ -3,8 +3,6 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::BTreeMap;
-use std::sync::{Mutex, RwLock, Arc};
-use std::cell::RefCell;
 
 // ~O(2^n)
 fn slow_fib(n: usize) -> Box<usize> {
@@ -20,7 +18,7 @@ fn fast_fib(n: usize) -> usize {
     let mut saved = vec![];
 
     for i in 0..=n {
-        let mut guard = &mut saved;
+        let guard = &mut saved;
         if guard.len() <= i {
             if i < 2 {
                 guard.push(i)

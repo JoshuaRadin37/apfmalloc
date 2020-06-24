@@ -62,7 +62,7 @@ extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false); // Only one can access init
+
 pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); // tells anyone who was stuck looping to continue
 pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
 
@@ -461,7 +461,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                     .try_with(|init| *init.borrow())
                     .unwrap_or(false)
                 {
-                    thread_cache::apf_tuners.try_with(|tuners| unsafe {
+                    thread_cache::apf_tuners.with(|tuners| unsafe {
                         (&mut *tuners.get())
                             .get_mut(size_class_index)
                             .unwrap()

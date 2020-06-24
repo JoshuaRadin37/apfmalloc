@@ -1,4 +1,3 @@
-use lrmalloc_rs::dump_info;
 use lrmalloc_rs_global::{OVERRIDE_MALLOC, OVERRIDE_ALIGNED_ALLOC, OVERRIDE_CALLOC};
 
 #[test]

@@ -24,7 +24,6 @@ fn create_and_destroy() {
 mod mass_stress {
     use super::*;
     use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-    use std::thread::Result;
 
     #[test]
     fn mass_thread_spawn_stress() {

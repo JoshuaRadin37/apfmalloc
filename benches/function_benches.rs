@@ -1,11 +1,9 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion};
 use lrmalloc_rs::alloc::malloc_from_new_sb;
-use lrmalloc_rs::allocation_data::{get_heaps, Descriptor};
+use lrmalloc_rs::allocation_data::Descriptor;
 use lrmalloc_rs::mem_info::{MAX_SZ_IDX, PAGE};
 use lrmalloc_rs::pages::{page_alloc, page_free};
-use lrmalloc_rs::size_classes::SIZE_CLASSES;
 use lrmalloc_rs::thread_cache::{fill_cache, ThreadCacheBin};
-use lrmalloc_rs::{allocate_to_cache, do_malloc};
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use std::time::Duration;
 use std::time::Instant;
@@ -86,7 +84,7 @@ fn page_alloc_bench(c: &mut Criterion) {
         b.iter(|| ptrs.push(page_alloc(PAGE).unwrap()));
     });
     print!("Freeing pages ({}) from page get bench... ", ptrs.len());
-    stdout().flush();
+    stdout().flush().unwrap();
     for ptr in ptrs {
         page_free(ptr);
     }
@@ -99,6 +97,6 @@ fn desc_alloc(c: &mut Criterion) {
     });
 }
 
-criterion_group!(paging, /*page_alloc_bench, */ page_free_time);
+criterion_group!(paging, page_alloc_bench, page_free_time);
 criterion_group!(functions, desc_alloc, thread_cache_fill, alloc_from_super_block, alloc_from_super_block_no_free);
 criterion_main!(paging, functions);

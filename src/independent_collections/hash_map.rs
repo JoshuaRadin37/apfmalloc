@@ -23,29 +23,6 @@ struct HashMapInner<K, V>
 impl<K, V> HashMapInner<K, V> where
     K: Eq + Hash {
 
-    fn find<F>(&self, hash: u64, func: F) -> Option<&Bucket<K, V>> where
-        F : Fn(&Bucket<K, V>) -> bool {
-        let buckets = &self.buckets[hash as usize];
-        for bucket in buckets.iter() {
-            if func(bucket) {
-                return Some(bucket);
-            }
-        }
-
-        None
-    }
-
-    fn find_mut<F>(&mut self, hash: u64, func: F) -> Option<&mut Bucket<K, V>> where
-        F : Fn(&Bucket<K, V>) -> bool {
-        let mut buckets = &mut self.buckets[hash as usize];
-        for bucket in buckets.as_mut().iter_mut() {
-            if func(bucket) {
-                return Some(bucket);
-            }
-        }
-
-        None
-    }
 
     fn get_hash<H>(&self, mut hasher: H, key: &K) -> u64
         where

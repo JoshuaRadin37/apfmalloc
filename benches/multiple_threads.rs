@@ -1,7 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-use lrmalloc_rs::{do_free, do_malloc};
-use std::iter::Iterator;
 use std::sync::{Arc, Mutex};
 use std::thread;
 

@@ -1,7 +1,6 @@
 use crate::mem_info::PAGE_MASK;
 use bitfield::size_of;
 use memmap::MmapMut;
-use std::io::ErrorKind;
 use std::os::raw::c_void;
 
 use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR, AllocationError};
@@ -12,7 +11,6 @@ use std::mem::MaybeUninit;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
 use std::{fmt, io};
-use errno::Errno;
 use crate::independent_collections::HashMap;
 use spin::Mutex;
 use std::hash::{Hash, Hasher};

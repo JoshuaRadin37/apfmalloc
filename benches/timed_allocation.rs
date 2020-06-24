@@ -20,10 +20,10 @@ fn allocate_for_10_sec(c: &mut Criterion<BytesAllocated>) {
             BenchmarkId::new("lrmalloc-rs", 1 << threads),
             &(1 << threads as usize),
             |b, &size| {
-                b.iter_custom(|iters| {
+                b.iter_custom(|_iters| {
                     let mut vec = Vec::with_capacity(size);
                     let output = BytesAllocated;
-                    let mut bytes_allocated = Arc::new(Mutex::new(BytesAllocated::start(&output)));
+                    let bytes_allocated = Arc::new(Mutex::new(BytesAllocated::start(&output)));
                     for _ in 0..size {
                         let b = bytes_allocated.clone();
                         vec.push(thread::spawn(move || {
@@ -53,10 +53,10 @@ fn allocate_for_10_sec(c: &mut Criterion<BytesAllocated>) {
             &(1 << threads as usize),
             |b, &size| {
                 let ptrs = Arc::new(Mutex::new(Vec::new()));
-                b.iter_custom(|iters| {
+                b.iter_custom(|_iters| {
                     let mut vec = Vec::with_capacity(size);
                     let output = BytesAllocated;
-                    let mut bytes_allocated = Arc::new(Mutex::new(BytesAllocated::start(&output)));
+                    let bytes_allocated = Arc::new(Mutex::new(BytesAllocated::start(&output)));
                     for _ in 0..size {
                         let clone = ptrs.clone();
                         let b = bytes_allocated.clone();

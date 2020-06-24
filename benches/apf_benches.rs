@@ -1,4 +1,4 @@
-use criterion::{ criterion_group, criterion_main, BenchmarkId, Criterion, Throughput };
+use criterion::{ criterion_group, criterion_main, Criterion};
 use lrmalloc_rs::apf::trace::{ Trace, Event };
 use lrmalloc_rs::apf::histogram::Histogram;
 use lrmalloc_rs::apf::timescale_functions::{ LivenessCounter, ReuseCounter };

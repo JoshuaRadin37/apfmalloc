@@ -5,6 +5,7 @@ use spin::Mutex;
 use std::process::exit;
 use std::ptr::null_mut;
 
+#[allow(unused)]
 pub static mut bootstrap_cache: Mutex<[ThreadCacheBin; MAX_SZ_IDX]> =
     Mutex::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
 
@@ -14,6 +15,7 @@ pub fn use_bootstrap() -> bool {
     *_use_bootstrap.lock()
 }
 
+#[allow(unused)]
 pub fn set_use_bootstrap(val: bool) {
     *_use_bootstrap.lock() = val;
 }
