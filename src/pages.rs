@@ -14,7 +14,8 @@ use std::sync::atomic::AtomicBool;
 use std::{fmt, io};
 use errno::Errno;
 use crate::independent_collections::HashMap;
-
+use spin::Mutex;
+use std::hash::{Hash, Hasher};
 
 
 pub mod external_mem_reservation;
@@ -491,13 +492,34 @@ impl Display for PageMaskError {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct PtrHolder(*const u8);
+
+unsafe impl Sync for PtrHolder {}
+unsafe impl Send for PtrHolder {}
+
+impl Hash for PtrHolder {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
+    }
+}
+
+
+
+struct SegmentHolder {
+    size_map: Option<HashMap<PtrHolder, usize>>
+}
+
+
+
+static SEGMENT_HOLDER: Mutex<SegmentHolder> = Mutex::new(SegmentHolder { size_map: None });
+
 /// Returns a set of continuous pages, totaling to size bytes
 pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
     if size & PAGE_MASK != 0 {
         return Err(AllocationError::AllocationFailed(size, errno::errno()));
     }
-
-
+    /*
     unsafe {
         //println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
         if PAGE_HOLDER_INIT.compare_and_swap(false, true, Ordering::AcqRel) == false {
@@ -513,8 +535,20 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
         PAGE_HOLDER.alloc(size)
     }
 
+     */
 
+    let mut segment_holder = SEGMENT_HOLDER.lock();
+    let is_none = segment_holder.size_map.is_none();
+    if is_none {
+        std::mem::replace(&mut segment_holder.size_map, Some(HashMap::new()));
+    }
+    let segment = SEGMENT_ALLOCATOR.allocate(size)?;
+    let ptr = segment.get_ptr() as *mut u8;
+    segment_holder.size_map.as_mut().unwrap().insert(PtrHolder(ptr), size);
+    Ok(ptr)
 }
+
+
 
 /// Explicitly allow overcommitting
 ///
@@ -523,7 +557,7 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
     if size & PAGE_MASK != 0 {
         return Err(AllocationError::AllocationFailed(size, errno::errno()));
     }
-
+    /*
     unsafe {
         // println!("PAGE_HOLDER_INIT: {:?}", PAGE_HOLDER_INIT);
         if PAGE_HOLDER_INIT.compare_and_swap(false, true, Ordering::AcqRel) == false {
@@ -539,6 +573,16 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
         PAGE_HOLDER.alloc_overcommit(size)
     }
 
+     */
+    let mut segment_holder = SEGMENT_HOLDER.lock();
+    let is_none = segment_holder.size_map.is_none();
+    if is_none {
+        std::mem::replace(&mut segment_holder.size_map, Some(HashMap::new()));
+    }
+    let segment = SEGMENT_ALLOCATOR.allocate_massive(size)?;
+    let ptr = segment.get_ptr() as *mut u8;
+    segment_holder.size_map.as_mut().unwrap().insert(PtrHolder(ptr), size);
+    Ok(ptr)
 
     // SEGMENT_ALLOCATOR.allocate_massive(size).map(|ptr| ptr.get_ptr() as *mut u8)
 }
@@ -546,13 +590,24 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
 /// Altered version of the lralloc free, which uses the drop method
 /// of MMapMut struct
 pub fn page_free(ptr: *const u8) -> bool {
-    unsafe { PAGE_HOLDER.dealloc(ptr) }
+    // unsafe { PAGE_HOLDER.dealloc(ptr) }
+    let mut segment_holder = SEGMENT_HOLDER.lock();
+    let holder = PtrHolder(ptr);
+    if segment_holder.size_map.as_mut().unwrap().contains(&holder) {
+        let size = segment_holder.size_map.as_mut().unwrap()[&holder];
+        let ret = SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, size));
+        segment_holder.size_map.as_mut().unwrap().remove(&holder);
+        ret
+    } else {
+        false
+    }
+
 }
 
 #[cfg(test)]
 mod test {
     use crate::mem_info::PAGE;
-    use crate::pages::{page_alloc, INITIAL_PAGES, PAGE_HOLDER};
+    use crate::pages::{page_alloc, INITIAL_PAGES, PAGE_HOLDER, page_free};
     use crate::size_classes::{SizeClassData, SIZE_CLASSES};
     use crate::{init_malloc, MALLOC_INIT_S};
 
@@ -560,10 +615,20 @@ mod test {
     fn get_page() {
         let ptr = page_alloc(4096).expect("Couldn't get page");
         assert!(!ptr.is_null());
+        /*
         unsafe {
             assert!(PAGE_HOLDER.capacity > 0);
             assert!(PAGE_HOLDER.count >= 1)
         }
+
+         */
+    }
+
+    #[test]
+    fn deallocate() {
+        let ptr = page_alloc(4096).expect("Couldn't get page");
+        assert!(!ptr.is_null());
+        assert!(page_free(ptr));
     }
 
     #[test]
@@ -589,6 +654,7 @@ mod test {
         use super::*;
 
         #[test]
+        #[ignore]
         fn deallocate() {
             for _ in 0..8 {
                 let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
@@ -605,7 +671,7 @@ mod test {
         }
 
         #[test]
-        //#[ignore]
+        #[ignore]
         fn grows() {
             // get_page();
 

@@ -33,6 +33,8 @@ pub struct Segment {
     length: usize,
 }
 
+unsafe impl Send for Segment {}
+
 impl Segment {
     #[cfg(windows)]
     pub fn new(ptr: *mut c_void, heap: HANDLE, length: usize) -> Self {
