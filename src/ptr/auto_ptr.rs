@@ -1,7 +1,6 @@
 use crate::{do_aligned_alloc, do_free};
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display};
-use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::drop_in_place;
@@ -118,7 +117,7 @@ impl<T: Clone> Clone for AutoPtr<T> {
 mod test {
     use crate::ptr::auto_ptr::AutoPtr;
     use crate::{allocate_type, do_free};
-    use std::fmt::{Debug, Display};
+
 
     #[test]
     fn normal_ptr() {

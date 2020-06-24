@@ -1,28 +1,25 @@
 #![allow(non_upper_case_globals)]
 
-use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
-use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
+#[macro_use]
+extern crate bitfield;
+
+use std::ffi::c_void;
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 
-use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
-
-use crate::page_map::S_PAGE_MAP;
+use atomic::Ordering;
+use spin::Mutex;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
-use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, use_bootstrap};
-use crate::pages::{page_alloc, page_alloc_over_commit, page_free};
+use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
+use crate::bootstrap::{bootstrap_reserve, use_bootstrap};
+use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
+use crate::page_map::S_PAGE_MAP;
+
+use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
-use crate::thread_cache::{fill_cache, flush_cache};
-use atomic::{Atomic, Ordering};
-use crossbeam::atomic::AtomicCell;
-use spin::Mutex;
-use std::ffi::c_void;
-use std::fs::read;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::thread;
-use std::thread::ThreadId;
-use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, AllocationError, Segment};
+use crate::size_classes::{get_size_class, init_size_class};
+use crate::thread_cache::{fill_cache};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -56,9 +53,6 @@ pub mod ptr {
 }
 
 pub mod apf;
-
-#[macro_use]
-extern crate bitfield;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
@@ -235,10 +229,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             cache.pop_block()
         }
          */
-        #[cfg(debug_assertions)]
-            unsafe {
-            IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
-        }
+        #[cfg(debug_assertions)] IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
+
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
         #[cfg(not(unix))]
@@ -259,10 +251,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 });
             }
 
-        #[cfg(debug_assertions)]
-            unsafe {
-            IN_CACHE.fetch_add(size, Ordering::AcqRel);
-        }
+        #[cfg(debug_assertions)] IN_CACHE.fetch_add(size, Ordering::AcqRel);
+
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         let ret = thread_cache::thread_cache.with(|tcache| {
             let cache = unsafe {
@@ -294,7 +284,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     if USE_APF {
                         thread_cache::skip.with(|b| unsafe {
                             if !*b.get() {
-                                let mut skip = b.get();
+                                let skip = b.get();
                                 *skip = true;
                                 thread_cache::apf_init.with(|init| {
                                     if !*init.borrow() {
@@ -425,20 +415,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             dump_info!();
 
             if force_bootstrap {
-                unsafe {
-                    /*
-                    let mut bootstrap_cache_guard = bootstrap_cache.lock();
-                    let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
-                    let sc = &SIZE_CLASSES[size_class_index];
 
-                    if cache.get_block_num() >= sc.cache_block_num {
-                        flush_cache(size_class_index, cache);
-                    }
-
-                    cache.push_block(ptr as *mut u8);
-
-                     */
-                }
             } else {
                 #[cfg(not(unix))]
                     {
@@ -473,7 +450,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };
-                        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+                        //let sc = unsafe { &SIZE_CLASSES[size_class_index] };
                         /*
                         if sc.block_num == 0 {
                             unsafe {
@@ -505,11 +482,16 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use core::mem::MaybeUninit;
+
+    use bitfield::size_of;
+
     use crate::allocation_data::get_heaps;
     use crate::ptr::auto_ptr::AutoPtr;
-    use bitfield::size_of;
-    use core::mem::MaybeUninit;
+
+    use super::*;
+    use std::thread;
+    use crate::size_classes::SIZE_CLASSES;
 
     #[test]
     fn heaps_valid() {
@@ -706,7 +688,7 @@ mod tests {
 
 #[cfg(test)]
 mod track_allocation_tests {
-    use crate::ptr::auto_ptr::AutoPtr;
+
 
     #[cfg(feature = "track_allocation")]
     #[test]

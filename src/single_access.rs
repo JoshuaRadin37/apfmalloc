@@ -81,7 +81,7 @@ unsafe impl Sync for SingleAccess {}
 mod test {
     use crate::single_access::SingleAccess;
     use spin::Mutex;
-    use std::sync::{mpsc, Arc, Barrier};
+    use std::sync::{Arc, Barrier};
     use std::thread;
 
     static mut counter: i16 = 0;

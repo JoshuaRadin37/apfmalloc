@@ -1,5 +1,5 @@
 use crate::allocation_data::Descriptor;
-use crate::mem_info::{LG_PAGE, MAX_SZ, MAX_SZ_IDX, PAGE};
+use crate::mem_info::{LG_PAGE, MAX_SZ, MAX_SZ_IDX};
 use bitfield::size_of;
 
 use std::ptr::slice_from_raw_parts_mut;

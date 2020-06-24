@@ -1,9 +1,9 @@
 use std::hash::{Hash, BuildHasher, Hasher};
-use crate::independent_collections::{Array, ArrayIterator};
+use crate::independent_collections::{Array};
 use std::hash::BuildHasherDefault;
 use std::collections::hash_map::DefaultHasher;
 use std::iter::{Iterator};
-use std::ops::{Index, IndexMut, Deref};
+use std::ops::{Index, IndexMut};
 
 struct Bucket<K, V>
     where
@@ -194,7 +194,7 @@ impl<K, V> HashMap<K, V> where
     }
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         let hash = self.get_hash(key);
-        let mut buckets = &mut self.inner.buckets[hash as usize];
+        let buckets = &mut self.inner.buckets[hash as usize];
         for bucket in buckets.iter_mut() {
             if bucket.key.eq(key) {
                 return Some(&mut bucket.value);

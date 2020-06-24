@@ -1,15 +1,13 @@
 use std::marker::PhantomData;
 use std::ptr::{null_mut, slice_from_raw_parts_mut};
 use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
-use std::ops::{Deref, Index, IndexMut, RangeFrom, RangeBounds, RangeTo};
+use std::ops::{Deref, Index, IndexMut, RangeFrom, RangeTo};
 use std::ptr::slice_from_raw_parts;
 use std::ops::DerefMut;
 use std::iter::FromIterator;
 use std::fmt::Debug;
 use std::fmt::Formatter;
-use std::ptr::drop_in_place;
 use crate::mem_info::align_val;
-use crate::ptr::auto_ptr::AutoPtr;
 
 struct RawArray<T> {
     segment: Option<Segment>,
@@ -78,7 +76,7 @@ impl<T> RawArray<T> {
         if !self.no_dealloc {
             match std::mem::replace(&mut self.segment, None) {
                 None => {},
-                Some(segment) => {
+                Some(_segment) => {
                     //SEGMENT_ALLOCATOR.deallocate(segment);
                 },
             }
@@ -148,6 +146,7 @@ impl <T : Default> Array<T> {
     }
 }
 
+#[allow(unused)]
 impl<T> Array<T> {
 
     pub const fn new() -> Self {
@@ -270,7 +269,9 @@ impl<T> Array<T> {
         ret
     }
 
-
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     pub fn iter(&self) -> ArrayIterator<&T> {
         let mut arr = Array::new();

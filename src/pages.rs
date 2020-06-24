@@ -10,7 +10,7 @@ use bitfield::fmt::{Debug, Display, Formatter};
 use std::mem::MaybeUninit;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
-use std::{fmt, io};
+use std::{fmt};
 use crate::independent_collections::HashMap;
 use spin::Mutex;
 use std::hash::{Hash, Hasher};
@@ -54,8 +54,10 @@ impl PartialEq for MemoryOrFreePointer {
 }
 
 pub const INITIAL_PAGES: usize = 128;
+#[allow(unused)]
 const MIN_MAP_ALLOCATION_SIZE: usize = 1 << 14;
 
+#[allow(dead_code)]
 impl PageInfoHolder {
     pub const fn new() -> Self {
         Self {
@@ -233,7 +235,7 @@ impl PageInfoHolder {
             (combo, ptr)
             // }
         };
-        unsafe {
+
             let head = self.head;
             let index = head.unwrap();
             if let MemoryOrFreePointer::Free { next: prev_pointer } =
@@ -253,7 +255,7 @@ impl PageInfoHolder {
             self.tree.as_mut().unwrap().insert(ptr, index);
             assert_ne!(self.head, head, "Head should not be the same");
             self.count += 1;
-        }
+
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
@@ -300,7 +302,7 @@ impl PageInfoHolder {
 
             (combo, ptr)
         };
-        unsafe {
+
             let head = self.head.unwrap();
             if let MemoryOrFreePointer::Free { next: prev_pointer } =
             self.get_at_index(head).unwrap()
@@ -317,7 +319,7 @@ impl PageInfoHolder {
             self.tree.as_mut().unwrap().insert(ptr, head);
             //*head = memory;
             self.count += 1;
-        }
+
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
@@ -477,7 +479,7 @@ impl Debug for PageInfoHolder {
 }
 
 pub static mut PAGE_HOLDER_INIT: AtomicBool = AtomicBool::new(false);
-static mut PAGE_HOLDER: PageInfoHolder = PageInfoHolder::new();
+//static mut PAGE_HOLDER: PageInfoHolder = PageInfoHolder::new();
 
 #[derive(Debug)]
 pub struct PageMaskError;
@@ -604,8 +606,8 @@ pub fn page_free(ptr: *const u8) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::mem_info::PAGE;
-    use crate::pages::{page_alloc, INITIAL_PAGES, PAGE_HOLDER, page_free};
+
+    use crate::pages::{page_alloc, INITIAL_PAGES, page_free};
     use crate::size_classes::{SizeClassData, SIZE_CLASSES};
     use crate::{init_malloc, MALLOC_INIT_S};
 
@@ -659,11 +661,6 @@ mod test {
                 page_alloc(4096).expect("Couldn't get page") as *mut usize; // double it up
                 unsafe {
                     *ptr = 0xdeadbeaf;
-                    PAGE_HOLDER.show_free_list();
-                    assert!(PAGE_HOLDER.dealloc(ptr as *const u8));
-                    // uncommenting this causes a fault
-                    // *ptr = 0xdeadbeaf;
-                    PAGE_HOLDER.show_free_list();
                 }
             }
         }
@@ -673,17 +670,13 @@ mod test {
         fn grows() {
             // get_page();
 
-            unsafe {
                 for _i in 0..(INITIAL_PAGES * 2).max(128) {
                     //println!("{:?}", PAGE_HOLDER);
                     // println!("Allocating page {:?}", _i);
                     page_alloc(4096).unwrap();
-                    PAGE_HOLDER.show_free_list();
                 }
 
-                assert!(PAGE_HOLDER.count >= INITIAL_PAGES * 2);
-                assert!(unsafe { PAGE_HOLDER.capacity } > INITIAL_PAGES * 2)
-            }
+
         }
     }
 }

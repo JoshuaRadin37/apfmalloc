@@ -1,10 +1,7 @@
 use std::collections::HashMap;
-use crate::apf::constants::INIT_HISTOGRAM_LENGTH;
-use crate::allocate_type;
 use crate::thread_cache::no_tuning;
-use crate::pages::external_mem_reservation::AllocationError;
 
-use std::slice::from_raw_parts_mut;
+
 
 /*
     Histogram class -- really just a Hashmap

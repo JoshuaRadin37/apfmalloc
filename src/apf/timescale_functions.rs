@@ -1,4 +1,3 @@
-use crate::apf::constants::{MAX_N, REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD};
 use std::cmp::max;
 use std::cmp::min;
 use std::collections::HashMap;

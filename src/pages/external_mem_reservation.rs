@@ -237,17 +237,17 @@ mod test {
 
     #[test]
     pub fn get_segment() {
-        unsafe { SEGMENT_ALLOCATOR.allocate(PAGE) }.expect("Test must fail is this fails");
+        SEGMENT_ALLOCATOR.allocate(PAGE).expect("Test must fail is this fails");
     }
 
     #[test]
     pub fn free_segment() {
-        unsafe {
-            let segment = SEGMENT_ALLOCATOR
-                .allocate(PAGE)
-                .expect("Test must fail is this fails");
-            assert!(SEGMENT_ALLOCATOR.deallocate(segment));
-        }
+
+        let segment = SEGMENT_ALLOCATOR
+            .allocate(PAGE)
+            .expect("Test must fail is this fails");
+        assert!(SEGMENT_ALLOCATOR.deallocate(segment));
+
     }
 
     #[test]

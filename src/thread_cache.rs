@@ -6,7 +6,6 @@ use crate::alloc::{
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::MAX_SZ_IDX;
-use crate::pages::page_free;
 use crate::size_classes::SIZE_CLASSES;
 use core::ops::{Deref, DerefMut};
 use std::cell::RefCell;
@@ -121,20 +120,20 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
          */
         panic!(
             "Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
-               used_partial,
-               block_num,
-               cache.block_num
+            used_partial,
+            block_num,
+            cache.block_num
         );
     }
 
     cache.block_size = Some(size_class_index);
 
     #[cfg(debug_assertions)]
-    {
-        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-        debug_assert!(block_num > 0);
-        debug_assert!(block_num <= sc.cache_block_num as usize);
-    }
+        {
+            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+            debug_assert!(block_num > 0);
+            debug_assert!(block_num <= sc.cache_block_num as usize);
+        }
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
@@ -252,16 +251,16 @@ impl DerefMut for ThreadCache {
 
 impl Drop for ThreadCache {
     fn drop(&mut self) {
-        unsafe {
-            //let thread_cache_bins  = &mut self.get_mut();
-            //info!("Flushing a thread cache");
-            for bin_index in 0..self.len() {
-                let bin = self.get_mut(bin_index).unwrap();
-                if let Some(sz_idx) = bin.block_size {
-                    flush_cache(sz_idx, bin);
-                }
+
+        //let thread_cache_bins  = &mut self.get_mut();
+        //info!("Flushing a thread cache");
+        for bin_index in 0..self.len() {
+            let bin = self.get_mut(bin_index).unwrap();
+            if let Some(sz_idx) = bin.block_size {
+                flush_cache(sz_idx, bin);
             }
         }
+
     }
 }
 
@@ -321,7 +320,7 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
 
     let mut block_num = 100.max(count);
 
-    
+
     malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
 
     // Handles no partial block and insufficient partial block cases
@@ -396,7 +395,7 @@ pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
 #[cfg(test)]
 mod test {
     use crate::thread_cache::ThreadCacheBin;
-    use core::ptr::null_mut;
+
 
     #[test]
     fn check_bin_consistency() {

@@ -1,6 +1,4 @@
 use crate::apf::constants::INIT_TRACE_LENGTH;
-use crate::pages::page_alloc_over_commit;
-use atomic::Atomic;
 use std::collections::HashMap;
 use std::fmt;
 use std::slice::from_raw_parts_mut;
@@ -27,7 +25,7 @@ impl fmt::Debug for Event {
 
 use crate::apf::trace::Event::*;
 use crate::pages::external_mem_reservation::AllocationError;
-use crate::{allocate_type, do_free, do_malloc, do_realloc};
+use crate::{allocate_type, do_free, do_realloc};
 use std::ffi::c_void;
 use std::mem::size_of;
 
@@ -100,11 +98,10 @@ impl<'a> Trace<'a> {
                 match page {
                     Ok(page) => {
                         let ptr = page as *mut Event;
-                        let accesses = unsafe {
+                        let accesses =
                             from_raw_parts_mut(
                                 ptr, new_max, // Size?
-                            )
-                        };
+                            );
 
                         self.ptr = Some(page);
                         self.accesses = accesses;

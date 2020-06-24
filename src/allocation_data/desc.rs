@@ -1,4 +1,4 @@
-use std::mem::MaybeUninit;
+
 use std::ptr::null_mut;
 
 use atomic::{Atomic, Ordering};
@@ -6,7 +6,7 @@ use atomic::{Atomic, Ordering};
 use crate::allocation_data::proc_heap::ProcHeap;
 use crate::AVAILABLE_DESC;
 use crate::independent_collections::Array;
-use crate::mem_info::{align_addr, CACHE_LINE, CACHE_LINE_MASK, DESCRIPTOR_BLOCK_SZ};
+use crate::mem_info::{CACHE_LINE_MASK, DESCRIPTOR_BLOCK_SZ};
 use crate::pages::external_mem_reservation::Segment;
 use crate::pages::page_alloc;
 
@@ -137,9 +137,8 @@ impl Descriptor {
         let desc = old_head.get_desc();
         if desc.is_none() {
             let page = page_alloc(DESCRIPTOR_BLOCK_SZ).expect("Creating a descriptor block failed");
-            let mut ptr = unsafe {
-                Array::<Descriptor>::from_ptr(page as *mut Descriptor, DESCRIPTOR_BLOCK_SZ / std::mem::size_of::<Descriptor>())
-            };
+            let mut ptr =
+                Array::<Descriptor>::from_ptr(page as *mut Descriptor, DESCRIPTOR_BLOCK_SZ / std::mem::size_of::<Descriptor>());
 
             {
                 let slice = &mut ptr[1..];
@@ -157,9 +156,7 @@ impl Descriptor {
                 prev.next_free.store(None, Ordering::Release);
             }
             // let old_head: DescriptorNode = AVAILABLE_DESC.load(Ordering::Acquire);
-            let ret = unsafe {
-                &mut *((page as *mut Descriptor).add(1))
-            };
+            let ret = &mut *((page as *mut Descriptor).add(1));
             let mut new_head: DescriptorNode = DescriptorNode::default();
             // loop {
             //prev.next_free.store(Some(old_head), Ordering::Release);
@@ -282,11 +279,12 @@ impl Descriptor {
 
 #[cfg(test)]
 mod test {
-    use std::mem::size_of;
+    use std::mem::{MaybeUninit};
 
     use crate::allocation_data::SuperBlockState;
 
     use super::*;
+    use crate::mem_info::{align_addr, CACHE_LINE};
 
     #[test]
     fn descriptor_list_good() {
@@ -303,10 +301,10 @@ mod test {
             curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
             let first = curr_ptr as *mut MaybeUninit<Descriptor>;
             let max = ptr as usize + DESCRIPTOR_BLOCK_SZ;
-            let mut count = 0;
+            let mut _count = 0;
             while (curr_ptr as usize + descriptor_size as usize) < max {
                 let curr = curr_ptr as *mut MaybeUninit<Descriptor>;
-                unsafe { *curr = MaybeUninit::new(Descriptor::default()) }
+                *curr = MaybeUninit::new(Descriptor::default());
                 if !prev.is_null() {
                     let prev_init = &mut *(prev as *mut Descriptor);
                     prev_init.next_free.store(
@@ -318,7 +316,6 @@ mod test {
                 prev = curr;
                 curr_ptr = curr_ptr.offset(descriptor_size);
                 curr_ptr = align_addr(curr_ptr as usize, CACHE_LINE) as *mut u8;
-                count += 1;
             }
             //info!("Generated {} Descriptors", count);
 
