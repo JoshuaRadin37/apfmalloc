@@ -129,8 +129,8 @@ impl ApfTuner<'_> {
             if demand < 0.0 {
                 return false;
             }
-            let ciel = demand.ceil() as u32;
-            (self.ret)(self.id, ciel + 1);
+            let ceil = demand.ceil() as u32;
+            (self.ret)(self.id, ceil + 1);
         }
         else {
             let alt = (self.check)(self.id);
@@ -144,15 +144,10 @@ impl ApfTuner<'_> {
     }
 
     fn calculate_dapf(&self) -> usize {
-        let dapf;
-
-        if self.time >= *TARGET_APF * (self.fetch_count + 1) {
-            dapf = *TARGET_APF;
-        } else {
-            dapf = *TARGET_APF * (self.fetch_count + 1) - self.time;
+        match self.time >= *TARGET_APF * (self.fetch_count + 1) {
+            true => *TARGET_APF,
+            false => *TARGET_APF * (self.fetch_count + 1) - self.time
         }
-
-        dapf
     }
 
     // Average demand in windows of length k
