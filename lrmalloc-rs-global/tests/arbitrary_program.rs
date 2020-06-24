@@ -52,6 +52,7 @@ fn fast_fib_no_fail_global() {
 }
 
 #[test]
+#[ignore = "Merge sort improperly written"]
 fn arbitrary_program_main() {
     const SIZE: usize = 64;
     let mut rng = thread_rng();

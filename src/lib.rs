@@ -22,6 +22,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::thread;
 use std::thread::ThreadId;
+use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, AllocationError, Segment};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -131,7 +132,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
         desc.max_count = 1;
-        desc.super_block = page_alloc_over_commit(pages).expect("Should create");
+        desc.super_block = SEGMENT_ALLOCATOR.allocate(pages).ok();
 
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
@@ -139,7 +140,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         desc.anchor.store(anchor, Ordering::Release);
 
         register_desc(desc);
-        let ptr = desc.super_block;
+        let ptr = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
         // Log malloc with tuner
         return ptr;
     }
@@ -173,8 +174,8 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
         let pages = page_ceiling!(size);
 
-        let mut ptr = match page_alloc(pages) {
-            Ok(ptr) => ptr,
+        let seg = match SEGMENT_ALLOCATOR.allocate(pages) {
+            Ok(seg) => {seg},
             Err(_) => {
                 return null_mut();
             },
@@ -185,7 +186,9 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
         desc.max_count = 1;
-        desc.super_block = ptr;
+        desc.super_block = Some(seg);
+
+        let mut ptr = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
@@ -201,7 +204,6 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         }
 
         return ptr;
-
     }
 
     let size_class_index = get_size_class(size);
@@ -390,17 +392,20 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
     let size_class_index = info.get_size_class_index();
     match size_class_index {
         None | Some(0) => {
-            let super_block = desc.super_block;
+            let super_block = desc.super_block.as_ref().unwrap();
             // unregister
+
             unregister_desc(None, super_block);
 
             // if large allocation
-            if ptr as *const u8 != super_block as *const u8 {
-                unregister_desc(None, ptr as *mut u8)
+            if ptr as *const u8 != super_block.get_ptr() as *const u8 {
+                unregister_desc(None, super_block)
             }
 
             // free the super block
-            page_free(super_block);
+            if let Some(segment) = std::mem::replace(&mut desc.super_block, None) {
+                SEGMENT_ALLOCATOR.deallocate(segment);
+            }
 
             // retire the descriptor
             desc.retire();

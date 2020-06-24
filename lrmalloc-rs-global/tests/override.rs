@@ -1,4 +1,5 @@
 use lrmalloc_rs::dump_info;
+use lrmalloc_rs_global::{OVERRIDE_MALLOC, OVERRIDE_ALIGNED_ALLOC, OVERRIDE_CALLOC};
 
 #[test]
 fn test() {
@@ -6,7 +7,9 @@ fn test() {
 
     assert_eq!(*u, 15);
     unsafe {
-        use lrmalloc_rs_global::OVERRIDE_MALLOC;
-        assert!(OVERRIDE_MALLOC);
+
+        assert!(OVERRIDE_ALIGNED_ALLOC || OVERRIDE_MALLOC || OVERRIDE_CALLOC);
     }
 }
+
+

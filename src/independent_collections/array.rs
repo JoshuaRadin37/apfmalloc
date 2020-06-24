@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::ptr::{null_mut, slice_from_raw_parts_mut};
 use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
-use std::ops::{Deref, Index, IndexMut};
+use std::ops::{Deref, Index, IndexMut, RangeFrom, RangeBounds, RangeTo};
 use std::ptr::slice_from_raw_parts;
 use std::ops::DerefMut;
 use std::iter::FromIterator;
@@ -13,6 +13,7 @@ use crate::ptr::auto_ptr::AutoPtr;
 
 struct RawArray<T> {
     segment: Option<Segment>,
+    no_dealloc: bool,
     _phantom: PhantomData<T>
 }
 
@@ -20,6 +21,7 @@ impl<T> RawArray<T> {
     pub const fn new() -> Self {
         Self {
             segment: None,
+            no_dealloc: false,
             _phantom: PhantomData
         }
     }
@@ -73,11 +75,13 @@ impl<T> RawArray<T> {
     }
 
     pub fn clear(&mut self) {
-        match std::mem::replace(&mut self.segment, None) {
-            None => {},
-            Some(segment) => {
-                //SEGMENT_ALLOCATOR.deallocate(segment);
-            },
+        if !self.no_dealloc {
+            match std::mem::replace(&mut self.segment, None) {
+                None => {},
+                Some(segment) => {
+                    //SEGMENT_ALLOCATOR.deallocate(segment);
+                },
+            }
         }
     }
 
@@ -104,12 +108,30 @@ impl<T> IndexMut<usize> for RawArray<T> {
 
 pub struct Array<T> {
     size: usize,
+    no_dealloc: bool,
     array: RawArray<T>
 }
 
 impl <T : Default> Array<T> {
     pub fn with_capacity(size: usize) -> Self {
         Self::with_capacity_using(|| Default::default(), size)
+    }
+
+    pub unsafe fn from_ptr(ptr: *mut T, length: usize) -> Self {
+        use std::ffi::c_void;
+        let mut ret = Self {
+            size: length,
+            no_dealloc: true,
+            array: RawArray {
+                segment: Some(Segment::new(ptr as *mut c_void, length)),
+                no_dealloc: true,
+                _phantom: PhantomData
+            }
+        };
+        for element in ret.iter_mut() {
+            (element as *mut T).write(T::default());
+        }
+        ret
     }
 
     pub fn grow(&mut self, new_size: usize) {
@@ -131,13 +153,17 @@ impl<T> Array<T> {
     pub const fn new() -> Self {
         Self {
             size: 0,
+            no_dealloc: false,
             array: RawArray::new()
         }
     }
 
+
+
     pub fn with_capacity_using<F>(default: F, size: usize) -> Self where F : Fn() -> T {
         let mut ret = Self {
             size,
+            no_dealloc: false,
             array: RawArray::with_capacity(size)
         };
         for i in 0..size {
@@ -320,9 +346,44 @@ impl<T> IndexMut<usize> for Array<T> {
     }
 }
 
+
+
+
+impl<T> Index<RangeFrom<usize>> for Array<T> {
+    type Output = [T];
+
+    fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
+        &self.as_ref()[index]
+    }
+}
+
+impl<T> IndexMut<RangeFrom<usize>> for Array<T> {
+    fn index_mut(&mut self, index: RangeFrom<usize>) -> &mut Self::Output {
+        &mut self.as_mut()[index]
+    }
+}
+
+impl<T> Index<RangeTo<usize>> for Array<T> {
+    type Output = [T];
+
+    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
+        &self.as_ref()[index]
+    }
+}
+
+impl<T> IndexMut<RangeTo<usize>> for Array<T> {
+    fn index_mut(&mut self, index: RangeTo<usize>) -> &mut Self::Output {
+        &mut self.as_mut()[index]
+    }
+}
+
+
+
 impl<T> Drop for Array<T> {
     fn drop(&mut self) {
-        self.clear()
+        if !self.no_dealloc {
+            self.clear()
+        }
     }
 }
 

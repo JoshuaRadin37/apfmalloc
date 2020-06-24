@@ -157,7 +157,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         //info!("Descriptor: {:?}", desc);
         //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
-        let super_block = desc.super_block;
+        let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
         let mut block_count = 1;
         while cache.get_block_num() > block_count {
@@ -211,8 +211,10 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         }
 
         if new_anchor.state() == SuperBlockState::EMPTY {
-            unregister_desc(Some(heap), super_block);
-            page_free(super_block);
+            unregister_desc(Some(heap), desc.super_block.as_ref().unwrap());
+            if let Some(segment) = std::mem::replace(&mut desc.super_block, None) {
+                SEGMENT_ALLOCATOR.deallocate(segment);
+            }
         } else if old_anchor.state() == SuperBlockState::FULL {
             /*info!("Pushing a partially used list to the heap (Size Class Index = {}, available = {}, count = {})",
                   size_class_index,
@@ -348,6 +350,8 @@ fn ret(size_class_index: usize, count: u32) -> bool {
 }
 
 use crate::apf::ApfTuner;
+use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator};
+
 #[cfg(not(unix))]
 impl Clone for ThreadBool {
     fn clone(&self) -> Self {
