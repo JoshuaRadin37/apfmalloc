@@ -34,20 +34,20 @@ impl Measurement for BytesAllocated {
 }
 
 impl ValueFormatter for BytesFormatter {
-    fn scale_values(&self, typical_value: f64, values: &mut [f64]) -> &'static str {
+    fn scale_values(&self, _typical_value: f64, _values: &mut [f64]) -> &'static str {
         "bytes"
     }
 
     fn scale_throughputs(
         &self,
-        typical_value: f64,
-        throughput: &Throughput,
-        values: &mut [f64],
+        _typical_value: f64,
+        _throughput: &Throughput,
+        _values: &mut [f64],
     ) -> &'static str {
         "bytes"
     }
 
-    fn scale_for_machines(&self, values: &mut [f64]) -> &'static str {
+    fn scale_for_machines(&self, _values: &mut [f64]) -> &'static str {
         "bytes"
     }
 }

@@ -6,12 +6,12 @@ use std::time::{Duration, Instant};
 #[test]
 fn multi_test_from_bench_no_global() {
     let size = 1;
-    for t in 0..10 {
+    for _t in 0..10 {
         let mut vec = Vec::with_capacity(size);
         for _ in 0..size {
             vec.push(thread::spawn(move || AutoPtr::new(3799i16)));
         }
-        for (i, join) in vec.into_iter().enumerate() {
+        for (_i, join) in vec.into_iter().enumerate() {
             let _ptr = match join.join() {
                 Ok(_) => {}
                 Err(e) => {

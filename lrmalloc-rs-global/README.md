@@ -17,27 +17,27 @@ use lrmalloc-rs. A global allocator does not need to be set by the user in the c
 This is done by having the 4 following C FFI functions:
 ```rust
 #[no_mangle]
-extern "C" fn malloc(size: usize) -> *mut c_void { }
+extern "C" fn malloc(_size: usize) -> *mut c_void { }
 
 #[no_mangle]
-extern "C" fn calloc(num: usize, size: usize) -> *mut c_void { }
+extern "C" fn calloc(num: usize, _size: usize) -> *mut c_void { }
 
 #[no_mangle]
-extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void { }
+extern "C" fn realloc(_ptr: *mut c_void, new_size: usize) -> *mut c_void { }
 
 #[no_mangle]
-extern "C" fn free(ptr: *mut c_void) { }
+extern "C" fn free(_ptr: *mut c_void) { }
 
 #[no_mangle]
-extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void { }
+extern "C" fn aligned_alloc(alignment: usize, _size: usize) -> *mut c_void { }
 ```
 These translate to the follow C functions:
 ```c
-void* malloc(size_t size);
-void* calloc(size_t num, size_t size);
-void* realloc(void* ptr, size_t new_size);
-void free(void* ptr);
-void* aligned_alloc(size_t alignment, size_t size);
+void* malloc(size_t _size);
+void* calloc(size_t num, size_t _size);
+void* realloc(void* _ptr, size_t new_size);
+void free(void* _ptr);
+void* aligned_alloc(size_t alignment, size_t _size);
 ```
 
 To link in rust, you 

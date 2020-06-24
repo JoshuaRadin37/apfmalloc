@@ -13,7 +13,7 @@ use std::io::{stdout, Write};
 
 fn thread_cache_fill(c: &mut Criterion) {
     let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
-    let ptr = AutoPtr::new(8);
+    let _ptr = AutoPtr::new(8);
     c.bench_function("cache fill", |b| {
         let cache = &mut tcache[1];
         b.iter(|| {
@@ -24,7 +24,7 @@ fn thread_cache_fill(c: &mut Criterion) {
 }
 
 fn alloc_from_super_block(c: &mut Criterion) {
-    let ptr = AutoPtr::new(8usize);
+    let _ptr = AutoPtr::new(8usize);
     c.bench_function("alloc from super block", |b| {
         b.iter(|| {
             let mut cache = ThreadCacheBin::new();
@@ -38,7 +38,7 @@ fn alloc_from_super_block(c: &mut Criterion) {
 }
 
 fn alloc_from_super_block_no_free(c: &mut Criterion) {
-    let ptr = AutoPtr::new(8usize);
+    let _ptr = AutoPtr::new(8usize);
     let mut ptrs = vec![];
     c.bench_function("alloc from super block no free", |b| {
         b.iter(|| {
@@ -56,7 +56,7 @@ fn alloc_from_super_block_no_free(c: &mut Criterion) {
 }
 
 fn page_free_time(c: &mut Criterion) {
-    let ptr = AutoPtr::new(8usize);
+    let _ptr = AutoPtr::new(8usize);
     c.bench_function("page free", |b| {
         b.iter_custom(|iters| {
             let mut cache = ThreadCacheBin::new();

@@ -76,7 +76,7 @@ fn multi_test_from_bench() {
                 AutoPtr::new(3799i16)
             }));
         }
-        for (i, join) in vec.into_iter().enumerate() {
+        for (_i, join) in vec.into_iter().enumerate() {
             let _ptr = match join.join() {
                 Ok(_) => {}
                 Err(e) => {

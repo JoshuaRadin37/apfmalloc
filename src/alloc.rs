@@ -8,7 +8,7 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-use crate::pages::page_alloc;
+
 use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
@@ -16,9 +16,7 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
 
     loop {
         let old_head = list.load(Ordering::Acquire);
-        if old_head.is_none() {
-            return None;
-        }
+        old_head?;
         let old_desc = old_head.unwrap().get_desc().unwrap();
         // Lets assume this descriptor exists
 
@@ -38,11 +36,8 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
             }
         }
 
-        match list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
-            Ok(_) => {
-                return Some(old_desc);
-            }
-            Err(_) => {}
+        if let Ok(_) = list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
+            return Some(old_desc);
         }
     }
 }
@@ -138,7 +133,7 @@ pub fn malloc_from_partial(
 
     match desc {
         None => {
-            return;
+
         }
         Some(desc) => {
             //info!("Allocating blocks from a partial list...");

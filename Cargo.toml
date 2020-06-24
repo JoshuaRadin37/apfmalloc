@@ -62,7 +62,6 @@ harness = false
 name = "timed_allocation"
 harness = false
 
-
 [[bench]]
 name = "multiple_threads"
 harness = false

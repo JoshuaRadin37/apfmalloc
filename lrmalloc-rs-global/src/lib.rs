@@ -201,4 +201,10 @@ mod test {
             assert!(OVERRIDE_FREE, "Free wasn't overwritten!")
         }
     }
+
+    #[test]
+    #[should_panic]
+    fn panic_ok() {
+        panic!("Panic should panic");
+    }
 }
