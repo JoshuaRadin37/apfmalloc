@@ -56,7 +56,7 @@ impl<K, V> HashMap<K, V> where
 
 
     pub fn with_capacity(capacity: usize) -> Self {
-        let buckets = Array::with_capacity(capacity);
+        let buckets = Array::of_size(capacity);
         Self {
             hash: Default::default(),
             inner: HashMapInner {
@@ -237,6 +237,8 @@ impl<K, V> HashMap<K, V> where
         self.len == 0
     }
 
+
+
 }
 
 impl<K : Hash + Eq, V> Index<&K> for HashMap<K, V> {
@@ -276,6 +278,7 @@ impl<K: Hash + Eq> HashSet<K> {
     pub fn contains(&self, val: &K) -> bool {
         self.0.contains(val)
     }
+
 
 }
 

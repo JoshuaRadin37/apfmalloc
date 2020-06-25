@@ -5,7 +5,7 @@ extern crate bitfield;
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::{AtomicUsize};
 
 use atomic::Ordering;
 use spin::Mutex;
@@ -18,8 +18,8 @@ use crate::page_map::S_PAGE_MAP;
 
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
-use crate::size_classes::{get_size_class, init_size_class};
-use crate::thread_cache::{fill_cache};
+use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
+use crate::thread_cache::{fill_cache, flush_cache};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -57,9 +57,6 @@ pub mod apf;
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
 
-pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); // tells anyone who was stuck looping to continue
-pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
-
 pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
@@ -83,10 +80,10 @@ unsafe fn init_malloc() {
 
     bootstrap_reserve.lock().init();
 
-    MALLOC_SKIP = true;
-    MALLOC_FINISH_INIT.store(true, Ordering::Release);
+
     //info!("Malloc Initialized")
 }
+
 
 /// Performs an aligned allocation for type `T`. Type `T` must be `Sized`
 pub fn allocate_type<T>() -> *mut T {
@@ -450,7 +447,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };
-                        //let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+
                         /*
                         if sc.block_num == 0 {
                             unsafe {
@@ -467,10 +464,12 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                         }
 
                          */
-
-                        /* if cache.get_block_num() >= sc.cache_block_num {
-                            flush_cache(size_class_index, cache);
-                        } */
+                        if !USE_APF {
+                            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+                            if cache.get_block_num() >= sc.cache_block_num {
+                                flush_cache(size_class_index, cache);
+                            }
+                        }
 
                         cache.push_block(ptr as *mut u8)
                     })
@@ -518,7 +517,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn cache_pop_no_fail() {
         const size_class: usize = 16;
         MALLOC_INIT_S.with(|| unsafe { init_malloc() });
@@ -676,14 +674,6 @@ mod tests {
         dump_info!();
     }
 
-    #[test]
-    #[should_panic]
-    #[ignore]
-    fn double_free() {
-        let ptr = allocate_val(0usize);
-        do_free(ptr);
-        do_free(ptr);
-    }
 }
 
 #[cfg(test)]
@@ -694,6 +684,8 @@ mod track_allocation_tests {
     #[test]
     fn info_dump_one_thread() {
         {
+            use crate::ptr::auto_ptr::AutoPtr;
+
             dump_info!();
             let first_ptrs = (0..10)
                 .into_iter()

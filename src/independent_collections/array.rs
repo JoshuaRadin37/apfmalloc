@@ -8,6 +8,7 @@ use std::iter::FromIterator;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use crate::mem_info::align_val;
+use std::slice::Iter;
 
 struct RawArray<T> {
     segment: Option<Segment>,
@@ -83,6 +84,11 @@ impl<T> RawArray<T> {
         }
     }
 
+    pub unsafe fn write(&mut self, index: usize, val: T) {
+        let ptr = self.get_ptr().add(index);
+        ptr.write(val);
+    }
+
 }
 
 
@@ -111,8 +117,8 @@ pub struct Array<T> {
 }
 
 impl <T : Default> Array<T> {
-    pub fn with_capacity(size: usize) -> Self {
-        Self::with_capacity_using(|| Default::default(), size)
+    pub fn of_size(size: usize) -> Self {
+        Self::of_size_using(|| Default::default(), size)
     }
 
     pub unsafe fn from_ptr(ptr: *mut T, length: usize) -> Self {
@@ -157,9 +163,15 @@ impl<T> Array<T> {
         }
     }
 
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            size: 0,
+            no_dealloc: false,
+            array: RawArray::with_capacity(capacity)
+        }
+    }
 
-
-    pub fn with_capacity_using<F>(default: F, size: usize) -> Self where F : Fn() -> T {
+    pub fn of_size_using<F>(default: F, size: usize) -> Self where F : Fn() -> T {
         let mut ret = Self {
             size,
             no_dealloc: false,
@@ -508,6 +520,244 @@ impl <T : Debug> Debug for Array<T> {
     }
 }
 
+pub struct ArrayDeque<T> {
+    raw: RawArray<T>,
+    start: usize,
+    end: usize,
+}
+
+
+
+#[allow(unused)]
+impl <T> ArrayDeque<T> {
+
+    pub fn new() -> Self {
+        Self {
+            raw: RawArray::new(),
+            start: 0,
+            end: 0,
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            raw: RawArray::with_capacity(capacity),
+            start: 0,
+            end: 0,
+        }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.raw.capacity()
+    }
+
+    fn grow_front(&mut self) {
+        let old_capacity = self.raw.capacity();
+        self.grow_back();
+        unsafe {
+            let new_start_ptr = self.raw.get_ptr().add(old_capacity);
+            std::ptr::copy_nonoverlapping(self.raw.get_ptr(), new_start_ptr, old_capacity);
+        }
+        self.start = old_capacity;
+        self.end = self.end + old_capacity;
+    }
+
+    fn grow_back(&mut self) {
+        let mut capacity = self.raw.capacity() * 2;
+        if capacity == 0 {
+            capacity = 1;
+        }
+        self.raw.reserve(capacity);
+    }
+
+    pub fn len(&self) -> usize {
+        self.end - self.start
+    }
+
+    pub fn push_front(&mut self, val: T) {
+        if self.len() == 0 {
+            self.push_back(val);
+        } else {
+            if self.start == 0 {
+                self.grow_front();
+            }
+
+            self.start -= 1;
+            let start = self.start;
+            unsafe {
+                self.raw.write(start, val);
+            }
+        }
+    }
+
+    pub fn push_back(&mut self, val: T) {
+        if self.end == self.capacity() {
+            self.grow_back();
+        }
+
+        let end = self.end;
+        unsafe {
+            self.raw.write(end, val);
+        }
+        self.end += 1;
+    }
+
+    pub fn pop_front(&mut self) -> Option<T> {
+        if self.is_empty() {
+            None
+        } else {
+            unsafe {
+                let output_ptr = self.get_start_ptr();
+                let read = output_ptr.read();
+                self.start += 1;
+                if self.start == self.end {
+                    self.start = self.capacity() / 2;
+                    self.end = self.capacity() / 2;
+                }
+                Some(read)
+            }
+        }
+    }
+
+    pub fn pop_back(&mut self) -> Option<T> {
+        if self.is_empty() {
+            None
+        } else {
+            unsafe {
+                let output_ptr = self.get_end_ptr();
+                let read = output_ptr.read();
+                self.end -= 1;
+                if self.start == self.end {
+                    self.start = self.capacity() / 2;
+                    self.end = self.capacity() / 2;
+                }
+                Some(read)
+            }
+        }
+    }
+
+    fn get_start_ptr(&self) -> * const T {
+        unsafe {
+            self.raw.get_ptr().add(self.start)
+        }
+    }
+
+    fn get_start_ptr_mut(&mut self) -> * mut T {
+        unsafe {
+            self.raw.get_ptr().add(self.start)
+        }
+    }
+
+    fn get_end_ptr(&self) -> * const T {
+        unsafe {
+            self.raw.get_ptr().add(self.end)
+        }
+    }
+
+    fn get_end_ptr_mut(&mut self) -> * mut T {
+        unsafe {
+            self.raw.get_ptr().add(self.end)
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.start == self.end
+    }
+
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.deref().iter()
+    }
+}
+
+impl <T> Deref for ArrayDeque<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        let ptr = self.raw.get_ptr();
+        if ptr.is_null() {
+            &[]
+        } else {
+
+            unsafe {
+                let start = self.get_start_ptr();
+                &*slice_from_raw_parts(
+                    start, self.len()
+                )
+            }
+        }
+    }
+}
+
+impl <T> DerefMut for ArrayDeque<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        let ptr = self.raw.get_ptr();
+        if ptr.is_null() {
+            &mut []
+        } else {
+
+            unsafe {
+                let start = self.get_start_ptr_mut();
+                &mut *slice_from_raw_parts_mut(
+                    start, self.len()
+                )
+            }
+        }
+    }
+}
+
+
+impl <T : Clone> Clone for ArrayDeque<T> {
+    fn clone(&self) -> Self {
+        self.iter().map(|v| v.clone()).collect::<Self>()
+    }
+}
+
+impl <T: PartialEq> PartialEq for ArrayDeque<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        let mut self_iter = self.iter();
+        let mut other_iter = other.iter();
+        loop {
+            let self_val = self_iter.next();
+            let other_val = other_iter.next();
+            if self_val.is_none() || other_val.is_none() {
+                return true;
+            }
+
+            if self_val != other_val {
+                return false;
+            }
+        }
+    }
+}
+
+impl <T : Debug> Debug for ArrayDeque<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let slice = self.deref();
+        slice.fmt(f)
+    }
+}
+
+impl <T> From<Array<T>> for ArrayDeque<T> {
+    fn from(mut a: Array<T>) -> Self {
+        let array = std::mem::replace(&mut a.array, RawArray::new());
+        Self {
+            raw: array,
+            start: 0,
+            end: a.len() - 1
+        }
+    }
+}
+
+impl <A> FromIterator<A> for ArrayDeque<A> {
+    fn from_iter<T: IntoIterator<Item=A>>(iter: T) -> Self {
+        ArrayDeque::from(Array::from_iter(iter))
+    }
+}
+
 #[macro_export]
 macro_rules! array {
     ($($element:expr),*) => {
@@ -523,10 +773,11 @@ macro_rules! array {
 #[cfg(test)]
 mod test {
     use crate::independent_collections::array::Array;
+    use crate::independent_collections::ArrayDeque;
 
     #[test]
     fn can_use_array() {
-        let mut arr: Array<usize> = Array::with_capacity(10);
+        let mut arr: Array<usize> = Array::of_size(10);
         arr[5] = 7;
         arr[3] = 7;
         assert_eq!(arr[5], arr[3]);
@@ -562,7 +813,7 @@ mod test {
 
     #[test]
     fn with_capacity() {
-        let arr: Array<usize> = Array::with_capacity(15);
+        let arr: Array<usize> = Array::of_size(15);
         let _i = arr[14];
     }
 
@@ -578,6 +829,22 @@ mod test {
         assert_eq!(arr[3], 5);
         assert_eq!(arr, array![1, 2, 3, 5, 6, 7]);
         println!("{:?}", arr);
+    }
+
+    #[test]
+    fn queue() {
+        let mut q = ArrayDeque::new();
+        assert_eq!(q.len(), 0);
+        assert_eq!(q.capacity(), 0);
+        q.push_front(1);
+        q.push_front(0);
+        q.push_back(2);
+        assert_eq!(q.len(), 3);
+        assert!(q.capacity() >= q.len());
+        assert_eq!(q.pop_front(), Some(0));
+        assert_eq!(q.pop_front(), Some(1));
+        assert_eq!(q.pop_front(), Some(2));
+        assert_eq!(q.pop_front(), None);
     }
 
 }

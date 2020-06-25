@@ -1,9 +1,13 @@
 [package]
 name = "lrmalloc-rs-global"
-description = "A package that creates FFI bindings for LRMalloc-rs to C programs"
+description = "A package that creates FFI bindings for LRMalloc-rs to C programs. It also includes an Rust Allocator that, which the user can either disable being set as the global allocator, or not include entirely."
 version = "1.0.0"
-authors = ["Joshua Radin <jradin16@gmail.com>"]
+authors = ["Joshua Radin <jradin2@u.rochester.edu>"]
 edition = "2018"
+readme = "README.md"
+keywords = ["memory", "allocation"]
+repository = "https://github.com/JoshuaRadin37/lrmalloc.rs"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +17,12 @@ no-rust-global = []
 
 [lib]
 crate-type = ["staticlib", "rlib", "dylib"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
 
 [dependencies]
 lrmalloc-rs = { path = "../"}

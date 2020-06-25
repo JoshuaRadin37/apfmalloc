@@ -61,4 +61,6 @@ fn main() {
     assert_eq!(hashed_stack.pop(), Some("World"));
     assert_eq!(hashed_stack.pop(), Some("w00t"));
     assert_eq!(hashed_stack.peak(), None);
+
+
 }

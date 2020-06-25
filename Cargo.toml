@@ -8,6 +8,7 @@ edition = "2018"
 license-file = "LICENSE"
 readme = "README.md"
 keywords = ["memory", "allocation"]
+repository = "https://github.com/JoshuaRadin37/lrmalloc.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
