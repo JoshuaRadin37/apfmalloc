@@ -287,9 +287,16 @@ impl Drop for ThreadEmpty {
 pub fn init_tuners() {
     no_tuning(|| {
         apf_tuners.with(|tuners| {
-            for i in 0..MAX_SZ_IDX {
+
+            // First tuner will show record
+            unsafe {
+                (&mut *tuners.get()).push(ApfTuner::new(0, check, fetch, ret, true));
+            }
+
+
+            for i in 1..MAX_SZ_IDX {
                 unsafe {
-                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret));
+                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret, false));
                 }
             }
         });

@@ -1,3 +1,4 @@
+use crate::thread_cache::no_tuning;
 use crate::apf::constants::{
     REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK,
 };
@@ -15,8 +16,6 @@ pub mod histogram;
 pub mod reuse_counter;
 pub mod liveness_counter;
 pub mod trace;
-
-static RECORD: bool = true;
 
 /*
         -- APF Tuner --
@@ -36,7 +35,7 @@ pub struct ApfTuner<'a> {
     get: fn(usize, usize) -> bool,
     ret: fn(usize, u32) -> bool,
 
-    record: Vec<(usize, usize)>
+    record: Option<Vec<(usize, usize)>>
 }
 
 impl ApfTuner<'_> {
@@ -45,6 +44,7 @@ impl ApfTuner<'_> {
         check: fn(usize) -> u32,
         get: fn(usize, usize) -> bool,
         ret: fn(usize, u32) -> bool,
+        use_record: bool
     ) -> ApfTuner<'a> {
 
         ApfTuner {
@@ -58,7 +58,10 @@ impl ApfTuner<'_> {
             check: check,
             get: get,
             ret: ret,
-            record: Vec::<(usize, usize)>::new()
+            record: match use_record {
+                true => Some(Vec::<(usize, usize)>::new()),
+                false => None
+            }
         }
     }
 
@@ -79,9 +82,12 @@ impl ApfTuner<'_> {
         // If out of free blocks, fetch
         if (self.check)(self.id) == 0 {
 
-            if RECORD {
-                self.record.push((self.time, self.calculate_dapf()));
+            if self.record.is_some() {
+                let dapf = self.calculate_dapf();
+                let time = self.time;
+                self.record.as_mut().map(|rec| rec.push((time, dapf)));
             }
+
 
             let demand;
             match self.demand(self.calculate_dapf().into()) {
@@ -141,10 +147,6 @@ impl ApfTuner<'_> {
             let ceil = demand.ceil() as u32;
             (self.ret)(self.id, ceil + 1);
         }
-        else {
-            let alt = (self.check)(self.id);
-            let dummy: usize;
-        }
         return true;
     }
 
@@ -173,8 +175,8 @@ impl ApfTuner<'_> {
     }
 
     pub fn record(&self) -> Option<Vec<(usize, usize)>> {
-        match RECORD {
-            true => Some(self.record.clone()),
+        match self.record.is_some() {
+            true => self.record.clone(),
             false => None
         }
     }
@@ -182,8 +184,28 @@ impl ApfTuner<'_> {
 
 impl Drop for ApfTuner<'_> {
     fn drop(&mut self) {
-        if RECORD {
-            // Show record
-        }
+        no_tuning(|| 
+            if self.record.is_some() {
+                let rec = self.record.as_mut().unwrap();
+                let mut x = Vec::with_capacity(rec.len());
+                let mut y = Vec::with_capacity(rec.len());
+
+                for i in 0..rec.len() {
+                    x.push(rec[i].0);
+                    y.push(i);
+                    x.push(rec[i].1);
+                    y.push(i);
+
+                }
+
+                let mut fg = Figure::new();
+                let axes = fg.axes2d();
+                for i in 0..x.len()/2 {
+                    axes.lines_points(&x[i..i+1], &y[i..i+1], &[Caption("Line"), Color("black")]);
+                }
+
+                fg.show().expect("Unable to display figure");
+            }
+        );
     }
 }

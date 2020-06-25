@@ -3,7 +3,6 @@ extern crate lrmalloc_rs;
 use core::sync::atomic::Ordering;
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free};
-use lrmalloc_rs::visualization::test;
 use std::alloc::{GlobalAlloc, Layout};
 use std::thread;
 
@@ -25,7 +24,7 @@ static ALLOCATOR: Apf = Apf;
 #[test]
 fn test_apf_tuning() {
     let mut vec = vec![];
-    let thread_count = 10;
+    let thread_count = 5;
 
     for _i in 0..thread_count {
         vec.push(thread::spawn(move || {
