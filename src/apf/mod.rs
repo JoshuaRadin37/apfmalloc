@@ -79,8 +79,8 @@ impl ApfTuner<'_> {
             self.count_fetch();
         }
         else {
-            let alt = (self.check)(self.id);
-            let dummy: usize;
+            let _alt = (self.check)(self.id);
+            let _dummy: usize;
         }
         return true;
     }
@@ -127,8 +127,8 @@ impl ApfTuner<'_> {
             (self.ret)(self.id, ciel + 1);
         }
         else {
-            let alt = (self.check)(self.id);
-            let dummy: usize;
+            let _alt = (self.check)(self.id);
+            let _dummy: usize;
         }
         return true;
     }

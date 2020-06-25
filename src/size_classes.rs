@@ -1,4 +1,4 @@
-use crate::mem_info::{MAX_SZ, MAX_SZ_IDX, PAGE};
+use crate::mem_info::{MAX_SZ, MAX_SZ_IDX};
 
 pub struct SizeClassData {
     pub block_size: u32,

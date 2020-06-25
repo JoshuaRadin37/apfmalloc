@@ -1,9 +1,5 @@
-use core::ops::DerefMut;
-use std::collections::{HashMap, LinkedList, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
-use std::ops::Deref;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
 
 extern crate lrmalloc_rs_global;
 
@@ -65,4 +61,6 @@ fn main() {
     assert_eq!(hashed_stack.pop(), Some("World"));
     assert_eq!(hashed_stack.pop(), Some("w00t"));
     assert_eq!(hashed_stack.peak(), None);
+
+
 }

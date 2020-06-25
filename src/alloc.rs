@@ -8,16 +8,15 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-use crate::pages::page_alloc;
+
+use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
 
     loop {
         let old_head = list.load(Ordering::Acquire);
-        if old_head.is_none() {
-            return None;
-        }
+        old_head?;
         let old_desc = old_head.unwrap().get_desc().unwrap();
         // Lets assume this descriptor exists
 
@@ -37,11 +36,8 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
             }
         }
 
-        match list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
-            Ok(_) => {
-                return Some(old_desc);
-            }
-            Err(_) => {}
+        if let Ok(_) = list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
+            return Some(old_desc);
         }
     }
 }
@@ -137,7 +133,7 @@ pub fn malloc_from_partial(
 
     match desc {
         None => {
-            return;
+
         }
         Some(desc) => {
             //info!("Allocating blocks from a partial list...");
@@ -147,7 +143,7 @@ pub fn malloc_from_partial(
             let max_count = desc.max_count;
             let block_size = desc.block_size;
 
-            let super_block = desc.super_block;
+            let super_block = &desc.super_block;
 
             loop {
                 if old_anchor.state() == SuperBlockState::EMPTY {
@@ -174,7 +170,7 @@ pub fn malloc_from_partial(
 
             let blocks_taken = old_anchor.count() as isize;
             let avail = old_anchor.avail() as isize;
-
+            let super_block = super_block.as_ref().unwrap().get_ptr() as *mut u8;
             assert!(
                 avail <= max_count as isize,
                 "Avail: {}, Count {}",
@@ -206,9 +202,9 @@ pub fn malloc_from_new_sb(
     desc.proc_heap = heap;
     desc.block_size = block_size;
     desc.max_count = max_count as u32;
-    desc.super_block = page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
+    desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
 
-    let super_block = desc.super_block;
+    let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
     for idx in 0..(max_count - 1) {
         unsafe {
             let block = super_block.offset((idx * block_size as usize) as isize);
@@ -254,7 +250,7 @@ pub fn malloc_count_from_partial(
             let max_count = desc.max_count;
             let block_size = desc.block_size;
 
-            let super_block = desc.super_block;
+            let super_block = &desc.super_block;
 
             let avail = old_anchor.avail() as isize;
             let new_avail = match avail + (count as isize) < max_count as isize {
@@ -293,7 +289,7 @@ pub fn malloc_count_from_partial(
             );
 
             let c = new_avail - avail;
-
+            let super_block = super_block.as_ref().unwrap().get_ptr() as *mut u8;
             for i in 0..c {
                 let block =
                     unsafe { super_block.offset((avail + i as isize) * block_size as isize) };
@@ -322,9 +318,9 @@ pub fn malloc_count_from_new_sb(
     desc.proc_heap = heap;
     desc.block_size = block_size;
     desc.max_count = max_count as u32;
-    desc.super_block = page_alloc(sc.sb_size as usize).expect("Couldn't create a superblock");
+    desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
 
-    let super_block = desc.super_block;
+    let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
     for idx in 0..(max_count - 1) {
         unsafe {
             let block = super_block.offset((idx * block_size as usize) as isize);
@@ -403,13 +399,13 @@ pub fn register_desc(desc: &mut Descriptor) {
     } else {
         Some(unsafe { &mut *desc.proc_heap })
     };
-    let ptr = desc.super_block;
+    let ptr = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
     let size_class_index = 0;
     update_page_map(heap, ptr, Some(desc), size_class_index);
 }
 
-pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: *mut u8) {
-    update_page_map(heap, super_block, None, 0)
+pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: &Segment) {
+    update_page_map(heap, super_block.get_ptr() as *mut u8, None, 0)
 }
 
 pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> PageInfo {

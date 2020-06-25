@@ -1,6 +1,6 @@
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Barrier, RwLock, RwLockReadGuard, TryLockError};
+use std::sync::{Arc, Barrier, RwLock};
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;

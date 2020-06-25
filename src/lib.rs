@@ -1,27 +1,25 @@
 #![allow(non_upper_case_globals)]
 
-use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
-use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
+#[macro_use]
+extern crate bitfield;
+
+use std::ffi::c_void;
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicUsize};
 
-use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
-
-use crate::page_map::S_PAGE_MAP;
+use atomic::Ordering;
+use spin::Mutex;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
-use crate::bootstrap::{bootstrap_cache, bootstrap_reserve, set_use_bootstrap, use_bootstrap};
-use crate::pages::{page_alloc, page_alloc_over_commit, page_free};
+use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
+use crate::bootstrap::{bootstrap_reserve, use_bootstrap};
+use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
+use crate::page_map::S_PAGE_MAP;
+
+use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
+use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::thread_cache::{fill_cache, flush_cache};
-use atomic::{Atomic, Ordering};
-use crossbeam::atomic::AtomicCell;
-use spin::Mutex;
-use std::ffi::c_void;
-use std::fs::read;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::thread;
-use std::thread::ThreadId;
 
 #[macro_export]
 macro_rules! dump_info {
@@ -56,21 +54,15 @@ pub mod ptr {
 
 pub mod apf;
 
-#[macro_use]
-extern crate bitfield;
-
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-pub(crate) static mut MALLOC_INIT: AtomicBool = AtomicBool::new(false); // Only one can access init
-pub(crate) static mut MALLOC_FINISH_INIT: AtomicBool = AtomicBool::new(false); // tells anyone who was stuck looping to continue
-pub(crate) static mut MALLOC_SKIP: bool = false; // removes the need for atomicity once set to true, potentially increasing speed
 
 pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
-static USE_APF: bool = true;
+static USE_APF: bool = false;
 
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
@@ -88,10 +80,10 @@ unsafe fn init_malloc() {
 
     bootstrap_reserve.lock().init();
 
-    MALLOC_SKIP = true;
-    MALLOC_FINISH_INIT.store(true, Ordering::Release);
+
     //info!("Malloc Initialized")
 }
+
 
 /// Performs an aligned allocation for type `T`. Type `T` must be `Sized`
 pub fn allocate_type<T>() -> *mut T {
@@ -131,7 +123,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
         desc.max_count = 1;
-        desc.super_block = page_alloc_over_commit(pages).expect("Should create");
+        desc.super_block = SEGMENT_ALLOCATOR.allocate(pages).ok();
 
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
@@ -139,7 +131,7 @@ pub fn do_malloc(size: usize) -> *mut u8 {
         desc.anchor.store(anchor, Ordering::Release);
 
         register_desc(desc);
-        let ptr = desc.super_block;
+        let ptr = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
         // Log malloc with tuner
         return ptr;
     }
@@ -173,8 +165,8 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
         let pages = page_ceiling!(size);
 
-        let mut ptr = match page_alloc(pages) {
-            Ok(ptr) => ptr,
+        let seg = match SEGMENT_ALLOCATOR.allocate(pages) {
+            Ok(seg) => {seg},
             Err(_) => {
                 return null_mut();
             },
@@ -185,7 +177,9 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         desc.proc_heap = null_mut();
         desc.block_size = pages as u32;
         desc.max_count = 1;
-        desc.super_block = ptr;
+        desc.super_block = Some(seg);
+
+        let mut ptr = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
         let mut anchor = Anchor::default();
         anchor.set_state(SuperBlockState::FULL);
@@ -201,7 +195,6 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         }
 
         return ptr;
-
     }
 
     let size_class_index = get_size_class(size);
@@ -233,10 +226,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             cache.pop_block()
         }
          */
-        #[cfg(debug_assertions)]
-            unsafe {
-            IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
-        }
+        #[cfg(debug_assertions)] IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
+
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
         #[cfg(not(unix))]
@@ -257,10 +248,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 });
             }
 
-        #[cfg(debug_assertions)]
-            unsafe {
-            IN_CACHE.fetch_add(size, Ordering::AcqRel);
-        }
+        #[cfg(debug_assertions)] IN_CACHE.fetch_add(size, Ordering::AcqRel);
+
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         let ret = thread_cache::thread_cache.with(|tcache| {
             let cache = unsafe {
@@ -292,7 +281,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                     if USE_APF {
                         thread_cache::skip.with(|b| unsafe {
                             if !*b.get() {
-                                let mut skip = b.get();
+                                let skip = b.get();
                                 *skip = true;
                                 thread_cache::apf_init.with(|init| {
                                     if !*init.borrow() {
@@ -390,17 +379,20 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
     let size_class_index = info.get_size_class_index();
     match size_class_index {
         None | Some(0) => {
-            let super_block = desc.super_block;
+            let super_block = desc.super_block.as_ref().unwrap();
             // unregister
+
             unregister_desc(None, super_block);
 
             // if large allocation
-            if ptr as *const u8 != super_block as *const u8 {
-                unregister_desc(None, ptr as *mut u8)
+            if ptr as *const u8 != super_block.get_ptr() as *const u8 {
+                unregister_desc(None, super_block)
             }
 
             // free the super block
-            page_free(super_block);
+            if let Some(segment) = std::mem::replace(&mut desc.super_block, None) {
+                SEGMENT_ALLOCATOR.deallocate(segment);
+            }
 
             // retire the descriptor
             desc.retire();
@@ -420,20 +412,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             dump_info!();
 
             if force_bootstrap {
-                unsafe {
-                    /*
-                    let mut bootstrap_cache_guard = bootstrap_cache.lock();
-                    let cache = bootstrap_cache_guard.get_mut(size_class_index).unwrap();
-                    let sc = &SIZE_CLASSES[size_class_index];
 
-                    if cache.get_block_num() >= sc.cache_block_num {
-                        flush_cache(size_class_index, cache);
-                    }
-
-                    cache.push_block(ptr as *mut u8);
-
-                     */
-                }
             } else {
                 #[cfg(not(unix))]
                     {
@@ -456,7 +435,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                     .try_with(|init| *init.borrow())
                     .unwrap_or(false)
                 {
-                    thread_cache::apf_tuners.try_with(|tuners| unsafe {
+                    thread_cache::apf_tuners.with(|tuners| unsafe {
                         (&mut *tuners.get())
                             .get_mut(size_class_index)
                             .unwrap()
@@ -468,7 +447,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };
-                        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+
                         /*
                         if sc.block_num == 0 {
                             unsafe {
@@ -485,10 +464,12 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                         }
 
                          */
-
-                        /* if cache.get_block_num() >= sc.cache_block_num {
-                            flush_cache(size_class_index, cache);
-                        } */
+                        if !USE_APF {
+                            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+                            if cache.get_block_num() >= sc.cache_block_num {
+                                flush_cache(size_class_index, cache);
+                            }
+                        }
 
                         cache.push_block(ptr as *mut u8)
                     })
@@ -500,11 +481,16 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use core::mem::MaybeUninit;
+
+    use bitfield::size_of;
+
     use crate::allocation_data::get_heaps;
     use crate::ptr::auto_ptr::AutoPtr;
-    use bitfield::size_of;
-    use core::mem::MaybeUninit;
+
+    use super::*;
+    use std::thread;
+    use crate::size_classes::SIZE_CLASSES;
 
     #[test]
     fn heaps_valid() {
@@ -531,7 +517,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn cache_pop_no_fail() {
         const size_class: usize = 16;
         MALLOC_INIT_S.with(|| unsafe { init_malloc() });
@@ -689,24 +674,18 @@ mod tests {
         dump_info!();
     }
 
-    #[test]
-    #[should_panic]
-    #[ignore]
-    fn double_free() {
-        let ptr = allocate_val(0usize);
-        do_free(ptr);
-        do_free(ptr);
-    }
 }
 
 #[cfg(test)]
 mod track_allocation_tests {
-    use crate::ptr::auto_ptr::AutoPtr;
+
 
     #[cfg(feature = "track_allocation")]
     #[test]
     fn info_dump_one_thread() {
         {
+            use crate::ptr::auto_ptr::AutoPtr;
+
             dump_info!();
             let first_ptrs = (0..10)
                 .into_iter()

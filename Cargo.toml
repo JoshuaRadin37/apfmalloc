@@ -8,6 +8,7 @@ edition = "2018"
 license-file = "LICENSE"
 readme = "README.md"
 keywords = ["memory", "allocation"]
+repository = "https://github.com/JoshuaRadin37/lrmalloc.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -41,6 +42,7 @@ lazy_static = "1.4.0"
 [lib]
 bench = false
 
+
 # Windows Dependencies
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "winnt", "winerror", "memoryapi"] }
@@ -61,7 +63,6 @@ harness = false
 [[bench]]
 name = "timed_allocation"
 harness = false
-
 
 [[bench]]
 name = "multiple_threads"

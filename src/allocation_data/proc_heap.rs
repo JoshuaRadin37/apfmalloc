@@ -2,7 +2,7 @@ use crate::allocation_data::DescriptorNode;
 use crate::mem_info::MAX_SZ_IDX;
 use crate::size_classes::{SizeClassData, SIZE_CLASSES};
 use std::ptr::slice_from_raw_parts_mut;
-use std::sync::atomic::{AtomicBool, Ordering};
+
 
 use crate::single_access::SingleAccess;
 use atomic::Atomic;
@@ -97,7 +97,6 @@ impl Heaps {
 }
 
 static mut HEAPS: Heaps = Heaps::uninit();
-static mut HEAP_INIT: AtomicBool = AtomicBool::new(false);
 
 unsafe fn init_heaps() {
     let mut map = MmapMut::map_anon(size_of::<ProcHeap>() * MAX_SZ_IDX)
@@ -122,7 +121,7 @@ pub fn get_heaps() -> &'static mut Heaps {
         }
 
          */
-        HEAPS_INIT_S.with(|| unsafe { init_heaps() });
+        HEAPS_INIT_S.with(|| init_heaps());
 
         &mut HEAPS
     }

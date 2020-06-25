@@ -1,4 +1,4 @@
-use criterion::{ criterion_group, criterion_main, BenchmarkId, Criterion, Throughput };
+use criterion::{ criterion_group, criterion_main, Criterion};
 use lrmalloc_rs::apf::trace::{ Trace, Event };
 use lrmalloc_rs::apf::histogram::Histogram;
 use lrmalloc_rs::apf::timescale_functions::{ LivenessCounter, ReuseCounter };
@@ -69,15 +69,15 @@ fn reuse_counter_free(c: &mut Criterion) {
     });
 }
 
-fn check(id: usize) -> u32 {
+fn check(_id: usize) -> u32 {
     0
 }
 
-fn get(id: usize, val: usize) -> bool {
+fn get(_id: usize, _val: usize) -> bool {
     true
 }
 
-fn ret(id: usize, val: u32) -> bool {
+fn ret(_id: usize, _val: u32) -> bool {
     true
 }
 

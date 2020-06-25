@@ -1,10 +1,9 @@
 use std::hash::{Hash, BuildHasher, Hasher};
-use crate::independent_collections::{Array, ArrayIterator};
+use crate::independent_collections::{Array};
 use std::hash::BuildHasherDefault;
 use std::collections::hash_map::DefaultHasher;
-use std::marker::PhantomData;
-use std::iter::{Iterator, IntoIterator};
-use std::ops::{Index, IndexMut, Deref};
+use std::iter::{Iterator};
+use std::ops::{Index, IndexMut};
 
 struct Bucket<K, V>
     where
@@ -24,29 +23,6 @@ struct HashMapInner<K, V>
 impl<K, V> HashMapInner<K, V> where
     K: Eq + Hash {
 
-    fn find<F>(&self, hash: u64, func: F) -> Option<&Bucket<K, V>> where
-        F : Fn(&Bucket<K, V>) -> bool {
-        let buckets = &self.buckets[hash as usize];
-        for bucket in buckets.iter() {
-            if func(bucket) {
-                return Some(bucket);
-            }
-        }
-
-        None
-    }
-
-    fn find_mut<F>(&mut self, hash: u64, func: F) -> Option<&mut Bucket<K, V>> where
-        F : Fn(&Bucket<K, V>) -> bool {
-        let mut buckets = &mut self.buckets[hash as usize];
-        for bucket in buckets.as_mut().iter_mut() {
-            if func(bucket) {
-                return Some(bucket);
-            }
-        }
-
-        None
-    }
 
     fn get_hash<H>(&self, mut hasher: H, key: &K) -> u64
         where
@@ -78,8 +54,9 @@ impl<K, V> HashMap<K, V> where
     }
 
 
+
     pub fn with_capacity(capacity: usize) -> Self {
-        let buckets = Array::with_capacity(capacity);
+        let buckets = Array::of_size(capacity);
         Self {
             hash: Default::default(),
             inner: HashMapInner {
@@ -217,7 +194,7 @@ impl<K, V> HashMap<K, V> where
     }
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         let hash = self.get_hash(key);
-        let mut buckets = &mut self.inner.buckets[hash as usize];
+        let buckets = &mut self.inner.buckets[hash as usize];
         for bucket in buckets.iter_mut() {
             if bucket.key.eq(key) {
                 return Some(&mut bucket.value);
@@ -256,6 +233,9 @@ impl<K, V> HashMap<K, V> where
         false
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 
 
 
@@ -299,6 +279,7 @@ impl<K: Hash + Eq> HashSet<K> {
         self.0.contains(val)
     }
 
+
 }
 
 
@@ -334,7 +315,7 @@ mod test {
         assert_eq!(map.len(), 1);
         let val = map.remove(&5).expect("If gotten here, the value must exist");
         assert!(!map.contains(&5));
-        assert_eq!(map.len(), 0);
+        assert!(map.is_empty());
         assert_eq!(val, "Hello World!")
 
     }

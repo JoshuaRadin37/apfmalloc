@@ -1,7 +1,7 @@
 extern crate lrmalloc_rs;
 
 use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
-use std::os::raw::c_void;
+use std::ffi::c_void;
 
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.
 ///
@@ -103,64 +103,94 @@ pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
 
 
 #[no_mangle]
-pub extern "C" fn check_override() -> bool {
+pub extern "C" fn check_override() -> u8 {
     unsafe {
         let ptr = malloc(8);
         if !OVERRIDE_MALLOC {
-            return false;
+            return 0;
         }
         let new_ptr = realloc(ptr, 64);
         assert_ne!(new_ptr, ptr);
         if !OVERRIDE_REALLOC {
-            return false;
+            return 0;
         }
         let calloced = calloc(8, 8);
         assert_ne!(new_ptr, calloced);
         if !OVERRIDE_CALLOC {
-            return false;
+            return 0;
         }
         do_free(new_ptr);
         do_free(calloced);
         if !OVERRIDE_FREE {
-            return false;
+            return 0;
         }
     }
-    true
+    1
 }
 
-#[cfg(not(feature = "no-rust-global"))] use std::alloc::{GlobalAlloc, Layout};
-#[cfg(not(feature = "no-rust-global"))] use lrmalloc_rs::mem_info::align_val;
-
-/// Allows Rust to use aligned allocation instead of using malloc when calling alloc, as alignment data would be lost. This is important
-/// for creating the internal structures of the allocator
 #[cfg(not(feature = "no-rust-global"))]
-pub struct RustAllocator;
+mod rust_global {
+    use super::*;
+    use std::alloc::{GlobalAlloc, Layout};
+    use lrmalloc_rs::mem_info::align_val;
 
-#[cfg(not(feature = "no-rust-global"))]
-unsafe impl GlobalAlloc for RustAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        aligned_alloc(layout.align(), layout.size()) as *mut u8
-    }
+    /// Allows Rust to use aligned allocation instead of using malloc when calling alloc, as alignment data would be lost. This is important
+    /// for creating the internal structures of the allocator
+    pub struct RustAllocator;
 
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let _ = layout;
-        free(ptr as *mut c_void)
-    }
 
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        calloc(1, align_val(layout.size(), layout.align())) as *mut u8
-    }
+    /// The global allocator structure
+    #[cfg(not(feature = "no-rust-global"))]
+    #[global_allocator]
+    pub static ALLOCATOR: RustAllocator = RustAllocator;
 
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        realloc(ptr as *mut c_void, align_val(new_size, layout.align())) as *mut u8
+
+    unsafe impl GlobalAlloc for RustAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            aligned_alloc(layout.align(), layout.size()) as *mut u8
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            let _ = layout;
+            free(ptr as *mut c_void)
+        }
+
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            calloc(1, align_val(layout.size(), layout.align())) as *mut u8
+        }
+
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            realloc(ptr as *mut c_void, align_val(new_size, layout.align())) as *mut u8
+        }
     }
 }
 
-// The global allocator structure
 #[cfg(not(feature = "no-rust-global"))]
-#[global_allocator]
-pub static ALLOCATOR: RustAllocator = RustAllocator;
+pub use rust_global::*;
 
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_alloc(size: usize) -> *mut c_void {
+    malloc(size)
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_alloc_zeroed(size: usize) -> *mut c_void {
+    calloc(1, size)
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_dealloc(ptr: *mut c_void) {
+    free(ptr)
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    realloc(ptr, size)
+}
 
 
 #[cfg(test)]
@@ -200,5 +230,12 @@ mod test {
             libc::free(ret);
             assert!(OVERRIDE_FREE, "Free wasn't overwritten!")
         }
+    }
+
+    #[test]
+    #[ignore]
+    #[should_panic]
+    fn panic_ok() {
+        panic!("Panic should panic");
     }
 }

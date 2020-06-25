@@ -1,6 +1,5 @@
 use lrmalloc_rs::allocation_data::get_heaps;
 use lrmalloc_rs::{do_free, do_malloc, dump_info};
-use std::fmt::Display;
 use std::sync::atomic::Ordering;
 use std::thread;
 

@@ -1,11 +1,10 @@
 extern crate lrmalloc_rs;
 
 use core::sync::atomic::Ordering;
-use core::time::Duration;
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
 use std::alloc::{GlobalAlloc, Layout};
-use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 struct Dummy;
@@ -76,7 +75,7 @@ fn multi_test_from_bench() {
                 AutoPtr::new(3799i16)
             }));
         }
-        for (i, join) in vec.into_iter().enumerate() {
+        for (_i, join) in vec.into_iter().enumerate() {
             let _ptr = match join.join() {
                 Ok(_) => {}
                 Err(e) => {

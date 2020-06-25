@@ -33,6 +33,8 @@ pub struct Segment {
     length: usize,
 }
 
+unsafe impl Send for Segment {}
+
 impl Segment {
     #[cfg(windows)]
     pub fn new(ptr: *mut c_void, heap: HANDLE, length: usize) -> Self {
@@ -220,9 +222,9 @@ impl SegAllocator for SegmentAllocator {
     }
 
     fn deallocate(&self, segment: Segment) -> bool {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        // while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
         let ret =  unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
-        LOCK.store(false, Ordering::Release);
+        // LOCK.store(false, Ordering::Release);
         ret
     }
 }
@@ -235,17 +237,17 @@ mod test {
 
     #[test]
     pub fn get_segment() {
-        unsafe { SEGMENT_ALLOCATOR.allocate(PAGE) }.expect("Test must fail is this fails");
+        SEGMENT_ALLOCATOR.allocate(PAGE).expect("Test must fail is this fails");
     }
 
     #[test]
     pub fn free_segment() {
-        unsafe {
-            let segment = SEGMENT_ALLOCATOR
-                .allocate(PAGE)
-                .expect("Test must fail is this fails");
-            assert!(SEGMENT_ALLOCATOR.deallocate(segment));
-        }
+
+        let segment = SEGMENT_ALLOCATOR
+            .allocate(PAGE)
+            .expect("Test must fail is this fails");
+        assert!(SEGMENT_ALLOCATOR.deallocate(segment));
+
     }
 
     #[test]

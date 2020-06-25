@@ -1,4 +1,5 @@
 pub const INIT_TRACE_LENGTH: usize = 1 << 14;
+#[allow(unused)]
 pub const INIT_HISTOGRAM_LENGTH: usize = 1 << 8;
 pub const REUSE_BURST_LENGTH: usize = 20000;
 pub const REUSE_HIBERNATION_PERIOD: usize = 40000;
@@ -25,4 +26,5 @@ pub static ref TARGET_APF: usize = no_tuning(|| option_env!("TARGET_APF").map(|a
 }
 
  */
+#[allow(unused)]
 pub const MAX_N: usize = 150;
