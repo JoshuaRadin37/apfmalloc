@@ -103,29 +103,29 @@ pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
 
 
 #[no_mangle]
-pub extern "C" fn check_override() -> bool {
+pub extern "C" fn check_override() -> u8 {
     unsafe {
         let ptr = malloc(8);
         if !OVERRIDE_MALLOC {
-            return false;
+            return 0;
         }
         let new_ptr = realloc(ptr, 64);
         assert_ne!(new_ptr, ptr);
         if !OVERRIDE_REALLOC {
-            return false;
+            return 0;
         }
         let calloced = calloc(8, 8);
         assert_ne!(new_ptr, calloced);
         if !OVERRIDE_CALLOC {
-            return false;
+            return 0;
         }
         do_free(new_ptr);
         do_free(calloced);
         if !OVERRIDE_FREE {
-            return false;
+            return 0;
         }
     }
-    true
+    1
 }
 
 #[cfg(not(feature = "no-rust-global"))]
@@ -168,6 +168,29 @@ mod rust_global {
 #[cfg(not(feature = "no-rust-global"))]
 pub use rust_global::*;
 
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_alloc(size: usize) -> *mut c_void {
+    malloc(size)
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_alloc_zeroed(size: usize) -> *mut c_void {
+    calloc(1, size)
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_dealloc(ptr: *mut c_void) {
+    free(ptr)
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn __rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    realloc(ptr, size)
+}
 
 
 #[cfg(test)]

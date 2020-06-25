@@ -42,11 +42,6 @@ lazy_static = "1.4.0"
 [lib]
 bench = false
 
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
 
 # Windows Dependencies
 [target.'cfg(windows)'.dependencies]
