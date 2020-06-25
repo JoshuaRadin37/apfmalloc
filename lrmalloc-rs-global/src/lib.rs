@@ -210,6 +210,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     #[should_panic]
     fn panic_ok() {
         panic!("Panic should panic");
