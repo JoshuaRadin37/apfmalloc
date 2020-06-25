@@ -6,6 +6,8 @@ use crate::apf::liveness_counter::LivenessCounter;
 use crate::apf::reuse_counter::ReuseCounter;
 use crate::apf::trace::Trace;
 
+use gnuplot::{Figure, Caption, Color};
+
 mod constants;
 pub use constants::TARGET_APF;
 pub mod histogram;
@@ -13,6 +15,8 @@ pub mod histogram;
 pub mod reuse_counter;
 pub mod liveness_counter;
 pub mod trace;
+
+static RECORD: bool = true;
 
 /*
         -- APF Tuner --
@@ -31,6 +35,8 @@ pub struct ApfTuner<'a> {
     check: fn(usize) -> u32,
     get: fn(usize, usize) -> bool,
     ret: fn(usize, u32) -> bool,
+
+    record: Vec<(usize, usize)>
 }
 
 impl ApfTuner<'_> {
@@ -40,7 +46,8 @@ impl ApfTuner<'_> {
         get: fn(usize, usize) -> bool,
         ret: fn(usize, u32) -> bool,
     ) -> ApfTuner<'a> {
-        let tuner = ApfTuner {
+
+        ApfTuner {
             id: id,
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD),
@@ -51,8 +58,8 @@ impl ApfTuner<'_> {
             check: check,
             get: get,
             ret: ret,
-        };
-        tuner
+            record: Vec::<(usize, usize)>::new()
+        }
     }
 
     pub fn set_id(&mut self, id: usize) {
@@ -71,6 +78,11 @@ impl ApfTuner<'_> {
 
         // If out of free blocks, fetch
         if (self.check)(self.id) == 0 {
+
+            if RECORD {
+                self.record.push((self.time, self.calculate_dapf()));
+            }
+
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -84,10 +96,7 @@ impl ApfTuner<'_> {
             (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
         }
-        else {
-            let alt = (self.check)(self.id);
-            let dummy: usize;
-        }
+
         return true;
     }
 
@@ -160,6 +169,21 @@ impl ApfTuner<'_> {
         match self.r_counter.reuse(k) {
             Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
             None => None,
+        }
+    }
+
+    pub fn record(&self) -> Option<Vec<(usize, usize)>> {
+        match RECORD {
+            true => Some(self.record.clone()),
+            false => None
+        }
+    }
+}
+
+impl Drop for ApfTuner<'_> {
+    fn drop(&mut self) {
+        if RECORD {
+            // Show record
         }
     }
 }

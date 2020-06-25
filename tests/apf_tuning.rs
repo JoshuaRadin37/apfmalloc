@@ -24,10 +24,10 @@ static ALLOCATOR: Apf = Apf;
 
 #[test]
 fn test_apf_tuning() {
-    test().expect("Unable to draw test!");
     let mut vec = vec![];
+    let thread_count = 10;
 
-    for _i in 0..10 {
+    for _i in 0..thread_count {
         vec.push(thread::spawn(move || {
             //println!("Thread {}", &i);
             AutoPtr::new(5)
