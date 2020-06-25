@@ -16,7 +16,7 @@ default = []
 no-rust-global = []
 
 [lib]
-crate-type = ["staticlib", "rlib", "dylib"]
+crate-type = ["staticlib", "rlib"]
 
 
 
