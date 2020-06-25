@@ -18,11 +18,7 @@ no-rust-global = []
 [lib]
 crate-type = ["staticlib", "rlib", "dylib"]
 
-[profile.dev]
-panic = "abort"
 
-[profile.release]
-panic = "abort"
 
 [dependencies]
 lrmalloc-rs = { path = "../"}
