@@ -28,7 +28,14 @@ fn test_apf_tuning() {
     for _i in 0..10 {
         vec.push(thread::spawn(move || {
             //println!("Thread {}", &i);
-            AutoPtr::new(5)
+            for _j in 2..5 {
+                let mut ptrs = vec![];
+                for _p in 0..1000 * _j {
+                    ptrs.push(AutoPtr::new(_i * _p));
+                }
+            } 
+            
+            _i
         }));
     }
 
