@@ -1,6 +1,9 @@
+//! A package that creates FFI bindings for LRMalloc-rs to C programs. It also includes an Rust Allocator that, which the user can either
+//! disable being set as the global allocator, or not include entirely.
+
 extern crate lrmalloc_rs;
 
-use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
+pub use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
 use std::ffi::c_void;
 
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.

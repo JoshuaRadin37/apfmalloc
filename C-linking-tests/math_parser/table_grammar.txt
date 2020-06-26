@@ -1,0 +1,42 @@
+ * PRODUCTION FOR TABLE PARSER
+ * $ represents empty
+ *
+ *
+ * RULE #| PRODUCTION
+ * 0    <expression> -> <group><etail>
+ *
+ * 10   <etail> -> +<expression>
+ * 11   <etail> -> $
+ * 12   <etail> -> -<expression>
+ *
+ * 20   <group> -> <factor><gtail>
+ *
+ * 30   <gtail> -> *<group>
+ * 31   <gtail> -> -<expression>
+ * 32   <gtail> -> *<group>
+ *
+ * 40   <factor> -> <number>
+ * 41   <factor> -> -<factor>
+ * 42   <factor> -> (<expression>)
+ * 43   <factor> -> <function>
+ *
+ * 50   <number> -> <digit><ntail>
+ *
+ * 60   <ntail> -> <number>
+ * 61   <ntail> -> $
+ *
+ * 70   <digit> -> [0-9]
+ *
+ * 80   <string> -> <char><stail>
+ *
+ * 90   <stail> -> <string>
+ * 91   <stail> -> $
+ *
+ * 100  <char> -> [a-z]
+ *
+ * 110  <function> -> <string><paramlist>
+ *
+ * 120  <paramlist> -> (<expression><ptail>)
+ *
+ * 130  <ptail> -> ,<expression><ptail>
+ * 131  <ptail> -> $
