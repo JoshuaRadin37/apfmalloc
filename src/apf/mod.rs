@@ -90,8 +90,10 @@ impl ApfTuner<'_> {
 
 
             let demand;
+            dbg!("Fetch");
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
+                    dbg!(d);
                     demand = d;
                 }
                 None => {
@@ -132,6 +134,7 @@ impl ApfTuner<'_> {
 
         // If too many free blocks, return some
         if (self.check)(self.id) as f32 >= 2.0 * demand + 1.0 {
+            // dbg!("Ret");
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
