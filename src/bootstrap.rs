@@ -15,6 +15,8 @@ pub fn use_bootstrap() -> bool {
     *_use_bootstrap.lock()
 }
 
+/// When using the bootstrap, all threads allocate from a single source location which does not require any heap allocation itself
+/// This is useful for systems that require heap space to allocate static variables of types that implement copy.
 #[allow(unused)]
 pub fn set_use_bootstrap(val: bool) {
     *_use_bootstrap.lock() = val;

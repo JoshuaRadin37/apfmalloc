@@ -2,6 +2,9 @@ use core::sync::atomic::AtomicBool;
 use std::cell::UnsafeCell;
 use std::sync::atomic::Ordering;
 
+/// A single access struct is an atomic, spin-locked barrier that ensures that only a single thread is ever able to
+/// to execute some function with it. Single Access structs can not preset its function, as this type is only usefull
+/// when used in a static context.
 pub struct SingleAccess {
     internal: UnsafeCell<SingleAccessInternal>,
 }
@@ -13,6 +16,8 @@ struct SingleAccessInternal {
 }
 
 impl SingleAccessInternal {
+
+
     fn with<F>(&mut self, func: F)
     where
         F: FnOnce(),
@@ -47,6 +52,8 @@ impl SingleAccessInternal {
 }
 
 impl SingleAccess {
+    /// Creates a new `SingleAccess` struct. Any struct can only be used with [`with()`](#method.with) or [`with_then()`](#method.with_then)
+    /// a single time.
     pub const fn new() -> Self {
         Self {
             internal: UnsafeCell::new(SingleAccessInternal {
@@ -57,6 +64,12 @@ impl SingleAccess {
         }
     }
 
+    /// When multiple threads have access to the same same `SingleAccess` struct, only one thread will ever execute the
+    /// the `func`tion. This ensured initially atomically, then un-atomically after the function has completed.
+    ///
+    /// While multiple threads are within this function, they are spin locked until the executing thread completes the function
+    /// # Panic
+    /// If the execuitng thread panics while other threads are within this function, they will never be released.
     pub fn with<F>(&self, func: F)
     where
         F: FnOnce(),
@@ -64,6 +77,15 @@ impl SingleAccess {
         unsafe { (*self.internal.get()).with(func) }
     }
 
+    /// When multiple threads have access to the same same `SingleAccess` struct, only one thread will ever execute the
+    /// the `func`tion. This ensured initially atomically, then un-atomically after the function has completed.
+    ///
+    /// While multiple threads are within this function, they are spin locked until the executing thread completes the function
+    ///
+    /// Once the executing thread finishes `func`, all other locked threads are released, then the same executing thread will then
+    /// execute `after`.
+    /// # Panic
+    /// If the execuitng thread panics while other threads are within this function, they will never be released.
     pub fn with_then<F1, F2>(&self, func: F1, after: F2)
     where
         F1: FnOnce(),

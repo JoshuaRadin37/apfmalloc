@@ -1,5 +1,7 @@
 use crate::mem_info::{MAX_SZ, MAX_SZ_IDX};
 
+/// Contains information on the size of each block, the size of super block containing the blocks, the number of blocks in the superblock,
+/// and the cache block number
 pub struct SizeClassData {
     pub block_size: u32,
     pub sb_size: u32,
@@ -13,6 +15,8 @@ impl SizeClassData {
     }
 }
 
+/// An array of [SizeClassData](struct.SizeClassData.html), where each SizeCLassData is initialized with data for the
+/// size class at the index in the array
 pub static mut SIZE_CLASS_LOOK_UP: [usize; MAX_SZ + 1] = [0; MAX_SZ + 1];
 #[inline]
 pub fn get_size_class(size: usize) -> usize {

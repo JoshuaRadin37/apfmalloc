@@ -1,7 +1,8 @@
 use criterion::{ criterion_group, criterion_main, Criterion};
 use lrmalloc_rs::apf::trace::{ Trace, Event };
 use lrmalloc_rs::apf::histogram::Histogram;
-use lrmalloc_rs::apf::timescale_functions::{ LivenessCounter, ReuseCounter };
+use lrmalloc_rs::apf::liveness_counter::LivenessCounter;
+use lrmalloc_rs::apf::reuse_counter::ReuseCounter;
 use lrmalloc_rs::apf::ApfTuner;
 
 fn trace_add(c: &mut Criterion) {

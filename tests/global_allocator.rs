@@ -1,8 +1,9 @@
-use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc};
+use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, IN_BOOTSTRAP};
 use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
 use std::thread;
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
 struct Dummy;
 
@@ -53,5 +54,18 @@ fn mass_stress_no_harness() {
         for join in vec {
             join.join().unwrap();
         }
+    }
+}
+
+#[test]
+fn panic_uses_direct_allocation() {
+    let thread = thread::spawn(|| panic!("I'm picnicking!"));
+    match thread.join() {
+        Ok(_) => {
+            panic!("Should result in an error")
+        },
+        Err(_) => {
+            assert!(IN_BOOTSTRAP.load(Ordering::Acquire) > 0);
+        },
     }
 }

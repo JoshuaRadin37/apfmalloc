@@ -4,6 +4,8 @@ use std::hash::BuildHasherDefault;
 use std::collections::hash_map::DefaultHasher;
 use std::iter::{Iterator};
 use std::ops::{Index, IndexMut};
+use std::fmt::Debug;
+use std::fmt::Formatter;
 
 struct Bucket<K, V>
     where
@@ -41,6 +43,12 @@ pub struct HashMap<K, V>
     inner: HashMapInner<K, V>,
     containers_used: usize,
     len: usize
+}
+
+impl <K : Eq + Hash, V> Debug for HashMap<K, V> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(size = {})", self.len())
+    }
 }
 
 
@@ -119,7 +127,11 @@ impl<K, V> HashMap<K, V> where
     }
 
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let (ret, _) = self.insert_keep_key(key, value);
+        ret
+    }
 
+    pub fn insert_keep_key(&mut self, key: K, value: V) -> (Option<V>, &K) {
         {
             if self.len() >= self.inner.buckets.len() / 2 && self.spread() < 0.5
                 || self.len() == self.inner.buckets.len() - 1
@@ -149,12 +161,12 @@ impl<K, V> HashMap<K, V> where
                     value
                 };
                 buckets.push(bucket);
-                None
+                (None, &buckets.last().unwrap().key)
             },
             Some(old_index) => {
                 let bucket = &mut buckets[old_index];
                 let val = std::mem::replace(&mut bucket.value, value);
-                Some(val)
+                (Some(val), &bucket.key)
             },
         }
     }
@@ -237,9 +249,67 @@ impl<K, V> HashMap<K, V> where
         self.len == 0
     }
 
-
+    pub fn entry(&mut self, key: K) -> HashMapEntry<'_, K, V> {
+        HashMapEntry::get_from_map(self, key)
+    }
 
 }
+
+enum HashMapEntryInner {
+    Present { bucket: usize, index: usize },
+    NotPresent
+}
+
+pub struct HashMapEntry<'a, K : Hash + Eq, V> {
+    map: &'a mut HashMap<K, V>,
+    key: K,
+    entry: HashMapEntryInner
+}
+
+impl<'a, K: Hash + Eq, V> HashMapEntry<'a, K, V> {
+
+    fn get_from_map(map: &'a mut HashMap<K, V>, key: K) -> HashMapEntry<'a, K, V> {
+        let hash = map.get_hash(&key);
+        let entry =
+            match map.inner.buckets[hash as usize]
+                .iter()
+                .position(|bucket| &bucket.key == &key) {
+                None => {
+                    HashMapEntryInner::NotPresent
+                },
+                Some(index) => {
+                    HashMapEntryInner::Present { bucket: hash as usize, index }
+                },
+            };
+
+        HashMapEntry {
+            map,
+            key,
+            entry
+        }
+    }
+
+    pub fn or_insert(self, value: V) -> &'a mut V {
+        match self.entry {
+            HashMapEntryInner::Present { bucket, index } => {
+                unsafe {
+                    &mut self.map.inner.buckets.get_unchecked_mut(bucket).get_unchecked_mut(index).value
+                }
+            },
+            HashMapEntryInner::NotPresent => {
+                let map = self.map;
+                let key =
+                    unsafe {
+                        let ptr = map.insert_keep_key(self.key, value).1 as *const K as *mut K;
+                        & *ptr
+                    };
+
+                map.get_mut(key).unwrap()
+            },
+        }
+    }
+}
+
 
 impl<K : Hash + Eq, V> Index<&K> for HashMap<K, V> {
     type Output = V;
@@ -325,6 +395,16 @@ mod test {
     fn illegal_access() {
         let map: HashMap<usize, usize> = HashMap::new();
         let _i = map[&15];
+    }
+
+    #[test]
+    fn or_insert() {
+        let mut map: HashMap<usize, usize> = HashMap::new();
+        let entry = map.entry(10).or_insert(0);
+        assert_eq!(entry, &mut 0);
+        *entry = 10;
+        assert_eq!(entry, &mut 10);
+        assert_ne!(map.entry(10).or_insert(0), &mut 0);
     }
 }
 
