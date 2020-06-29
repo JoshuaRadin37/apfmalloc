@@ -607,7 +607,7 @@ pub fn page_free(ptr: *const u8) -> bool {
 #[cfg(test)]
 mod test {
 
-    use crate::pages::{page_alloc, INITIAL_PAGES, page_free};
+    use crate::pages::{page_alloc, page_free};
     use crate::size_classes::{SizeClassData, SIZE_CLASSES};
     use crate::{init_malloc, MALLOC_INIT_S};
 
@@ -654,7 +654,6 @@ mod test {
         use super::*;
 
         #[test]
-        #[ignore]
         fn deallocate() {
             for _ in 0..8 {
                 let ptr = page_alloc(4096).expect("Couldn't get page") as *mut usize;
@@ -662,22 +661,10 @@ mod test {
                 unsafe {
                     *ptr = 0xdeadbeaf;
                 }
+                page_free(ptr as *mut u8);
             }
         }
 
-        #[test]
-        #[ignore]
-        fn grows() {
-            // get_page();
-
-                for _i in 0..(INITIAL_PAGES * 2).max(128) {
-                    //println!("{:?}", PAGE_HOLDER);
-                    // println!("Allocating page {:?}", _i);
-                    page_alloc(4096).unwrap();
-                }
-
-
-        }
     }
 }
 
