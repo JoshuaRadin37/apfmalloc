@@ -72,10 +72,8 @@ pub extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
 ///
 /// If size is zero, a pointer to the minimum sized allocation is created
 #[no_mangle]
-pub extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
-    unsafe {
-        OVERRIDE_REALLOC = true;
-    }
+pub unsafe extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
+    OVERRIDE_REALLOC = true;
     do_realloc(ptr, new_size)
 }
 
@@ -89,10 +87,8 @@ pub extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
 ///
 /// The behavior is undefined if after free() returns, an access is made through the pointer ptr (unless another allocation function happened to result in a pointer value equal to ptr)
 #[no_mangle]
-pub extern "C" fn free(ptr: *mut c_void) {
-    unsafe {
-        OVERRIDE_FREE = true;
-    }
+pub unsafe extern "C" fn free(ptr: *mut c_void) {
+    OVERRIDE_FREE = true;
     do_free(ptr)
 }
 
@@ -186,13 +182,17 @@ pub extern "C" fn __rust_alloc_zeroed(size: usize) -> *mut c_void {
 #[no_mangle]
 #[doc(hidden)]
 pub extern "C" fn __rust_dealloc(ptr: *mut c_void) {
-    free(ptr)
+    unsafe {
+        free(ptr)
+    }
 }
 
 #[no_mangle]
 #[doc(hidden)]
 pub extern "C" fn __rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
-    realloc(ptr, size)
+    unsafe {
+        realloc(ptr, size)
+    }
 }
 
 

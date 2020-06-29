@@ -14,7 +14,9 @@ fn threads_return_extra_to_heap() {
     });
 
     let ptr = handle.join().expect("Didn't acquire a pointer");
-    do_free(ptr);
+    unsafe {
+        do_free(ptr);
+    }
     let new_ptr = unsafe { &*do_malloc(8) };
     assert_eq!(new_ptr as *const u8, ptr as *const u8);
     dump_info!();

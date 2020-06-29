@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::drop_in_place;
 
-/// Similar to Box, but directly calls the do_aligned_alloc and free for dropping
+/// Similar to Box, but directly calls the [`do_aligned_alloc`](fn.do_aligned_alloc.html) and free for dropping
 pub struct AutoPtr<T> {
     data: *mut T,
 }
@@ -20,7 +20,16 @@ impl<T> AutoPtr<T> {
         Self { data: ptr }
     }
 
-    /// Takes the data in the pointer, and de-allocates the space in the heap
+    /// Takes the data in the pointer, and de-allocates the space in the heap.
+    ///
+    /// # Example
+    /// ```
+    /// use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+    /// let ptr = AutoPtr::new(100usize);
+    /// assert_eq!(*ptr, &100usize);
+    /// let value = ptr.take();
+    /// assert_eq!(ptr, 100usize);
+    /// ```
     pub fn take(self) -> T {
         unsafe {
             let Self { data } = &self;
@@ -33,6 +42,23 @@ impl<T> AutoPtr<T> {
     }
 
     /// Converts the AutoPtr into a normal pointer, and removes the ability to auto deallocate the pointer
+    ///
+    /// # Example
+    /// ```
+    /// use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+    /// use std::ptr::null_mut;
+    /// use lrmalloc_rs::do_free;
+    /// let mut unsafe_ptr = null_mut();
+    /// {
+    ///     let ptr = AutoPtr::new(100usize);
+    ///     unsafe_ptr = ptr.into_ptr(); // Normally, `ptr` would deallocate after this, but because we have taken the pointer, it longer does
+    /// }
+    /// unsafe {
+    ///     assert_eq!(*unsafe_ptr, 100usize); // `unsafe_ptr` is still valid
+    ///     do_free(unsafe_ptr); // must be manually dropped now
+    /// }
+    ///
+    /// ```
     pub fn into_ptr(self) -> *mut T {
         let data = self.data;
         std::mem::forget(self);
@@ -85,8 +111,8 @@ impl<T> Drop for AutoPtr<T> {
     fn drop(&mut self) {
         unsafe {
             drop_in_place(self.data);
+            do_free(self.data);
         }
-        do_free(self.data);
     }
 }
 
@@ -225,8 +251,10 @@ mod test {
             un_managed_ptr2, un_managed_ptr,
             "Should not point to the same location"
         );
-        do_free(un_managed_ptr);
-        do_free(un_managed_ptr2);
+        unsafe {
+            do_free(un_managed_ptr);
+            do_free(un_managed_ptr2);
+        }
     }
 
     #[test]
@@ -245,6 +273,8 @@ mod test {
         let new_managed = AutoPtr::new(0usize);
         let new_ptr = new_managed.into_ptr();
         assert_eq!(ptr, new_ptr, "The managed ptr should have caused the old pointer to be freed, enabling the next allocation to be at the same location");
-        do_free(new_ptr); // must deallocate manually now
+        unsafe {
+            do_free(new_ptr); // must deallocate manually now
+        }
     }
 }

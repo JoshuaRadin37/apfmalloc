@@ -265,7 +265,9 @@ impl Drop for Trace<'_> {
         match self.ptr {
             None => {}
             Some(ptr) => {
-                do_free(ptr);
+                unsafe {
+                    do_free(ptr);
+                }
             }
         }
     }

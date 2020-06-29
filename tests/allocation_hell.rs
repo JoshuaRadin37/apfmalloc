@@ -15,29 +15,31 @@ fn allocation_hell() {
         1 << range.start,
         1 << range.end
     );
-    stdout().flush().unwrap();
-    for size in range.map(|shift| 1 << shift) {
-        print!("[{:3?}%]", 0);
-        for i in 0..(ALLOCATIONS / 100) {
-            let ptr = do_malloc(size);
-            do_free(ptr);
-            print!(
-                "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}[{:3?}%]",
-                (i as f64 / ALLOCATIONS as f64 * 100.0) as usize
-            );
-            stdout().flush().unwrap();
-        }
-        for i in 0..(ALLOCATIONS - ALLOCATIONS / 100) {
-            let ptr = do_malloc(size);
-            do_free(ptr);
-            print!(
-                "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}[{:3?}%]",
-                ((i + ALLOCATIONS / 100) as f64 / ALLOCATIONS as f64 * 100.0) as usize
-            );
-            stdout().flush().unwrap();
-        }
-        print!("\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}.");
+    unsafe {
         stdout().flush().unwrap();
+        for size in range.map(|shift| 1 << shift) {
+            print!("[{:3?}%]", 0);
+            for i in 0..(ALLOCATIONS / 100) {
+                let ptr = do_malloc(size);
+                do_free(ptr);
+                print!(
+                    "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}[{:3?}%]",
+                    (i as f64 / ALLOCATIONS as f64 * 100.0) as usize
+                );
+                stdout().flush().unwrap();
+            }
+            for i in 0..(ALLOCATIONS - ALLOCATIONS / 100) {
+                let ptr = do_malloc(size);
+                do_free(ptr);
+                print!(
+                    "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}[{:3?}%]",
+                    ((i + ALLOCATIONS / 100) as f64 / ALLOCATIONS as f64 * 100.0) as usize
+                );
+                stdout().flush().unwrap();
+            }
+            print!("\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}.");
+            stdout().flush().unwrap();
+        }
     }
     println!(" done");
 }
