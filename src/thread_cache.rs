@@ -1,4 +1,4 @@
-use crate::allocation_data::Anchor;
+use crate::allocation_data::{Anchor, Descriptor};
 
 use crate::alloc::{
     compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb,
@@ -152,7 +152,10 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let head = cache.peek_block();
         let mut tail = head;
         let info = get_page_info_for_ptr(head);
-        let desc = unsafe { &mut *info.get_desc().expect("Could not find descriptor") };
+        let desc = unsafe { match info.get_desc() {
+            None => { return;},
+            Some(desc) => {&mut *desc},
+        } };
         //info!("Descriptor: {:?}", desc);
         //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
