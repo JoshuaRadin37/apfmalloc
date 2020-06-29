@@ -1,11 +1,17 @@
-use crate::apf::constants::{REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK};
-use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
+use crate::apf::constants::{
+    REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK,
+};
+// use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
+use crate::apf::liveness_counter::LivenessCounter;
+use crate::apf::reuse_counter::ReuseCounter;
 use crate::apf::trace::Trace;
 
 mod constants;
 pub use constants::TARGET_APF;
 pub mod histogram;
-pub mod timescale_functions;
+// pub mod timescale_functions;
+pub mod reuse_counter;
+pub mod liveness_counter;
 pub mod trace;
 
 /*
@@ -16,7 +22,7 @@ pub mod trace;
 #[derive(Debug)]
 pub struct ApfTuner<'a> {
     id: usize,
-    l_counter: LivenessCounter,
+    l_counter: LivenessCounter<'a>,
     r_counter: ReuseCounter<'a>,
     trace: Trace<'a>,
     time: usize,
@@ -66,8 +72,10 @@ impl ApfTuner<'_> {
         // If out of free blocks, fetch
         if (self.check)(self.id) == 0 {
             let demand;
+            dbg!("Fetch");
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
+                    dbg!(d);
                     demand = d;
                 }
                 None => {
@@ -77,10 +85,6 @@ impl ApfTuner<'_> {
 
             (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
-        }
-        else {
-            let _alt = (self.check)(self.id);
-            let _dummy: usize;
         }
         return true;
     }
@@ -111,6 +115,7 @@ impl ApfTuner<'_> {
 
         // If too many free blocks, return some
         if (self.check)(self.id) as f32 >= 2.0 * demand + 1.0 {
+            // dbg!("Ret");
             let demand;
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
@@ -123,8 +128,8 @@ impl ApfTuner<'_> {
             if demand < 0.0 {
                 return false;
             }
-            let ciel = demand.ceil() as u32;
-            (self.ret)(self.id, ciel + 1);
+            let ceil = demand.ceil() as u32;
+            (self.ret)(self.id, ceil + 1);
         }
         else {
             let _alt = (self.check)(self.id);
@@ -138,15 +143,10 @@ impl ApfTuner<'_> {
     }
 
     fn calculate_dapf(&self) -> usize {
-        let dapf;
-
-        if self.time >= *TARGET_APF * (self.fetch_count + 1) {
-            dapf = *TARGET_APF;
-        } else {
-            dapf = *TARGET_APF * (self.fetch_count + 1) - self.time;
+        match self.time >= *TARGET_APF * (self.fetch_count + 1) {
+            true => *TARGET_APF,
+            false => *TARGET_APF * (self.fetch_count + 1) - self.time
         }
-
-        dapf
     }
 
     // Average demand in windows of length k

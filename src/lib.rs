@@ -470,18 +470,20 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
                 /* WARNING -- ELIAS CODE -- WARNING */
 
                 // Should always be initialized at this point
-                if thread_cache::apf_init
+                if USE_APF && thread_cache::apf_init
                     .try_with(|init| *init.borrow())
                     .unwrap_or(false)
                 {
-                    thread_cache::apf_tuners.with(|tuners|
-                        {
-                            (*tuners.get())
-                                .get_mut(size_class_index)
-                                .unwrap()
-                                .free(ptr as *mut u8);
+                    let _r1 = thread_cache::skip_tuners.try_with(|b| {
+                        if *b.get() == 0 {
+                            let _r2 = thread_cache::apf_tuners.try_with(|tuners| {
+                                (*tuners.get()).get_mut(size_class_index)
+                                    .unwrap()
+                                    .free(ptr as *mut u8);
+                            });
                         }
-                    );
+                    }
+                    ).unwrap();
                 }
 
                 /* END ELIAS CODE */
