@@ -38,6 +38,7 @@ pub mod allocation_data;
 pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
+#[doc(hidden)]
 pub mod page_map;
 pub mod pages;
 pub mod single_access;
@@ -46,6 +47,7 @@ pub mod thread_cache;
 pub mod independent_collections;
 
 mod bootstrap;
+pub use bootstrap::set_use_bootstrap;
 
 pub mod ptr {
     pub mod auto_ptr;
@@ -62,7 +64,7 @@ pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
-static USE_APF: bool = false;
+static USE_APF: bool = true;
 
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
@@ -86,21 +88,39 @@ unsafe fn init_malloc() {
 
 
 /// Performs an aligned allocation for type `T`. Type `T` must be `Sized`
+///
+/// # Example
+/// ```
+/// use lrmalloc_rs::allocate_type;
+/// let ptr = allocate_type::<usize>();
+/// unsafe {
+///     ptr.write(100);
+/// }
+/// ```
 pub fn allocate_type<T>() -> *mut T {
     let size = std::mem::size_of::<T>();
     let align = std::mem::align_of::<T>();
     do_aligned_alloc(align, size) as *mut T
 }
 
+/// Allocates a space in memory with correct alignment for type `T`, then sets the value at the pointed location to `val`
+///
+/// # Safety
+/// If for whatever reason, the pointer created is a NULL pointer, this function will not attempt to write to the pointer,
+/// so no SEGFAULTS should occur
 pub fn allocate_val<T>(val: T) -> *mut T {
     let ret = allocate_type::<T>();
-    unsafe {
-        ret.write(val);
+    if !ret.is_null() {
+        unsafe {
+            ret.write(val);
+        }
     }
     ret
 }
 
-/// Allocates a space in memory
+/// Allocates a space in memory of length `size`.
+///
+/// If the allocation fails, a NULL pointer is returned.
 pub fn do_malloc(size: usize) -> *mut u8 {
 
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
@@ -146,6 +166,9 @@ fn is_power_of_two(x: usize) -> bool {
     (if x != 0 { true } else { false }) && (if (!(x & (x - 1))) != 0 { true } else { false })
 }
 
+/// Allocates a space in memory of length `size`, that is aligned to `align`. `align` must be a power of 2.
+///
+/// If the allocation fails, a NULL pointer is returned.
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     if !is_power_of_two(align) {
         return null_mut();
@@ -202,6 +225,14 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     allocate_to_cache(size, size_class_index)
 }
 
+/// Requests either a memory of length `size` from the bootstrap or a block from a reserve of the
+/// `size_class_index` size class. The memory is only allocated from bootstrap if a global variable is
+/// set.
+///
+/// By default, memory is reserved from a thread cache. To reserve from the bootstrap, first the user must
+/// pass true to [`set_use_bootstrap()`](fn.set_use_bootstrap.html)
+/// # Safety
+/// This function is safe, as if for whatever reason memory can not be reserved, a NULL pointer is returned
 pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     // Because of how rust creates thread locals, we have to assume the thread local does not exist yet
     // We also can't tell if a thread local exists without causing it to initialize, and when using
@@ -211,8 +242,10 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
     // todo: remove the true
     //let id = thread::current();
+    let panic_status = std::thread::panicking();
 
-    if use_bootstrap() {
+
+    if panic_status || use_bootstrap() {
         // This is a global state, and tells to allocate from the bootstrap cache
         /*
         unsafe {
@@ -252,6 +285,9 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         let ret = thread_cache::thread_cache.with(|tcache| {
+
+
+
             let cache = unsafe {
                 (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
             };
@@ -320,7 +356,18 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     }
 }
 
-pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+/// Creates a new space in memory of length `size`, and moves the memory in `ptr` to the newly created memory. A pointer to the new memory is
+/// returned.
+///
+/// The original `ptr` is free'd within this function, and should not be called manually.
+///
+/// If the size class of the new `size` is the same as the old size class, then no new memory is allocated and nothing performed. The exception
+/// to this is if both the old size class and the new size class are part of the size class 0, which does not have a specific size. If this is
+/// the case, then the re-alloc operation is performed only if the new size greater than the old size.
+///
+/// # Safety
+/// If an invalid pointer is passed to this function, then a SEGFAULT will occur. As such, this function is marked as unsafe.
+pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     let new_size_class = get_size_class(size);
     let old_size = match get_allocation_size(ptr) {
         Ok(size) => size as usize,
@@ -336,14 +383,14 @@ pub fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 
     let ret = do_malloc(size) as *mut c_void;
     if !ret.is_null() {
-        unsafe {
-            libc::memcpy(ret, ptr, old_size);
-        }
+        libc::memcpy(ret, ptr, old_size);
     }
     do_free(ptr);
     ret
 }
 
+/// Determines the size of the allocation for a pointer. If no allocation data is available for the pointer, `Err(())` is returned. Otherwise,
+/// `Ok(block size)` is returned
 pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
     let info = get_page_info_for_ptr(ptr);
     let desc = unsafe { &*info.get_desc().ok_or(())? };
@@ -353,25 +400,25 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
 
 /// Frees a location in memory so that it can be reused at a later time. A free to a `NULL` pointer has no effect.
 ///
-/// # Warning
+/// # Safety
 ///
-/// If a pointer has already been freed, a second free to that pointer will cause undefined behavior
-pub fn do_free<T: ?Sized>(ptr: *const T) {
+/// If a pointer has already been freed, a second free to that pointer will cause undefined behavior, and likely a SEGFAULT
+pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
     if ptr.is_null() {
         return;
     }
     let info = get_page_info_for_ptr(ptr);
-    let desc = unsafe {
+    let desc =
         &mut *match info.get_desc() {
             Some(d) => d,
             None => {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
-                //return; // todo: Band-aid fix
-                panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                return; // todo: Band-aid fix
+                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
-        }
-    };
+
+        };
 
     // #[cfg(debug_assertions)]
     // println!("Free will succeed at {:?}", ptr);
@@ -398,14 +445,13 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
             desc.retire();
         }
         Some(size_class_index) => {
-            let force_bootstrap = unsafe { bootstrap_reserve.lock().ptr_in_bootstrap(ptr) }
+            let force_bootstrap = bootstrap_reserve.lock().ptr_in_bootstrap(ptr)
                 || use_bootstrap()
+                || std::thread::panicking()
                 || (!cfg!(unix)
-                && match thread_cache::thread_init.try_with(|_| {()} ) {
-                Ok(_) => false,
-                Err(_) => true,
-            });
-            // todo: remove true
+                && thread_cache::thread_init.try_with(|_| {} ).is_err());
+
+
             #[cfg(feature = "track_allocation")]
                 crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
@@ -431,22 +477,26 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
                 /* WARNING -- ELIAS CODE -- WARNING */
 
                 // Should always be initialized at this point
-                if thread_cache::apf_init
+                if USE_APF && thread_cache::apf_init
                     .try_with(|init| *init.borrow())
                     .unwrap_or(false)
                 {
-                    thread_cache::apf_tuners.with(|tuners| unsafe {
-                        (&mut *tuners.get())
-                            .get_mut(size_class_index)
-                            .unwrap()
-                            .free(ptr as *mut u8);
-                    });
+                    let _r1 = thread_cache::skip_tuners.try_with(|b| {
+                        if *b.get() == 0 {
+                            let _r2 = thread_cache::apf_tuners.try_with(|tuners| {
+                                (*tuners.get()).get_mut(size_class_index)
+                                    .unwrap()
+                                    .free(ptr as *mut u8);
+                            });
+                        }
+                    }
+                    ).unwrap();
                 }
 
                 /* END ELIAS CODE */
                 thread_cache::thread_cache
                     .try_with(|tcache| {
-                        let cache = unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() };
+                        let cache = (*tcache.get()).get_mut(size_class_index).unwrap();
 
                         /*
                         if sc.block_num == 0 {
@@ -465,7 +515,7 @@ pub fn do_free<T: ?Sized>(ptr: *const T) {
 
                          */
                         if !USE_APF {
-                            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+                            let sc = &SIZE_CLASSES[size_class_index];
                             if cache.get_block_num() >= sc.cache_block_num {
                                 flush_cache(size_class_index, cache);
                             }
@@ -492,6 +542,7 @@ mod tests {
     use std::thread;
     use crate::size_classes::SIZE_CLASSES;
 
+
     #[test]
     fn heaps_valid() {
         let heap = get_heaps();
@@ -507,13 +558,17 @@ mod tests {
             &unsafe { *(ptr as *const MaybeUninit<usize> as *const u8) },
             &8
         ); // should be trivial
-        do_free(ptr as *mut MaybeUninit<usize>);
+        unsafe {
+            do_free(ptr as *mut MaybeUninit<usize>);
+        }
     }
 
     #[test]
     fn malloc_and_free_large() {
         let ptr = super::do_malloc(MAX_SZ * 2);
-        do_free(ptr);
+        unsafe {
+            do_free(ptr);
+        }
     }
 
     #[test]
@@ -539,8 +594,10 @@ mod tests {
             );
             ptrs.push(ptr);
         }
-        for ptr in ptrs {
-            do_free(ptr);
+        unsafe {
+            for ptr in ptrs {
+                do_free(ptr);
+            }
         }
     }
 
@@ -553,7 +610,9 @@ mod tests {
                 .expect("Zero Sized Allocation should act as an 8 byte allocation"),
             8
         );
-        do_free(v);
+        unsafe {
+            do_free(v);
+        }
     }
 
     // O(n)
@@ -673,6 +732,8 @@ mod tests {
 
         dump_info!();
     }
+
+
 
 }
 

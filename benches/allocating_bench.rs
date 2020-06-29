@@ -16,11 +16,13 @@ fn allocate_one_thread(c: &mut Criterion) {
                         vec.push(do_malloc(size as usize));
                     }
                 });
-                black_box(|| {
-                    for ptr in vec {
-                        do_free(ptr);
-                    }
-                });
+                unsafe {
+                    black_box(|| {
+                        for ptr in vec {
+                            do_free(ptr);
+                        }
+                    });
+                }
             },
         );
     }
@@ -54,7 +56,9 @@ fn allocate_and_free_one_thread(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let mem = do_malloc(size as usize);
-                    do_free(mem);
+                    unsafe {
+                        do_free(mem);
+                    }
                 })
             },
         );

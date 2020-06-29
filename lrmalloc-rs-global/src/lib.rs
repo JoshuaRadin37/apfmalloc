@@ -1,6 +1,9 @@
+//! A package that creates FFI bindings for LRMalloc-rs to C programs. It also includes an Rust Allocator that, which the user can either
+//! disable being set as the global allocator, or not include entirely.
+
 extern crate lrmalloc_rs;
 
-use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
+pub use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
 use std::ffi::c_void;
 
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.
@@ -35,7 +38,13 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
         OVERRIDE_MALLOC = true;
     }
 
-    do_malloc(size) as *mut c_void
+    #[cfg(not(target_os = "macos"))] {
+        do_malloc(size) as *mut c_void
+    }
+    #[cfg(target_os = "macos")] {
+        do_aligned_alloc(16, size) as *mut c_void
+    }
+
 
 }
 
@@ -69,10 +78,8 @@ pub extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
 ///
 /// If size is zero, a pointer to the minimum sized allocation is created
 #[no_mangle]
-pub extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
-    unsafe {
-        OVERRIDE_REALLOC = true;
-    }
+pub unsafe extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
+    OVERRIDE_REALLOC = true;
     do_realloc(ptr, new_size)
 }
 
@@ -86,10 +93,8 @@ pub extern "C" fn realloc(ptr: *mut c_void, new_size: usize) -> *mut c_void {
 ///
 /// The behavior is undefined if after free() returns, an access is made through the pointer ptr (unless another allocation function happened to result in a pointer value equal to ptr)
 #[no_mangle]
-pub extern "C" fn free(ptr: *mut c_void) {
-    unsafe {
-        OVERRIDE_FREE = true;
-    }
+pub unsafe extern "C" fn free(ptr: *mut c_void) {
+    OVERRIDE_FREE = true;
     do_free(ptr)
 }
 
@@ -168,29 +173,45 @@ mod rust_global {
 #[cfg(not(feature = "no-rust-global"))]
 pub use rust_global::*;
 
+
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_alloc(size: usize) -> *mut c_void {
-    malloc(size)
+pub fn __rust_alloc(size: usize, align: usize) -> *mut u8 {
+    do_aligned_alloc(size, align) as *mut u8
 }
 
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_alloc_zeroed(size: usize) -> *mut c_void {
-    calloc(1, size)
+pub fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
+    unsafe {
+        OVERRIDE_CALLOC = true;
+    }
+    let ret = aligned_alloc(align, size) as *mut u8;
+    unsafe {
+        for i in 0..size {
+            *ret.offset(i as isize) = 0;
+        }
+    }
+    ret
 }
 
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_dealloc(ptr: *mut c_void) {
-    free(ptr)
+pub fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
+    unsafe {
+        do_free(ptr)
+    }
 }
 
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
-    realloc(ptr, size)
+pub fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: usize) -> *mut u8 {
+    unsafe {
+        realloc(ptr as *mut c_void, new_size) as *mut u8
+    }
 }
+
+
 
 
 #[cfg(test)]
@@ -233,7 +254,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     #[should_panic]
     fn panic_ok() {
         panic!("Panic should panic");
