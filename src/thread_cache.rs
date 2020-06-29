@@ -376,6 +376,8 @@ thread_local! {
     // Probably don't want a static lifetime here
     pub static apf_tuners: UnsafeCell<Vec<ApfTuner<'static>>> = UnsafeCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
+
+    pub static thread_use_bootstrap: UnsafeCell<bool> = UnsafeCell::new(false);
 }
 
 #[inline]

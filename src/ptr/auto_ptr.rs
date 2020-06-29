@@ -26,9 +26,9 @@ impl<T> AutoPtr<T> {
     /// ```
     /// use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
     /// let ptr = AutoPtr::new(100usize);
-    /// assert_eq!(*ptr, &100usize);
+    /// assert_eq!(*ptr, 100usize);
     /// let value = ptr.take();
-    /// assert_eq!(ptr, 100usize);
+    /// assert_eq!(value, 100usize);
     /// ```
     pub fn take(self) -> T {
         unsafe {

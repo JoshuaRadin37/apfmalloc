@@ -38,7 +38,13 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
         OVERRIDE_MALLOC = true;
     }
 
-    do_malloc(size) as *mut c_void
+    #[cfg(not(target_os = "macos"))] {
+        do_malloc(size) as *mut c_void
+    }
+    #[cfg(target_os = "macos")] {
+        do_aligned_alloc(16, size) as *mut c_void
+    }
+
 
 }
 
@@ -167,33 +173,45 @@ mod rust_global {
 #[cfg(not(feature = "no-rust-global"))]
 pub use rust_global::*;
 
+
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_alloc(size: usize) -> *mut c_void {
-    malloc(size)
+pub fn __rust_alloc(size: usize, align: usize) -> *mut u8 {
+    do_aligned_alloc(size, align) as *mut u8
 }
 
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_alloc_zeroed(size: usize) -> *mut c_void {
-    calloc(1, size)
-}
-
-#[no_mangle]
-#[doc(hidden)]
-pub extern "C" fn __rust_dealloc(ptr: *mut c_void) {
+pub fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
     unsafe {
-        free(ptr)
+        OVERRIDE_CALLOC = true;
+    }
+    let ret = aligned_alloc(align, size) as *mut u8;
+    unsafe {
+        for i in 0..size {
+            *ret.offset(i as isize) = 0;
+        }
+    }
+    ret
+}
+
+#[no_mangle]
+#[doc(hidden)]
+pub fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
+    unsafe {
+        do_free(ptr)
     }
 }
 
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn __rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+pub fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: usize) -> *mut u8 {
     unsafe {
-        realloc(ptr, size)
+        realloc(ptr as *mut c_void, new_size) as *mut u8
     }
 }
+
+
 
 
 #[cfg(test)]

@@ -72,10 +72,10 @@ impl ApfTuner<'_> {
         // If out of free blocks, fetch
         if (self.check)(self.id) == 0 {
             let demand;
-            dbg!("Fetch");
+            // dbg!("Fetch");
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
-                    dbg!(d);
+                    // dbg!(d);
                     demand = d;
                 }
                 None => {

@@ -242,8 +242,10 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
     // todo: remove the true
     //let id = thread::current();
+    let panic_status = std::thread::panicking();
 
-    if use_bootstrap() {
+
+    if panic_status || use_bootstrap() {
         // This is a global state, and tells to allocate from the bootstrap cache
         /*
         unsafe {
@@ -283,6 +285,9 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         let ret = thread_cache::thread_cache.with(|tcache| {
+
+
+
             let cache = unsafe {
                 (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
             };
@@ -409,8 +414,8 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
             None => {
                 // #[cfg(debug_assertions)]
                 // println!("Free failed at {:?}", ptr);
-                //return; // todo: Band-aid fix
-                panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+                return; // todo: Band-aid fix
+                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
             }
 
         };
@@ -442,9 +447,11 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
         Some(size_class_index) => {
             let force_bootstrap = bootstrap_reserve.lock().ptr_in_bootstrap(ptr)
                 || use_bootstrap()
+                || std::thread::panicking()
                 || (!cfg!(unix)
                 && thread_cache::thread_init.try_with(|_| {} ).is_err());
-            // todo: remove true
+
+
             #[cfg(feature = "track_allocation")]
                 crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
@@ -534,6 +541,7 @@ mod tests {
     use super::*;
     use std::thread;
     use crate::size_classes::SIZE_CLASSES;
+
 
     #[test]
     fn heaps_valid() {
@@ -724,6 +732,8 @@ mod tests {
 
         dump_info!();
     }
+
+
 
 }
 

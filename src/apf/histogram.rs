@@ -19,10 +19,10 @@ pub struct Histogram<'a> {
 
 impl<'a> Histogram<'a> {
     pub fn new() -> Histogram<'a> {
-        let page = allocate_type::<[usize; INIT_HISTOGRAM_LENGTH]>() as * mut usize as *mut u8;
+        let page = allocate_type::<[usize; INIT_HISTOGRAM_LENGTH]>() as * mut usize;
         assert!(!page.is_null(), "Error initializing histogram: {:?}", AllocationError::AllocationFailed(INIT_HISTOGRAM_LENGTH, errno::errno()));
 
-        let ptr = page as *mut usize;
+        let ptr = page;
         let histogram = unsafe {
             from_raw_parts_mut(
                 ptr, 
@@ -42,7 +42,7 @@ impl<'a> Histogram<'a> {
 
     pub fn increment(&mut self, key: usize) -> () {
         if key >= self.max_key - 1 {
-            self.grow();
+            self.grow(key);
         }
 
         self.histogram[key] += 1;
@@ -50,10 +50,11 @@ impl<'a> Histogram<'a> {
 
     pub fn add(&mut self, key: usize, val: usize) {
         if key >= self.max_key - 1 {
-            self.grow();
+            self.grow(key);
         }
 
-        unsafe { (&mut self.histogram[key]as *mut usize).write(self.histogram[key] + val) };
+        self.histogram[key] = self.histogram[key] + val;
+        // unsafe { (&mut self.histogram[key]as *mut usize).write(self.histogram[key] + val) };
 
     }
 
@@ -69,8 +70,14 @@ impl<'a> Histogram<'a> {
         self.histogram.len()
     }
 
-    pub fn grow(&mut self) {
-        let new_max = self.max_key * 2;
+    pub fn grow(&mut self, failed_key: usize) {
+        let new_max = {
+            let mut output = self.max_key * 2;
+            while output <= failed_key {
+                output *= 2;
+            }
+            output
+        };
         let page = no_tuning(|| unsafe {
             do_realloc(self.histogram.as_mut_ptr() as *mut c_void, new_max * size_of::<usize>()) as *mut u8
         });
@@ -80,7 +87,8 @@ impl<'a> Histogram<'a> {
         let histogram = unsafe { from_raw_parts_mut(ptr, new_max) };
 
         for i in self.max_key..new_max {
-            unsafe { (&mut histogram[i]as *mut usize).write(0) };
+            //unsafe { (&mut histogram[i]as *mut usize).write(0) };
+            histogram[i] = 0;
         }
 
         self.histogram = histogram;
