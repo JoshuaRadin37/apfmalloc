@@ -164,11 +164,27 @@ mod test {
     #[test]
     fn test_reuse_counter() {
         let mut rc = ReuseCounter::new(6, 18);
-        rc.alloc(1); rc.inc_timer(); rc.alloc(2); rc.inc_timer(); rc.free(1); rc.alloc(1); rc.inc_timer(); rc.free(2); rc.alloc(2); rc.inc_timer();
-        rc.free(1); rc.alloc(3); rc.inc_timer(); rc.alloc(1); rc.inc_timer();
-        rc.free(1); rc.free(3); rc.alloc(3); rc.inc_timer();
+        rc.alloc(1);
+        rc.inc_timer();
+        rc.alloc(2);
+        rc.inc_timer();
+        rc.free(1);
+        rc.alloc(1);
+        rc.inc_timer();
+        rc.free(2);
+        rc.alloc(2);
+        rc.inc_timer();
+        rc.free(1);
+        rc.alloc(3);
+        rc.inc_timer();
+        rc.alloc(1);
+        rc.inc_timer();
+        rc.free(1);
+        rc.free(3);
+        rc.alloc(3);
+        rc.inc_timer();
 
-        assert_eq!(rc.reuse(4), Some(7.0/3.0));
+        assert_eq!(rc.reuse(4), Some(7.0 / 3.0));
     }
 
     #[test]

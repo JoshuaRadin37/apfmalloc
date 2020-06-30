@@ -40,15 +40,15 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
         OVERRIDE_MALLOC = true;
     }
 
-    #[cfg(not(target_os = "macos"))] {
+    #[cfg(not(target_os = "macos"))]
+    {
         do_malloc(size) as *mut c_void
     }
-    #[cfg(target_os = "macos")] {
+    #[cfg(target_os = "macos")]
+    {
         // MacOS requires that memory is aligned to atleast 16 bytes
         do_aligned_alloc(16, size) as *mut c_void
     }
-
-
 }
 
 /// Allocates memory for an array of num objects of size and initializes all bytes in the allocated storage to zero.
@@ -116,7 +116,6 @@ pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     }
 }
 
-
 #[no_mangle]
 pub extern "C" fn check_override() -> u8 {
     unsafe {
@@ -146,19 +145,17 @@ pub extern "C" fn check_override() -> u8 {
 #[cfg(not(feature = "no-rust"))]
 mod rust_global {
     use super::*;
-    use std::alloc::{GlobalAlloc, Layout};
     use lrmalloc_rs::mem_info::align_val;
+    use std::alloc::{GlobalAlloc, Layout};
 
     /// Allows Rust to use aligned allocation instead of using malloc when calling alloc, as alignment data would be lost. This is important
     /// for creating the internal structures of the allocator
     pub struct RustAllocator;
 
-
     /// The global allocator structure
     #[cfg(not(feature = "no-rust-global"))]
     #[global_allocator]
     pub static ALLOCATOR: RustAllocator = RustAllocator;
-
 
     unsafe impl GlobalAlloc for RustAllocator {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -182,7 +179,6 @@ mod rust_global {
 
 #[cfg(not(feature = "no-rust"))]
 pub use rust_global::*;
-
 
 #[no_mangle]
 #[doc(hidden)]
@@ -208,21 +204,14 @@ pub fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 #[no_mangle]
 #[doc(hidden)]
 pub fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
-    unsafe {
-        free(ptr as *mut c_void)
-    }
+    unsafe { free(ptr as *mut c_void) }
 }
 
 #[no_mangle]
 #[doc(hidden)]
 pub fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: usize) -> *mut u8 {
-    unsafe {
-        realloc(ptr as *mut c_void, new_size) as *mut u8
-    }
+    unsafe { realloc(ptr as *mut c_void, new_size) as *mut u8 }
 }
-
-
-
 
 #[cfg(test)]
 mod test {
@@ -262,5 +251,4 @@ mod test {
             assert!(OVERRIDE_FREE, "Free wasn't overwritten!")
         }
     }
-
 }

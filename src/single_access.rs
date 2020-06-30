@@ -16,8 +16,6 @@ struct SingleAccessInternal {
 }
 
 impl SingleAccessInternal {
-
-
     fn with<F>(&mut self, func: F)
     where
         F: FnOnce(),

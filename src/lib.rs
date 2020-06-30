@@ -5,15 +5,15 @@ extern crate bitfield;
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 
 use atomic::Ordering;
 use spin::Mutex;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
-use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
+use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
 use crate::bootstrap::{bootstrap_reserve, use_bootstrap};
-use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE, align_size};
+use crate::mem_info::{align_addr, align_size, MAX_SZ, MAX_SZ_IDX, PAGE};
 use crate::page_map::S_PAGE_MAP;
 
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
@@ -34,6 +34,7 @@ pub mod macros;
 
 pub mod alloc;
 pub mod allocation_data;
+pub mod independent_collections;
 #[cfg(feature = "track_allocation")]
 pub mod info_dump;
 #[allow(unused)]
@@ -44,7 +45,6 @@ pub mod pages;
 pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
-pub mod independent_collections;
 
 mod bootstrap;
 pub use bootstrap::set_use_bootstrap;
@@ -58,13 +58,15 @@ pub mod apf;
 
 static AVAILABLE_DESC: Mutex<DescriptorNode> = Mutex::new(DescriptorNode::new());
 
-
 pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
 static USE_APF: bool = true;
+
+#[cfg(debug_assertions)]
+pub(crate) const TRACK_ALLOCATION_LOCATION: bool = false;
 
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
@@ -82,10 +84,8 @@ unsafe fn init_malloc() {
 
     bootstrap_reserve.lock().init();
 
-
     //info!("Malloc Initialized")
 }
-
 
 /// Performs an aligned allocation for type `T`. Type `T` must be `Sized`
 ///
@@ -122,7 +122,6 @@ pub fn allocate_val<T>(val: T) -> *mut T {
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_malloc(size: usize) -> *mut u8 {
-
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
     /*
     unsafe {
@@ -189,10 +188,10 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         let pages = page_ceiling!(size);
 
         let seg = match SEGMENT_ALLOCATOR.allocate(pages) {
-            Ok(seg) => {seg},
+            Ok(seg) => seg,
             Err(_) => {
                 return null_mut();
-            },
+            }
         };
 
         let desc = unsafe { &mut *Descriptor::alloc() };
@@ -244,7 +243,6 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     //let id = thread::current();
     let panic_status = std::thread::panicking();
 
-
     if panic_status || use_bootstrap() {
         // This is a global state, and tells to allocate from the bootstrap cache
         /*
@@ -259,35 +257,38 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
             cache.pop_block()
         }
          */
-        #[cfg(debug_assertions)] IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
+        #[cfg(debug_assertions)]
+        if TRACK_ALLOCATION_LOCATION {
+            IN_BOOTSTRAP.fetch_add(size, Ordering::AcqRel);
+        }
 
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
         #[cfg(not(unix))]
-            {
-                set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
-                //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
-                thread_cache::thread_init.with(|val| {
-                    // if not initalized, it goes back
-                    if !*val.borrow() {
-                        // the default value of the val is false, which means that the thread cache has not been created yet
-                        thread_cache::thread_cache.with(|tcache| {
-                            // This causes another allocation, hopefully with bootstrap
-                            let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
-                        }); // it repeatedly sets it false, eventually, it will allocate
-                        *val.borrow_mut() = true; // Never has to repeat this code after this
-                    }
-                    set_use_bootstrap(false) // Turns off the bootstrap
-                });
-            }
+        {
+            set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
+                                     //WAIT_FOR_THREAD_INIT.store(Some(thread::current().id()));
+            thread_cache::thread_init.with(|val| {
+                // if not initalized, it goes back
+                if !*val.borrow() {
+                    // the default value of the val is false, which means that the thread cache has not been created yet
+                    thread_cache::thread_cache.with(|tcache| {
+                        // This causes another allocation, hopefully with bootstrap
+                        let _tcache = tcache; // There is a theoretical bootstrap data race here, but because
+                    }); // it repeatedly sets it false, eventually, it will allocate
+                    *val.borrow_mut() = true; // Never has to repeat this code after this
+                }
+                set_use_bootstrap(false) // Turns off the bootstrap
+            });
+        }
 
-        #[cfg(debug_assertions)] IN_CACHE.fetch_add(size, Ordering::AcqRel);
+        #[cfg(debug_assertions)]
+        if TRACK_ALLOCATION_LOCATION {
+            IN_CACHE.fetch_add(size, Ordering::AcqRel);
+        }
 
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         let ret = thread_cache::thread_cache.with(|tcache| {
-
-
-
             let cache = unsafe {
                 (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
             };
@@ -299,53 +300,56 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 }
             }
             #[cfg(feature = "track_allocation")]
-                {
-                    let ret = cache.pop_block();
-                    let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
-                    crate::info_dump::log_malloc(size);
-                    #[cfg(feature = "show_all_allocations")]
-                    dump_info!();
-                    ret
-                }
+            {
+                let ret = cache.pop_block();
+                let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
+                crate::info_dump::log_malloc(size);
+                #[cfg(feature = "show_all_allocations")]
+                dump_info!();
+                ret
+            }
             #[cfg(not(feature = "track_allocation"))]
-                let ptr = cache.pop_block(); // Pops the block from the thread cache bin
+            let ptr = cache.pop_block(); // Pops the block from the thread cache bin
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
             #[cfg(unix)]
-                {
-                    if USE_APF {
-                        thread_cache::skip.with(|b| unsafe {
-                            if !*b.get() {
-                                let skip = b.get();
-                                *skip = true;
-                                thread_cache::apf_init.with(|init| {
-                                    if !*init.borrow() {
-                                        thread_cache::init_tuners();
-                                        *init.borrow_mut() = true;
-                                    }
-                                    assert_eq!(
-                                        thread_cache::apf_init.with(|init| { *init.borrow() }),
-                                        true
-                                    );
-                                    // set_use_bootstrap(false);
-                                });
-                                assert_eq!(thread_cache::apf_init.with(|init| { *init.borrow() }), true);
-                                let _ = thread_cache::thread_init.with(|_| ());
-                            }
-                        });
-                        thread_cache::skip_tuners.with(|b| unsafe {
-                            if *b.get() == 0 {
-                                thread_cache::apf_tuners.with(|tuners| {
-                                    (&mut *tuners.get())
-                                        .get_mut(size_class_index)
-                                        .unwrap()
-                                        .malloc(ptr);
-                                });
-                            }
-                        });
-                    }
+            {
+                if USE_APF {
+                    thread_cache::skip.with(|b| unsafe {
+                        if !*b.get() {
+                            let skip = b.get();
+                            *skip = true;
+                            thread_cache::apf_init.with(|init| {
+                                if !*init.borrow() {
+                                    thread_cache::init_tuners();
+                                    *init.borrow_mut() = true;
+                                }
+                                assert_eq!(
+                                    thread_cache::apf_init.with(|init| { *init.borrow() }),
+                                    true
+                                );
+                                // set_use_bootstrap(false);
+                            });
+                            assert_eq!(
+                                thread_cache::apf_init.with(|init| { *init.borrow() }),
+                                true
+                            );
+                            let _ = thread_cache::thread_init.with(|_| ());
+                        }
+                    });
+                    thread_cache::skip_tuners.with(|b| unsafe {
+                        if *b.get() == 0 {
+                            thread_cache::apf_tuners.with(|tuners| {
+                                (&mut *tuners.get())
+                                    .get_mut(size_class_index)
+                                    .unwrap()
+                                    .malloc(ptr);
+                            });
+                        }
+                    });
                 }
+            }
 
             //set_use_bootstrap(true);
 
@@ -376,8 +380,9 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
         }
     };
     let old_size_class = get_size_class(old_size);
-    if old_size_class != 0 && old_size_class == new_size_class ||
-        old_size_class == 0 && new_size_class == 0 && size < old_size {
+    if old_size_class != 0 && old_size_class == new_size_class
+        || old_size_class == 0 && new_size_class == 0 && size < old_size
+    {
         return ptr;
     }
 
@@ -408,17 +413,15 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
         return;
     }
     let info = get_page_info_for_ptr(ptr);
-    let desc =
-        &mut *match info.get_desc() {
-            Some(d) => d,
-            None => {
-                // #[cfg(debug_assertions)]
-                // println!("Free failed at {:?}", ptr);
-                return; // todo: Band-aid fix
-                // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
-            }
-
-        };
+    let desc = &mut *match info.get_desc() {
+        Some(d) => d,
+        None => {
+            // #[cfg(debug_assertions)]
+            // println!("Free failed at {:?}", ptr);
+            return; // todo: Band-aid fix
+                    // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+        }
+    };
 
     // #[cfg(debug_assertions)]
     // println!("Free will succeed at {:?}", ptr);
@@ -448,49 +451,49 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
             let force_bootstrap = bootstrap_reserve.lock().ptr_in_bootstrap(ptr)
                 || use_bootstrap()
                 || std::thread::panicking()
-                || (!cfg!(unix)
-                && thread_cache::thread_init.try_with(|_| {} ).is_err());
-
+                || (!cfg!(unix) && thread_cache::thread_init.try_with(|_| {}).is_err());
 
             #[cfg(feature = "track_allocation")]
-                crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+            crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
             dump_info!();
 
             if force_bootstrap {
-
             } else {
                 #[cfg(not(unix))]
-                    {
-                        set_use_bootstrap(true);
-                        thread_cache::thread_init.with(|val| {
-                            if !*val.borrow() {
-                                thread_cache::thread_cache.with(|tcache| {
-                                    let _tcache = tcache;
-                                });
-                                *val.borrow_mut() = true;
-                            }
-                            set_use_bootstrap(false)
-                        });
-                    }
+                {
+                    set_use_bootstrap(true);
+                    thread_cache::thread_init.with(|val| {
+                        if !*val.borrow() {
+                            thread_cache::thread_cache.with(|tcache| {
+                                let _tcache = tcache;
+                            });
+                            *val.borrow_mut() = true;
+                        }
+                        set_use_bootstrap(false)
+                    });
+                }
 
                 /* WARNING -- ELIAS CODE -- WARNING */
 
                 // Should always be initialized at this point
-                if USE_APF && thread_cache::apf_init
-                    .try_with(|init| *init.borrow())
-                    .unwrap_or(false)
+                if USE_APF
+                    && thread_cache::apf_init
+                        .try_with(|init| *init.borrow())
+                        .unwrap_or(false)
                 {
-                    let _r1 = thread_cache::skip_tuners.try_with(|b| {
-                        if *b.get() == 0 {
-                            let _r2 = thread_cache::apf_tuners.try_with(|tuners| {
-                                (*tuners.get()).get_mut(size_class_index)
-                                    .unwrap()
-                                    .free(ptr as *mut u8);
-                            });
-                        }
-                    }
-                    ).unwrap();
+                    let _r1 = thread_cache::skip_tuners
+                        .try_with(|b| {
+                            if *b.get() == 0 {
+                                let _r2 = thread_cache::apf_tuners.try_with(|tuners| {
+                                    (*tuners.get())
+                                        .get_mut(size_class_index)
+                                        .unwrap()
+                                        .free(ptr as *mut u8);
+                                });
+                            }
+                        })
+                        .unwrap();
                 }
 
                 /* END ELIAS CODE */
@@ -539,9 +542,8 @@ mod tests {
     use crate::ptr::auto_ptr::AutoPtr;
 
     use super::*;
-    use std::thread;
     use crate::size_classes::SIZE_CLASSES;
-
+    use std::thread;
 
     #[test]
     fn heaps_valid() {
@@ -732,14 +734,10 @@ mod tests {
 
         dump_info!();
     }
-
-
-
 }
 
 #[cfg(test)]
 mod track_allocation_tests {
-
 
     #[cfg(feature = "track_allocation")]
     #[test]

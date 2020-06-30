@@ -3,11 +3,11 @@ use lrmalloc_rs::alloc::malloc_from_new_sb;
 use lrmalloc_rs::allocation_data::Descriptor;
 use lrmalloc_rs::mem_info::{MAX_SZ_IDX, PAGE};
 use lrmalloc_rs::pages::{page_alloc, page_free};
-use lrmalloc_rs::thread_cache::{fill_cache, ThreadCacheBin};
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+use lrmalloc_rs::thread_cache::{fill_cache, ThreadCacheBin};
+use std::io::{stdout, Write};
 use std::time::Duration;
 use std::time::Instant;
-use std::io::{stdout, Write};
 
 fn thread_cache_fill(c: &mut Criterion) {
     let mut tcache = [ThreadCacheBin::new(); MAX_SZ_IDX];
@@ -98,5 +98,11 @@ fn desc_alloc(c: &mut Criterion) {
 }
 
 criterion_group!(paging, page_alloc_bench, page_free_time);
-criterion_group!(functions, desc_alloc, thread_cache_fill, alloc_from_super_block, alloc_from_super_block_no_free);
+criterion_group!(
+    functions,
+    desc_alloc,
+    thread_cache_fill,
+    alloc_from_super_block,
+    alloc_from_super_block_no_free
+);
 criterion_main!(paging, functions);

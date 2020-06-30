@@ -3,7 +3,6 @@ use crate::mem_info::MAX_SZ_IDX;
 use crate::size_classes::{SizeClassData, SIZE_CLASSES};
 use std::ptr::slice_from_raw_parts_mut;
 
-
 use crate::single_access::SingleAccess;
 use atomic::Atomic;
 use bitfield::size_of;

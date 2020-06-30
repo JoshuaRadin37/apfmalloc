@@ -98,10 +98,9 @@ impl<'a> Trace<'a> {
                 match page {
                     Ok(page) => {
                         let ptr = page as *mut Event;
-                        let accesses =
-                            from_raw_parts_mut(
-                                ptr, new_max, // Size?
-                            );
+                        let accesses = from_raw_parts_mut(
+                            ptr, new_max, // Size?
+                        );
 
                         self.ptr = Some(page);
                         self.accesses = accesses;
@@ -264,11 +263,9 @@ impl Drop for Trace<'_> {
     fn drop(&mut self) {
         match self.ptr {
             None => {}
-            Some(ptr) => {
-                unsafe {
-                    do_free(ptr);
-                }
-            }
+            Some(ptr) => unsafe {
+                do_free(ptr);
+            },
         }
     }
 }

@@ -3,21 +3,21 @@ use bitfield::size_of;
 use memmap::MmapMut;
 use std::os::raw::c_void;
 
-use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR, AllocationError};
+use crate::independent_collections::HashMap;
+use crate::pages::external_mem_reservation::{
+    AllocationError, SegAllocator, Segment, SEGMENT_ALLOCATOR,
+};
 use crate::pages::MemoryOrFreePointer::Free;
 use atomic::Ordering;
 use bitfield::fmt::{Debug, Display, Formatter};
+use spin::Mutex;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
-use std::{fmt};
-use crate::independent_collections::HashMap;
-use spin::Mutex;
-use std::hash::{Hash, Hasher};
-
 
 pub mod external_mem_reservation;
-
 
 #[inline]
 #[allow(unused)]
@@ -31,7 +31,7 @@ struct PageInfoHolder {
     capacity: usize,
     head: Option<usize>,
     lock: AtomicBool,
-    tree: Option<HashMap<*const u8, usize>>
+    tree: Option<HashMap<*const u8, usize>>,
 }
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl PageInfoHolder {
             capacity: 0,
             head: None,
             lock: AtomicBool::new(false),
-            tree: None
+            tree: None,
         }
     }
 
@@ -89,7 +89,7 @@ impl PageInfoHolder {
             capacity: 0,
             head: None,
             lock: AtomicBool::new(false),
-            tree: Some(HashMap::with_capacity(10_001))
+            tree: Some(HashMap::with_capacity(10_001)),
         };
         let ptr = self.internals.as_mut().unwrap().as_mut_ptr();
         unsafe {
@@ -120,8 +120,8 @@ impl PageInfoHolder {
                 self.internals.as_mut().unwrap().as_mut_ptr() as *mut MemoryOrFreePointer,
                 *self.get_capacity(),
             )
-                .as_mut()
-                .unwrap()
+            .as_mut()
+            .unwrap()
         }
     }
 
@@ -147,7 +147,7 @@ impl PageInfoHolder {
             if first {
                 prev = Some(index + self.capacity);
                 first = false;
-                // first_index = Some(index + self.capacity);
+            // first_index = Some(index + self.capacity);
             } else {
                 prev = Some(prev.unwrap() - 1);
             }
@@ -226,8 +226,7 @@ impl PageInfoHolder {
             } else
             {
              */
-            let segment = SEGMENT_ALLOCATOR
-                .allocate(size)?;
+            let segment = SEGMENT_ALLOCATOR.allocate(size)?;
             let ptr = segment.get_ptr() as *mut u8;
             let combo = MemoryOrFreePointer::Segment(segment);
             //self.release();
@@ -236,33 +235,31 @@ impl PageInfoHolder {
             // }
         };
 
-            let head = self.head;
-            let index = head.unwrap();
-            if let MemoryOrFreePointer::Free { next: prev_pointer } =
-            self.get_at_index(index).unwrap()
-            {
-                if prev_pointer.is_none() {
-                    panic!("Previous pointer should not be null");
-                }
-                // println!("Previous pointer: {:x?}", *prev_pointer);
-                self.head = *prev_pointer;
-                // self.head.store(*prev_pointer, Ordering::SeqCst);
-            } else {
-                // eprintln!("Head is {:?}", head);
-                panic!("No more space in page container")
+        let head = self.head;
+        let index = head.unwrap();
+        if let MemoryOrFreePointer::Free { next: prev_pointer } = self.get_at_index(index).unwrap()
+        {
+            if prev_pointer.is_none() {
+                panic!("Previous pointer should not be null");
             }
-            *self.get_at_index(index).unwrap() = memory;
-            self.tree.as_mut().unwrap().insert(ptr, index);
-            assert_ne!(self.head, head, "Head should not be the same");
-            self.count += 1;
-
+            // println!("Previous pointer: {:x?}", *prev_pointer);
+            self.head = *prev_pointer;
+        // self.head.store(*prev_pointer, Ordering::SeqCst);
+        } else {
+            // eprintln!("Head is {:?}", head);
+            panic!("No more space in page container")
+        }
+        *self.get_at_index(index).unwrap() = memory;
+        self.tree.as_mut().unwrap().insert(ptr, index);
+        assert_ne!(self.head, head, "Head should not be the same");
+        self.count += 1;
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
         #[cfg(feature = "track_allocation")]
-            {
-                crate::info_dump::increase_allocated_from_vm(size);
-            }
+        {
+            crate::info_dump::increase_allocated_from_vm(size);
+        }
         self.release();
         Ok(ptr)
     }
@@ -295,31 +292,27 @@ impl PageInfoHolder {
         }
 
         let (memory, ptr) = {
-            let segment = SEGMENT_ALLOCATOR
-                .allocate_massive(size)?;
+            let segment = SEGMENT_ALLOCATOR.allocate_massive(size)?;
             let ptr = segment.get_ptr() as *mut u8;
             let combo = MemoryOrFreePointer::Segment(segment);
 
             (combo, ptr)
         };
 
-            let head = self.head.unwrap();
-            if let MemoryOrFreePointer::Free { next: prev_pointer } =
-            self.get_at_index(head).unwrap()
-            {
-                if prev_pointer.is_none() {
-                    panic!("Previous pointer should not be null");
-                }
-                self.head = *prev_pointer;
-                // self.head.store(*prev_pointer, Ordering::SeqCst);
-            } else {
-                panic!("No more space in page container")
+        let head = self.head.unwrap();
+        if let MemoryOrFreePointer::Free { next: prev_pointer } = self.get_at_index(head).unwrap() {
+            if prev_pointer.is_none() {
+                panic!("Previous pointer should not be null");
             }
-            *self.get_at_index(head).unwrap() = memory;
-            self.tree.as_mut().unwrap().insert(ptr, head);
-            //*head = memory;
-            self.count += 1;
-
+            self.head = *prev_pointer;
+        // self.head.store(*prev_pointer, Ordering::SeqCst);
+        } else {
+            panic!("No more space in page container")
+        }
+        *self.get_at_index(head).unwrap() = memory;
+        self.tree.as_mut().unwrap().insert(ptr, head);
+        //*head = memory;
+        self.count += 1;
 
         // println!("After: {:?}", self);
         // println!("Finished Alloc Page");
@@ -333,7 +326,6 @@ impl PageInfoHolder {
         let prev = { self.head.clone() };
 
         let new_head = {
-
             /*
             for page in self.get_maps() {
                 match page {
@@ -356,7 +348,12 @@ impl PageInfoHolder {
 
              */
             // let mut mapping = self.tree.as_ref().unwrap();
-            let index = self.tree.as_ref().unwrap().get(&page_ptr).expect("Pointer must exist in map");
+            let index = self
+                .tree
+                .as_ref()
+                .unwrap()
+                .get(&page_ptr)
+                .expect("Pointer must exist in map");
             let found_mem = self.get_at_index(*index);
 
             match found_mem {
@@ -381,7 +378,6 @@ impl PageInfoHolder {
                     //    .store(page as *mut MemoryOrFreePointer, Ordering::Release);
                 }
             };
-
 
             //let index = self.tree.as_ref().unwrap().get(&page_ptr).expect("Pointer must exist in map");
             let ptr = self.get_at_index(*index).unwrap();
@@ -504,13 +500,9 @@ impl Hash for PtrHolder {
     }
 }
 
-
-
 struct SegmentHolder {
-    size_map: Option<HashMap<PtrHolder, usize>>
+    size_map: Option<HashMap<PtrHolder, usize>>,
 }
-
-
 
 static SEGMENT_HOLDER: Mutex<SegmentHolder> = Mutex::new(SegmentHolder { size_map: None });
 
@@ -544,11 +536,13 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
     }
     let segment = SEGMENT_ALLOCATOR.allocate(size)?;
     let ptr = segment.get_ptr() as *mut u8;
-    segment_holder.size_map.as_mut().unwrap().insert(PtrHolder(ptr), size);
+    segment_holder
+        .size_map
+        .as_mut()
+        .unwrap()
+        .insert(PtrHolder(ptr), size);
     Ok(ptr)
 }
-
-
 
 /// Explicitly allow overcommitting
 ///
@@ -581,7 +575,11 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
     }
     let segment = SEGMENT_ALLOCATOR.allocate_massive(size)?;
     let ptr = segment.get_ptr() as *mut u8;
-    segment_holder.size_map.as_mut().unwrap().insert(PtrHolder(ptr), size);
+    segment_holder
+        .size_map
+        .as_mut()
+        .unwrap()
+        .insert(PtrHolder(ptr), size);
     Ok(ptr)
 
     // SEGMENT_ALLOCATOR.allocate_massive(size).map(|ptr| ptr.get_ptr() as *mut u8)
@@ -601,7 +599,6 @@ pub fn page_free(ptr: *const u8) -> bool {
     } else {
         false
     }
-
 }
 
 #[cfg(test)]
@@ -664,7 +661,5 @@ mod test {
                 page_free(ptr as *mut u8);
             }
         }
-
     }
 }
-

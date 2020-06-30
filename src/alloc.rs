@@ -8,8 +8,7 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-
-use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
+use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
@@ -36,7 +35,9 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
             }
         }
 
-        if let Ok(_) = list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
+        if let Ok(_) =
+            list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed)
+        {
             return Some(old_desc);
         }
     }
@@ -132,9 +133,7 @@ pub fn malloc_from_partial(
     let desc = heap_pop_partial(heap);
 
     match desc {
-        None => {
-
-        }
+        None => {}
         Some(desc) => {
             //info!("Allocating blocks from a partial list...");
             let old_anchor = desc.anchor.load(Ordering::Acquire);
@@ -344,7 +343,7 @@ pub fn malloc_count_from_new_sb(
     let mut anchor: Anchor = Anchor::default();
     anchor.set_avail(c as u64);
     anchor.set_count(max_count as u64 - c as u64);
-    
+
     anchor.set_state(match max_count > count {
         true => SuperBlockState::PARTIAL,
         false => SuperBlockState::EMPTY,

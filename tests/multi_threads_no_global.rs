@@ -8,14 +8,14 @@ use std::thread;
 fn test_multiple_threads() {
     let mut vec = vec![];
     let boxes = Arc::new(Mutex::new(Vec::new()));
-
+    let value = 3799usize;
     for i in 0..30 {
         let clone = boxes.clone();
         vec.push(thread::spawn(move || {
             println!("Thread {} says hi!", &i);
             // thread::sleep(Duration::from_secs_f64(5.0));
             for _ in 0..10_000 {
-                let b = AutoPtr::new(0xdeadbeafusize);
+                let b = AutoPtr::new(value);
                 let arc = &clone;
                 let mut guard = arc.lock().unwrap();
                 guard.push(b);
@@ -29,7 +29,7 @@ fn test_multiple_threads() {
 
     println!();
     for x in &*boxes.lock().unwrap() {
-        assert_eq!(**x, 0xdeadbeaf);
+        assert_eq!(**x, value);
     }
 
     println!(

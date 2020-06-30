@@ -1,19 +1,19 @@
-use std::marker::PhantomData;
-use std::ptr::{null_mut, slice_from_raw_parts_mut};
-use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
-use std::ops::{Deref, Index, IndexMut, RangeFrom, RangeTo};
-use std::ptr::slice_from_raw_parts;
-use std::ops::DerefMut;
-use std::iter::FromIterator;
+use crate::mem_info::align_val;
+use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 use std::fmt::Debug;
 use std::fmt::Formatter;
-use crate::mem_info::align_val;
+use std::iter::FromIterator;
+use std::marker::PhantomData;
+use std::ops::DerefMut;
+use std::ops::{Deref, Index, IndexMut, RangeFrom, RangeTo};
+use std::ptr::slice_from_raw_parts;
+use std::ptr::{null_mut, slice_from_raw_parts_mut};
 use std::slice::Iter;
 
 struct RawArray<T> {
     segment: Option<Segment>,
     no_dealloc: bool,
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
 
 impl<T> RawArray<T> {
@@ -21,7 +21,7 @@ impl<T> RawArray<T> {
         Self {
             segment: None,
             no_dealloc: false,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -36,12 +36,13 @@ impl<T> RawArray<T> {
         match &mut self.segment {
             None => {
                 self.segment = Some(new_ptr);
-            },
+            }
             Some(old_ptr) => {
                 unsafe {
-                    std::ptr::copy_nonoverlapping(old_ptr.get_ptr() as *mut u8,
-                                                  new_ptr.get_ptr() as *mut u8,
-                                                  old_ptr.len()
+                    std::ptr::copy_nonoverlapping(
+                        old_ptr.get_ptr() as *mut u8,
+                        new_ptr.get_ptr() as *mut u8,
+                        old_ptr.len(),
                     );
                 }
                 let old = std::mem::replace(&mut self.segment, Some(new_ptr));
@@ -50,7 +51,7 @@ impl<T> RawArray<T> {
                         SEGMENT_ALLOCATOR.deallocate(segment);
                     }
                 }
-            },
+            }
         }
     }
 
@@ -62,24 +63,24 @@ impl<T> RawArray<T> {
 
     pub fn get_ptr(&self) -> *mut T {
         match &self.segment {
-            None => { null_mut() },
-            Some(segment) => {
-                segment.get_ptr() as *mut T
-            },
+            None => null_mut(),
+            Some(segment) => segment.get_ptr() as *mut T,
         }
     }
 
     pub fn capacity(&self) -> usize {
-        self.segment.as_ref().map_or(0, |s| s.len() / std::mem::size_of::<T>())
+        self.segment
+            .as_ref()
+            .map_or(0, |s| s.len() / std::mem::size_of::<T>())
     }
 
     pub fn clear(&mut self) {
         if !self.no_dealloc {
             match std::mem::replace(&mut self.segment, None) {
-                None => {},
+                None => {}
                 Some(_segment) => {
                     //SEGMENT_ALLOCATOR.deallocate(segment);
-                },
+                }
             }
         }
     }
@@ -88,16 +89,18 @@ impl<T> RawArray<T> {
         let ptr = self.get_ptr().add(index);
         ptr.write(val);
     }
-
 }
-
 
 impl<T> Index<usize> for RawArray<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
         unsafe {
-            &*self.segment.as_ref().map_or(null_mut(), |s| s.get_ptr() as *mut T).add(index)
+            &*self
+                .segment
+                .as_ref()
+                .map_or(null_mut(), |s| s.get_ptr() as *mut T)
+                .add(index)
         }
     }
 }
@@ -105,7 +108,11 @@ impl<T> Index<usize> for RawArray<T> {
 impl<T> IndexMut<usize> for RawArray<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         unsafe {
-            &mut *self.segment.as_ref().map_or(null_mut(), |s| s.get_ptr() as *mut T).add(index)
+            &mut *self
+                .segment
+                .as_ref()
+                .map_or(null_mut(), |s| s.get_ptr() as *mut T)
+                .add(index)
         }
     }
 }
@@ -113,10 +120,10 @@ impl<T> IndexMut<usize> for RawArray<T> {
 pub struct Array<T> {
     size: usize,
     no_dealloc: bool,
-    array: RawArray<T>
+    array: RawArray<T>,
 }
 
-impl <T : Default> Array<T> {
+impl<T: Default> Array<T> {
     pub fn of_size(size: usize) -> Self {
         Self::of_size_using(|| Default::default(), size)
     }
@@ -129,8 +136,8 @@ impl <T : Default> Array<T> {
             array: RawArray {
                 segment: Some(Segment::new(ptr as *mut c_void, length)),
                 no_dealloc: true,
-                _phantom: PhantomData
-            }
+                _phantom: PhantomData,
+            },
         };
         for element in ret.iter_mut() {
             (element as *mut T).write(T::default());
@@ -154,12 +161,11 @@ impl <T : Default> Array<T> {
 
 #[allow(unused)]
 impl<T> Array<T> {
-
     pub const fn new() -> Self {
         Self {
             size: 0,
             no_dealloc: false,
-            array: RawArray::new()
+            array: RawArray::new(),
         }
     }
 
@@ -167,15 +173,18 @@ impl<T> Array<T> {
         Self {
             size: 0,
             no_dealloc: false,
-            array: RawArray::with_capacity(capacity)
+            array: RawArray::with_capacity(capacity),
         }
     }
 
-    pub fn of_size_using<F>(default: F, size: usize) -> Self where F : Fn() -> T {
+    pub fn of_size_using<F>(default: F, size: usize) -> Self
+    where
+        F: Fn() -> T,
+    {
         let mut ret = Self {
             size,
             no_dealloc: false,
-            array: RawArray::with_capacity(size)
+            array: RawArray::with_capacity(size),
         };
         for i in 0..size {
             let ptr = &mut ret.array[i] as *mut T;
@@ -189,7 +198,6 @@ impl<T> Array<T> {
     pub fn len(&self) -> usize {
         self.size
     }
-
 
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.size {
@@ -210,11 +218,7 @@ impl<T> Array<T> {
     pub fn push(&mut self, val: T) {
         let capacity = self.array.capacity();
         if self.size >= capacity {
-            let new_size = if self.size > 0 {
-                self.size * 2
-            } else {
-                1
-            };
+            let new_size = if self.size > 0 { self.size * 2 } else { 1 };
             self.array.reserve(new_size);
         }
         unsafe {
@@ -236,7 +240,9 @@ impl<T> Array<T> {
     }
 
     fn get_ptr(&self, offset: usize) -> *mut T {
-        self.array.segment.as_ref().map_or(null_mut(), |s| unsafe { (s.get_ptr() as *mut T).add(offset) })
+        self.array.segment.as_ref().map_or(null_mut(), |s| unsafe {
+            (s.get_ptr() as *mut T).add(offset)
+        })
     }
 
     pub fn clear(&mut self) {
@@ -292,13 +298,12 @@ impl<T> Array<T> {
         }
         ArrayIterator {
             index: 0,
-            array: arr
+            array: arr,
         }
     }
 }
 
 impl Array<u8> {
-
     /// Receives a bit index and returns (the index of the byte, the index of the bit within the byte)
     fn byte_index(bit_index: usize) -> (usize, u8) {
         (bit_index % 8, bit_index as u8 / 8)
@@ -320,47 +325,42 @@ impl Array<u8> {
     pub fn get_bit(&self, bit_index: usize) -> Option<bool> {
         let (byte_index, bit_index) = Self::byte_index(bit_index);
         match self.get_byte(byte_index) {
-            None => { None },
+            None => None,
             Some(byte) => {
                 let mask = Self::bit_mask(bit_index);
                 Some((byte & mask) != 0)
-            },
+            }
         }
     }
 
     pub fn set_bit(&mut self, bit_index: usize, bit: bool) {
         let (byte_index, bit_index) = Self::byte_index(bit_index);
         match self.get_byte_mut(byte_index) {
-            None => {
-                panic!("Index {} out of bounds", bit_index)
-            },
+            None => panic!("Index {} out of bounds", bit_index),
             Some(byte) => {
                 let mask = !Self::bit_mask(bit_index);
                 let shifted = (bit as u8) << bit_index;
                 *byte = (*byte & mask) | shifted;
-            },
+            }
         }
     }
 }
 
-
-
-impl<T> Index<usize> for Array<T>{
+impl<T> Index<usize> for Array<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        self.get(index).unwrap_or_else(|| panic!("Array index {} out of bounds", index))
+        self.get(index)
+            .unwrap_or_else(|| panic!("Array index {} out of bounds", index))
     }
 }
 
 impl<T> IndexMut<usize> for Array<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        self.get_mut(index).unwrap_or_else(|| panic!("Array index {} out of bounds", index))
+        self.get_mut(index)
+            .unwrap_or_else(|| panic!("Array index {} out of bounds", index))
     }
 }
-
-
-
 
 impl<T> Index<RangeFrom<usize>> for Array<T> {
     type Output = [T];
@@ -390,8 +390,6 @@ impl<T> IndexMut<RangeTo<usize>> for Array<T> {
     }
 }
 
-
-
 impl<T> Drop for Array<T> {
     fn drop(&mut self) {
         if !self.no_dealloc {
@@ -400,7 +398,7 @@ impl<T> Drop for Array<T> {
     }
 }
 
-impl <T> Default for Array<T> {
+impl<T> Default for Array<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -408,10 +406,10 @@ impl <T> Default for Array<T> {
 
 pub struct ArrayIterator<T> {
     index: usize,
-    array: Array<T>
+    array: Array<T>,
 }
 
-impl <T> Iterator for ArrayIterator<T>{
+impl<T> Iterator for ArrayIterator<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -420,8 +418,7 @@ impl <T> Iterator for ArrayIterator<T>{
         } else {
             unsafe {
                 let ret = &self.array[self.index] as *const T;
-                let ret =
-                    ret.read_unaligned();
+                let ret = ret.read_unaligned();
 
                 self.index += 1;
                 Some(ret)
@@ -430,19 +427,19 @@ impl <T> Iterator for ArrayIterator<T>{
     }
 }
 
-impl <T> IntoIterator for Array<T> {
+impl<T> IntoIterator for Array<T> {
     type Item = T;
     type IntoIter = ArrayIterator<T>;
 
     fn into_iter(self) -> Self::IntoIter {
         ArrayIterator {
             index: 0,
-            array: self
+            array: self,
         }
     }
 }
 
-impl <T> Deref for Array<T> {
+impl<T> Deref for Array<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
@@ -450,33 +447,24 @@ impl <T> Deref for Array<T> {
         if ptr.is_null() {
             &[]
         } else {
-            unsafe {
-                &*slice_from_raw_parts(
-                    ptr, self.size
-                )
-            }
+            unsafe { &*slice_from_raw_parts(ptr, self.size) }
         }
     }
 }
 
-impl <T> DerefMut for Array<T> {
+impl<T> DerefMut for Array<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let ptr = self.array.get_ptr();
         if ptr.is_null() {
             &mut []
         } else {
-            unsafe {
-                &mut *slice_from_raw_parts_mut(
-                    ptr, self.size
-                )
-            }
+            unsafe { &mut *slice_from_raw_parts_mut(ptr, self.size) }
         }
     }
 }
 
-
-impl <T> FromIterator<T> for Array<T> {
-    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
+impl<T> FromIterator<T> for Array<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut output = Array::new();
         for val in iter {
             output.push(val);
@@ -485,13 +473,13 @@ impl <T> FromIterator<T> for Array<T> {
     }
 }
 
-impl <T : Clone> Clone for Array<T> {
+impl<T: Clone> Clone for Array<T> {
     fn clone(&self) -> Self {
         self.iter().map(|v| v.clone()).collect::<Self>()
     }
 }
 
-impl <T: PartialEq> PartialEq for Array<T> {
+impl<T: PartialEq> PartialEq for Array<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -513,7 +501,7 @@ impl <T: PartialEq> PartialEq for Array<T> {
     }
 }
 
-impl <T : Debug> Debug for Array<T> {
+impl<T: Debug> Debug for Array<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let slice = self.deref();
         slice.fmt(f)
@@ -526,11 +514,8 @@ pub struct ArrayDeque<T> {
     end: usize,
 }
 
-
-
 #[allow(unused)]
-impl <T> ArrayDeque<T> {
-
+impl<T> ArrayDeque<T> {
     pub fn new() -> Self {
         Self {
             raw: RawArray::new(),
@@ -636,28 +621,20 @@ impl <T> ArrayDeque<T> {
         }
     }
 
-    fn get_start_ptr(&self) -> * const T {
-        unsafe {
-            self.raw.get_ptr().add(self.start)
-        }
+    fn get_start_ptr(&self) -> *const T {
+        unsafe { self.raw.get_ptr().add(self.start) }
     }
 
-    fn get_start_ptr_mut(&mut self) -> * mut T {
-        unsafe {
-            self.raw.get_ptr().add(self.start)
-        }
+    fn get_start_ptr_mut(&mut self) -> *mut T {
+        unsafe { self.raw.get_ptr().add(self.start) }
     }
 
-    fn get_end_ptr(&self) -> * const T {
-        unsafe {
-            self.raw.get_ptr().add(self.end)
-        }
+    fn get_end_ptr(&self) -> *const T {
+        unsafe { self.raw.get_ptr().add(self.end) }
     }
 
-    fn get_end_ptr_mut(&mut self) -> * mut T {
-        unsafe {
-            self.raw.get_ptr().add(self.end)
-        }
+    fn get_end_ptr_mut(&mut self) -> *mut T {
+        unsafe { self.raw.get_ptr().add(self.end) }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -669,7 +646,7 @@ impl <T> ArrayDeque<T> {
     }
 }
 
-impl <T> Deref for ArrayDeque<T> {
+impl<T> Deref for ArrayDeque<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
@@ -677,42 +654,35 @@ impl <T> Deref for ArrayDeque<T> {
         if ptr.is_null() {
             &[]
         } else {
-
             unsafe {
                 let start = self.get_start_ptr();
-                &*slice_from_raw_parts(
-                    start, self.len()
-                )
+                &*slice_from_raw_parts(start, self.len())
             }
         }
     }
 }
 
-impl <T> DerefMut for ArrayDeque<T> {
+impl<T> DerefMut for ArrayDeque<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let ptr = self.raw.get_ptr();
         if ptr.is_null() {
             &mut []
         } else {
-
             unsafe {
                 let start = self.get_start_ptr_mut();
-                &mut *slice_from_raw_parts_mut(
-                    start, self.len()
-                )
+                &mut *slice_from_raw_parts_mut(start, self.len())
             }
         }
     }
 }
 
-
-impl <T : Clone> Clone for ArrayDeque<T> {
+impl<T: Clone> Clone for ArrayDeque<T> {
     fn clone(&self) -> Self {
         self.iter().map(|v| v.clone()).collect::<Self>()
     }
 }
 
-impl <T: PartialEq> PartialEq for ArrayDeque<T> {
+impl<T: PartialEq> PartialEq for ArrayDeque<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -734,26 +704,26 @@ impl <T: PartialEq> PartialEq for ArrayDeque<T> {
     }
 }
 
-impl <T : Debug> Debug for ArrayDeque<T> {
+impl<T: Debug> Debug for ArrayDeque<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let slice = self.deref();
         slice.fmt(f)
     }
 }
 
-impl <T> From<Array<T>> for ArrayDeque<T> {
+impl<T> From<Array<T>> for ArrayDeque<T> {
     fn from(mut a: Array<T>) -> Self {
         let array = std::mem::replace(&mut a.array, RawArray::new());
         Self {
             raw: array,
             start: 0,
-            end: a.len() - 1
+            end: a.len() - 1,
         }
     }
 }
 
-impl <A> FromIterator<A> for ArrayDeque<A> {
-    fn from_iter<T: IntoIterator<Item=A>>(iter: T) -> Self {
+impl<A> FromIterator<A> for ArrayDeque<A> {
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
         ArrayDeque::from(Array::from_iter(iter))
     }
 }
@@ -808,7 +778,6 @@ mod test {
     fn out_of_bounds() {
         let arr: Array<usize> = Array::new();
         let _i = arr[10];
-
     }
 
     #[test]
@@ -846,9 +815,4 @@ mod test {
         assert_eq!(q.pop_front(), Some(2));
         assert_eq!(q.pop_front(), None);
     }
-
 }
-
-
-
-

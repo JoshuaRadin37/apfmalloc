@@ -1,4 +1,4 @@
-use crate::allocation_data::{Anchor};
+use crate::allocation_data::Anchor;
 
 use crate::alloc::{
     compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb,
@@ -129,11 +129,11 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     cache.block_size = Some(size_class_index);
 
     #[cfg(debug_assertions)]
-        {
-            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-            debug_assert!(block_num > 0);
-            debug_assert!(block_num <= sc.cache_block_num as usize);
-        }
+    {
+        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+        debug_assert!(block_num > 0);
+        debug_assert!(block_num <= sc.cache_block_num as usize);
+    }
 }
 
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
@@ -152,10 +152,14 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let head = cache.peek_block();
         let mut tail = head;
         let info = get_page_info_for_ptr(head);
-        let desc = unsafe { match info.get_desc() {
-            None => { return;},
-            Some(desc) => {&mut *desc},
-        } };
+        let desc = unsafe {
+            match info.get_desc() {
+                None => {
+                    return;
+                }
+                Some(desc) => &mut *desc,
+            }
+        };
         //info!("Descriptor: {:?}", desc);
         //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
@@ -254,7 +258,6 @@ impl DerefMut for ThreadCache {
 
 impl Drop for ThreadCache {
     fn drop(&mut self) {
-
         //let thread_cache_bins  = &mut self.get_mut();
         //info!("Flushing a thread cache");
         for bin_index in 0..self.len() {
@@ -263,7 +266,6 @@ impl Drop for ThreadCache {
                 flush_cache(sz_idx, bin);
             }
         }
-
     }
 }
 
@@ -323,7 +325,6 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
 
     let mut block_num = 100.max(count);
 
-
     malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
 
     // Handles no partial block and insufficient partial block cases
@@ -352,7 +353,7 @@ fn ret(size_class_index: usize, count: u32) -> bool {
 }
 
 use crate::apf::ApfTuner;
-use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator};
+use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 
 #[cfg(not(unix))]
 impl Clone for ThreadBool {
@@ -400,7 +401,6 @@ pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
 #[cfg(test)]
 mod test {
     use crate::thread_cache::ThreadCacheBin;
-
 
     #[test]
     fn check_bin_consistency() {

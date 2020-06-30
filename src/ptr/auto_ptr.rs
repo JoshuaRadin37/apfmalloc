@@ -144,7 +144,6 @@ mod test {
     use crate::ptr::auto_ptr::AutoPtr;
     use crate::{allocate_type, do_free};
 
-
     #[test]
     fn normal_ptr() {
         let mut auto_ptr = AutoPtr::new(Some(0xdeadbeafusize));

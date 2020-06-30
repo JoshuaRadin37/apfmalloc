@@ -33,8 +33,8 @@ fn test_apf_tuning() {
                 for _p in 0..1000 * _j {
                     ptrs.push(AutoPtr::new(_i * _p));
                 }
-            } 
-            
+            }
+
             _i
         }));
     }

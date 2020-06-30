@@ -2,8 +2,8 @@ extern crate lrmalloc_rs_global;
 
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use std::sync::{RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::RwLock;
 
 // ~O(2^n)
 fn slow_fib(n: usize) -> Box<usize> {
@@ -31,7 +31,6 @@ fn fast_fib(n: usize) -> usize {
         } else {
             break;
         }
-
     }
     saved[n]
 }
@@ -68,12 +67,7 @@ fn memory_fib(n: usize) -> usize {
 fn fast_fib_no_fail_global() {
     for n in (0..10).rev() {
         let fib = fast_fib(n);
-        assert_eq!(
-            fib,
-            *slow_fib(n),
-            "fast_fib({}) gave the wrong result",
-            n
-        );
+        assert_eq!(fib, *slow_fib(n), "fast_fib({}) gave the wrong result", n);
         assert_eq!(
             memory_fib(n),
             fib,
@@ -82,7 +76,9 @@ fn fast_fib_no_fail_global() {
         )
     }
 
-    assert!(unsafe { lrmalloc_rs_global::OVERRIDE_MALLOC || lrmalloc_rs_global::OVERRIDE_ALIGNED_ALLOC })
+    assert!(unsafe {
+        lrmalloc_rs_global::OVERRIDE_MALLOC || lrmalloc_rs_global::OVERRIDE_ALIGNED_ALLOC
+    })
 }
 
 #[test]
@@ -91,11 +87,17 @@ fn arbitrary_program_main() {
     let mut rng = thread_rng();
     let mut collect = (0..SIZE).map(|n| memory_fib(n)).collect::<Vec<usize>>();
 
-
     //collect.reverse();
     collect.shuffle(&mut rng);
     fn merge_sort<T: PartialOrd>(input: &mut Vec<T>) {
-        fn wmerge<T : PartialOrd>(xs: &mut [T], mut i: usize, m: usize, mut j: usize, n: usize, mut w: usize) {
+        fn wmerge<T: PartialOrd>(
+            xs: &mut [T],
+            mut i: usize,
+            m: usize,
+            mut j: usize,
+            n: usize,
+            mut w: usize,
+        ) {
             while i < m && j < n {
                 let index = if xs[i] < xs[j] {
                     let ret = i;
@@ -123,7 +125,7 @@ fn arbitrary_program_main() {
             }
         }
 
-        fn wsort<T : PartialOrd>(xs: &mut [T], mut l: usize, u: usize, mut w: usize) {
+        fn wsort<T: PartialOrd>(xs: &mut [T], mut l: usize, u: usize, mut w: usize) {
             if u - l > 1 {
                 let m = l + (u - l) / 2;
                 imsort(xs, l, m);
@@ -138,7 +140,7 @@ fn arbitrary_program_main() {
             }
         }
 
-        fn imsort<T : PartialOrd>(xs: &mut [T], l: usize, u: usize) {
+        fn imsort<T: PartialOrd>(xs: &mut [T], l: usize, u: usize) {
             if u - l > 1 {
                 let m = l + (u - l) / 2;
                 let mut w = l + u - m;
@@ -152,8 +154,8 @@ fn arbitrary_program_main() {
                 let mut n = w;
                 while n > l {
                     let mut m = n;
-                    while m < u && xs[m] < xs[m-1] {
-                        xs.swap(m, m-1);
+                    while m < u && xs[m] < xs[m - 1] {
+                        xs.swap(m, m - 1);
 
                         m += 1;
                     }

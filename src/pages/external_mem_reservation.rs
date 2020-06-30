@@ -21,9 +21,9 @@ use errno::Errno;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use winapi::shared::minwindef::LPVOID;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug)]
 pub struct Segment {
@@ -182,7 +182,7 @@ impl SegAllocator for SegmentAllocator {
 #[cfg(unix)]
 impl SegAllocator for SegmentAllocator {
     fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -202,7 +202,7 @@ impl SegAllocator for SegmentAllocator {
     }
 
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -223,7 +223,7 @@ impl SegAllocator for SegmentAllocator {
 
     fn deallocate(&self, segment: Segment) -> bool {
         // while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
-        let ret =  unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
+        let ret = unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
         // LOCK.store(false, Ordering::Release);
         ret
     }
@@ -237,17 +237,17 @@ mod test {
 
     #[test]
     pub fn get_segment() {
-        SEGMENT_ALLOCATOR.allocate(PAGE).expect("Test must fail is this fails");
+        SEGMENT_ALLOCATOR
+            .allocate(PAGE)
+            .expect("Test must fail is this fails");
     }
 
     #[test]
     pub fn free_segment() {
-
         let segment = SEGMENT_ALLOCATOR
             .allocate(PAGE)
             .expect("Test must fail is this fails");
         assert!(SEGMENT_ALLOCATOR.deallocate(segment));
-
     }
 
     #[test]
