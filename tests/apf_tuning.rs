@@ -24,12 +24,12 @@ static ALLOCATOR: Apf = Apf;
 #[test]
 fn test_apf_tuning() {
     let mut vec = vec![];
-    let thread_count = 5;
+    let thread_count = 1;
 
     for _i in 0..thread_count {
         vec.push(thread::spawn(move || {
             //println!("Thread {}", &i);
-            for _j in 2..5 {
+            for _j in 2..10 {
                 let mut ptrs = vec![];
                 for _p in 0..1000 * _j {
                     ptrs.push(AutoPtr::new(_i * _p));

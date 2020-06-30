@@ -7,7 +7,7 @@ use crate::apf::liveness_counter::LivenessCounter;
 use crate::apf::reuse_counter::ReuseCounter;
 use crate::apf::trace::Trace;
 
-use gnuplot::{Figure, Caption, Color};
+use gnuplot::{Figure, Axes2D, Caption, Color};
 
 mod constants;
 pub use constants::TARGET_APF;
@@ -22,12 +22,12 @@ pub mod trace;
     * One for each size container
     * Call malloc() and free() whenever those operations are performed
 */
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct ApfTuner<'a> {
     id: usize,
     l_counter: LivenessCounter<'a>,
     r_counter: ReuseCounter<'a>,
-    trace: Trace<'a>,
+    // trace: Trace<'a>,
     time: usize,
     fetch_count: usize,
     dapf: usize,
@@ -51,7 +51,7 @@ impl ApfTuner<'_> {
             id: id,
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD),
-            trace: Trace::new(),
+            // trace: Trace::new(),
             time: 0,
             fetch_count: 0,
             dapf: 0,
@@ -82,18 +82,16 @@ impl ApfTuner<'_> {
         // If out of free blocks, fetch
         if (self.check)(self.id) == 0 {
 
-            if self.record.is_some() {
-                let dapf = self.calculate_dapf();
-                let time = self.time;
-                self.record.as_mut().map(|rec| rec.push((time, dapf)));
-            }
-
-
             let demand;
-            dbg!("Fetch");
+
             match self.demand(self.calculate_dapf().into()) {
                 Some(d) => {
-                    dbg!(d);
+                    if self.record.is_some() {
+                        let dapf = self.calculate_dapf();
+                        let time = self.time;
+                        self.record.as_mut().map(|rec| rec.push((time, dapf)));
+                    }
+
                     demand = d;
                 }
                 None => {
@@ -127,26 +125,15 @@ impl ApfTuner<'_> {
         }
 
         let d = self.demand(self.calculate_dapf().into());
-        if !d.is_some() {
+
+        // Safe because short-circuit
+        if !d.is_some() || d.unwrap() < 0.0 {
             return false;
         }
         let demand = d.unwrap(); // Safe
 
         // If too many free blocks, return some
         if (self.check)(self.id) as f32 >= 2.0 * demand + 1.0 {
-            // dbg!("Ret");
-            let demand;
-            match self.demand(self.calculate_dapf().into()) {
-                Some(d) => {
-                    demand = d;
-                }
-                None => {
-                    return false;
-                }
-            }
-            if demand < 0.0 {
-                return false;
-            }
             let ceil = demand.ceil() as u32;
             (self.ret)(self.id, ceil + 1);
         }
@@ -155,6 +142,12 @@ impl ApfTuner<'_> {
 
     fn count_fetch(&mut self) {
         self.fetch_count += 1;
+        if self.fetch_count > 1 {
+            self.show_record();
+        }
+        
+        dbg!(self.fetch_count);
+        dbg!(self.time);
     }
 
     fn calculate_dapf(&self) -> usize {
@@ -183,32 +176,33 @@ impl ApfTuner<'_> {
             false => None
         }
     }
-}
 
-impl Drop for ApfTuner<'_> {
-    fn drop(&mut self) {
-        no_tuning(|| 
-            if self.record.is_some() {
-                let rec = self.record.as_mut().unwrap();
+    fn show_record(&mut self) {
+        match &self.record {
+            Some(rec) => {
+                dbg!(rec.len());
                 let mut x = Vec::with_capacity(rec.len());
                 let mut y = Vec::with_capacity(rec.len());
 
+                dbg!(rec);
+
                 for i in 0..rec.len() {
                     x.push(rec[i].0);
-                    y.push(i);
-                    x.push(rec[i].1);
-                    y.push(i);
+                    y.push(i+1);
+                    x.push(rec[i].0 + rec[i].1);
+                    y.push(i+1);
 
                 }
-
+ 
                 let mut fg = Figure::new();
                 let axes = fg.axes2d();
                 for i in 0..x.len()/2 {
-                    axes.lines_points(&x[i..i+1], &y[i..i+1], &[Caption("Line"), Color("black")]);
+                    axes.lines_points(&x[i*2..i*2+2], &y[i*2..i*2+2], &[Caption("Line"), Color("black")]);
                 }
 
                 fg.show().expect("Unable to display figure");
-            }
-        );
+            }, 
+            None => {}
+        }
     }
 }

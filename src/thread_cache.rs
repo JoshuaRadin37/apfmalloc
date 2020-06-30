@@ -14,6 +14,8 @@ use std::cell::UnsafeCell;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
+static RECORDED_SC: usize = 41; // Size class to record and display graph of -- 41 if none
+
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
@@ -288,15 +290,9 @@ pub fn init_tuners() {
     no_tuning(|| {
         apf_tuners.with(|tuners| {
 
-            // First tuner will show record
-            unsafe {
-                (&mut *tuners.get()).push(ApfTuner::new(0, check, fetch, ret, true));
-            }
-
-
-            for i in 1..MAX_SZ_IDX {
+            for i in 0..MAX_SZ_IDX {
                 unsafe {
-                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret, false));
+                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret, i == RECORDED_SC));
                 }
             }
         });
