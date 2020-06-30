@@ -27,11 +27,13 @@ pub static mut OVERRIDE_FREE: bool = false;
 /// Only works after `aligned_alloc` has been called at least once.
 pub static mut OVERRIDE_ALIGNED_ALLOC: bool = false;
 
-///Allocates size bytes of uninitialized storage.
+/// Allocates size bytes of uninitialized storage.
 ///
 /// If allocation succeeds, returns a pointer that is suitably aligned for any object type with fundamental alignment.
 ///
-/// If size is zero, a pointer to the minimum sized allocation is created
+/// If size is zero, a pointer to the minimum sized allocation is created.
+///
+/// Memory in malloc is aligned to the minimum on the current OS.
 #[no_mangle]
 pub extern "C" fn malloc(size: usize) -> *mut c_void {
     unsafe {
@@ -42,6 +44,7 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
         do_malloc(size) as *mut c_void
     }
     #[cfg(target_os = "macos")] {
+        // MacOS requires that memory is aligned to atleast 16 bytes
         do_aligned_alloc(16, size) as *mut c_void
     }
 
@@ -98,12 +101,19 @@ pub unsafe extern "C" fn free(ptr: *mut c_void) {
     do_free(ptr)
 }
 
+/// Has similar behavior to malloc, but also ensures that all memory allocated is also properly aligned to the specified
+/// alignment
 #[no_mangle]
 pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_ALIGNED_ALLOC = true;
     }
-    do_aligned_alloc(alignment, size) as *mut c_void
+    if cfg!(target_os = "macos") {
+        let alignment = alignment.max(16);
+        do_aligned_alloc(alignment, size) as *mut c_void
+    } else {
+        do_aligned_alloc(alignment, size) as *mut c_void
+    }
 }
 
 
@@ -133,7 +143,7 @@ pub extern "C" fn check_override() -> u8 {
     1
 }
 
-#[cfg(not(feature = "no-rust-global"))]
+#[cfg(not(feature = "no-rust"))]
 mod rust_global {
     use super::*;
     use std::alloc::{GlobalAlloc, Layout};
@@ -170,14 +180,14 @@ mod rust_global {
     }
 }
 
-#[cfg(not(feature = "no-rust-global"))]
+#[cfg(not(feature = "no-rust"))]
 pub use rust_global::*;
 
 
 #[no_mangle]
 #[doc(hidden)]
 pub fn __rust_alloc(size: usize, align: usize) -> *mut u8 {
-    do_aligned_alloc(size, align) as *mut u8
+    aligned_alloc(align, size) as *mut u8
 }
 
 #[no_mangle]
@@ -199,7 +209,7 @@ pub fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 #[doc(hidden)]
 pub fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
     unsafe {
-        do_free(ptr)
+        free(ptr as *mut c_void)
     }
 }
 
@@ -252,5 +262,5 @@ mod test {
             assert!(OVERRIDE_FREE, "Free wasn't overwritten!")
         }
     }
-    
+
 }

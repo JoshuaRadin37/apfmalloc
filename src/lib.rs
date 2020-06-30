@@ -13,7 +13,7 @@ use spin::Mutex;
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
 use crate::bootstrap::{bootstrap_reserve, use_bootstrap};
-use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE};
+use crate::mem_info::{align_addr, align_val, MAX_SZ, MAX_SZ_IDX, PAGE, align_size};
 use crate::page_map::S_PAGE_MAP;
 
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
@@ -174,7 +174,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         return null_mut();
     }
 
-    let mut size = align_val(size, align);
+    let mut size = align_size(size, align);
 
     MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
