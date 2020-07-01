@@ -1,12 +1,13 @@
 // use crate::apf::timescale_functions::{LivenessCounter, ReuseCounter};
 use crate::apf::liveness_counter::LivenessCounter;
 use crate::apf::reuse_counter::ReuseCounter;
-use crate::apf::trace::Trace;
 
-use gnuplot::{Figure, Axes2D, Caption, Color};
+use gnuplot::{Caption, Color, Figure};
 
 mod constants;
+use crate::apf::constants::{REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD, USE_ALLOCATION_CLOCK};
 pub use constants::TARGET_APF;
+
 pub mod histogram;
 // pub mod timescale_functions;
 pub mod liveness_counter;
@@ -26,12 +27,12 @@ pub struct ApfTuner<'a> {
     // trace: Trace<'a>,
     time: usize,
     fetch_count: usize,
-    dapf: usize,
+    _dapf: usize,
     check: fn(usize) -> u32,
     get: fn(usize, usize) -> bool,
     ret: fn(usize, u32) -> bool,
 
-    record: Option<Vec<(usize, usize)>>
+    record: Option<Vec<(usize, usize)>>,
 }
 
 impl ApfTuner<'_> {
@@ -40,23 +41,23 @@ impl ApfTuner<'_> {
         check: fn(usize) -> u32,
         get: fn(usize, usize) -> bool,
         ret: fn(usize, u32) -> bool,
-        use_record: bool
+        use_record: bool,
     ) -> ApfTuner<'a> {
-
         ApfTuner {
-            id: id,
+            id,
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD),
             time: 0,
             fetch_count: 0,
-            dapf: 0,
-            check: check,
-            get: get,
-            ret: ret,
-            record: match use_record {
-                true => Some(Vec::<(usize, usize)>::new()),
-                false => None
-            }
+            _dapf: 0,
+            check,
+            get,
+            ret,
+            record: if use_record {
+                Some(Vec::<(usize, usize)>::new())
+            } else {
+                None
+            },
         }
     }
 
@@ -78,7 +79,6 @@ impl ApfTuner<'_> {
 
         // If out of free blocks, fetch
         if (self.check)(self.id) == 0 {
-
             let demand;
 
             match self.demand(self.calculate_dapf().into()) {
@@ -118,7 +118,7 @@ impl ApfTuner<'_> {
 
         let d = self.demand(self.calculate_dapf().into());
 
-        if !d.is_some() || d.unwrap() < 0.0 {
+        if d.is_none() || d.unwrap() < 0.0 {
             return false;
         }
         let demand = d.unwrap(); // Safe
@@ -127,8 +127,8 @@ impl ApfTuner<'_> {
         if (self.check)(self.id) as f32 >= 2.0 * demand + 1.0 {
             let ceil = demand.ceil() as u32;
             (self.ret)(self.id, ceil + 1);
-        } else {
-        return true;
+        }
+        true
     }
 
     fn count_fetch(&mut self) {
@@ -139,9 +139,10 @@ impl ApfTuner<'_> {
     }
 
     fn calculate_dapf(&self) -> usize {
-        match self.time >= *TARGET_APF * (self.fetch_count + 1) {
-            true => *TARGET_APF,
-            false => *TARGET_APF * (self.fetch_count + 1) - self.time,
+        if self.time >= *TARGET_APF * (self.fetch_count + 1) {
+            *TARGET_APF
+        } else {
+            *TARGET_APF * (self.fetch_count + 1) - self.time
         }
     }
 
@@ -154,19 +155,21 @@ impl ApfTuner<'_> {
 
         match self.r_counter.reuse(k) {
             Some(r) => {
-                match USE_ALLOCATION_CLOCK {
-                    true => Some(k as f32 - r),
-                    false => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r)
+                if USE_ALLOCATION_CLOCK {
+                    Some(k as f32 - r)
+                } else {
+                    Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r)
                 }
-            },
+            }
             None => None,
         }
     }
 
     pub fn record(&self) -> Option<Vec<(usize, usize)>> {
-        match self.record.is_some() {
-            true => self.record.clone(),
-            false => None
+        if self.record.is_some() {
+            self.record.clone()
+        } else {
+            None
         }
     }
 
@@ -181,20 +184,23 @@ impl ApfTuner<'_> {
 
                 for i in 0..rec.len() {
                     x.push(rec[i].0);
-                    y.push(i+1);
+                    y.push(i + 1);
                     x.push(rec[i].0 + rec[i].1);
-                    y.push(i+1);
-
+                    y.push(i + 1);
                 }
- 
+
                 let mut fg = Figure::new();
                 let axes = fg.axes2d();
-                for i in 0..x.len()/2 {
-                    axes.lines_points(&x[i*2..i*2+2], &y[i*2..i*2+2], &[Caption("Line"), Color("black")]);
+                for i in 0..x.len() / 2 {
+                    axes.lines_points(
+                        &x[i * 2..i * 2 + 2],
+                        &y[i * 2..i * 2 + 2],
+                        &[Caption("Line"), Color("black")],
+                    );
                 }
 
                 fg.show().expect("Unable to display figure");
-            }, 
+            }
             None => {}
         }
     }

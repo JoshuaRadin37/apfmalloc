@@ -65,8 +65,10 @@ static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
 static USE_APF: bool = true;
 
+/// Tells the allocator to remember the total amount allocated to a thread cache or the bootstrap. Only available in builds
+/// with debug_assertions
 #[cfg(debug_assertions)]
-pub(crate) const TRACK_ALLOCATION_LOCATION: bool = false;
+pub const TRACK_ALLOCATION_LOCATION: bool = false;
 
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost

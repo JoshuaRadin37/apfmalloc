@@ -1,6 +1,5 @@
 extern crate lrmalloc_rs;
 
-use core::sync::atomic::Ordering;
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free};
 use std::alloc::{GlobalAlloc, Layout};
