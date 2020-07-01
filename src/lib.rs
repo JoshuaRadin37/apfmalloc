@@ -233,6 +233,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 /// # Safety
 /// This function is safe, as if for whatever reason memory can not be reserved, a NULL pointer is returned
 pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
+    // dbg!(size_class_index);
     // Because of how rust creates thread locals, we have to assume the thread local does not exist yet
     // We also can't tell if a thread local exists without causing it to initialize, and when using
     // This as a global allocator, it ends up calling this function again. If not careful, we will create an

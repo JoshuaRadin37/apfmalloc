@@ -83,7 +83,7 @@ fn ret(_id: usize, _val: u32) -> bool {
 }
 
 fn apf_tuner_alloc(c: &mut Criterion) {
-    let mut apf = ApfTuner::new(0, check, get, ret);
+    let mut apf = ApfTuner::new(0, check, get, ret, false);
 
     c.bench_function("apf alloc", |b| {
         b.iter(|| {
@@ -93,7 +93,7 @@ fn apf_tuner_alloc(c: &mut Criterion) {
 }
 
 fn apf_tuner_free(c: &mut Criterion) {
-    let mut apf = ApfTuner::new(0, check, get, ret);
+    let mut apf = ApfTuner::new(0, check, get, ret, false);
     apf.malloc(0 as *mut u8);
 
     c.bench_function("apf free", |b| {
