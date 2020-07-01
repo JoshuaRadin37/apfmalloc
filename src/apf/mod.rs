@@ -51,7 +51,6 @@ impl ApfTuner<'_> {
             id: id,
             l_counter: LivenessCounter::new(),
             r_counter: ReuseCounter::new(REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD),
-            // trace: Trace::new(),
             time: 0,
             fetch_count: 0,
             dapf: 0,
@@ -73,8 +72,10 @@ impl ApfTuner<'_> {
         // dbg!("malloc");
         self.time += 1;
 
-        self.l_counter.inc_timer();
-        self.l_counter.alloc();
+        if !USE_ALLOCATION_CLOCK {
+            self.l_counter.inc_timer();
+            self.l_counter.alloc();
+        }
 
         self.r_counter.alloc(ptr as usize);
         self.r_counter.inc_timer();
@@ -111,22 +112,16 @@ impl ApfTuner<'_> {
     // Ret function returns number of slots to central reserve
     // Returns true if demand can be calculated (reuse counter has completed a burst), false if not
     pub fn free(&mut self, ptr: *mut u8) -> bool {
-        // dbg!("free");
         self.r_counter.free(ptr as usize);
         if !USE_ALLOCATION_CLOCK {
+            self.r_counter.inc_timer();
             self.time += 1;
             self.l_counter.inc_timer();
-        }
-
-        self.l_counter.free();
-
-        if !USE_ALLOCATION_CLOCK {
-            self.r_counter.inc_timer();
+            self.l_counter.free();
         }
 
         let d = self.demand(self.calculate_dapf().into());
 
-        // Safe because short-circuit
         if !d.is_some() || d.unwrap() < 0.0 {
             return false;
         }
@@ -145,9 +140,6 @@ impl ApfTuner<'_> {
         if self.fetch_count > 1 {
             self.show_record();
         }
-        
-        dbg!(self.fetch_count);
-        dbg!(self.time);
     }
 
     fn calculate_dapf(&self) -> usize {
@@ -165,7 +157,12 @@ impl ApfTuner<'_> {
         }
 
         match self.r_counter.reuse(k) {
-            Some(r) => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r),
+            Some(r) => {
+                match USE_ALLOCATION_CLOCK {
+                    true => Some(k as f32 - r),
+                    false => Some(self.l_counter.liveness(k) - self.l_counter.liveness(0) - r)
+                }
+            },
             None => None,
         }
     }
