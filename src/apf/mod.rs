@@ -97,7 +97,7 @@ impl ApfTuner<'_> {
             }
 
             (self.get)(self.id, demand.ceil() as usize);
-            self.count_fetch();
+            //self.count_fetch();
         }
 
         return true;
