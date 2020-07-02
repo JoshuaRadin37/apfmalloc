@@ -346,11 +346,14 @@ pub fn malloc_count_from_new_sb(
         false => max_count,
     };
 
+    /*
     for i in 0..c {
         let block = unsafe { super_block.offset(i as isize * block_size as isize) };
         cache.push_block(block);
         *block_num += 1;
     }
+
+     */
 
     let mut anchor: Anchor = Anchor::default();
     anchor.set_avail(c as u64);
