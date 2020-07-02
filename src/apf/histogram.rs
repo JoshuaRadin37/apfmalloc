@@ -28,9 +28,12 @@ impl<'a> Histogram<'a> {
         let ptr = page;
         let histogram = unsafe { from_raw_parts_mut(ptr, INIT_HISTOGRAM_LENGTH) };
 
+
         for i in 0..INIT_HISTOGRAM_LENGTH {
             unsafe { (&mut histogram[i] as *mut usize).write(0) };
         }
+
+
 
         Histogram {
             histogram: histogram,

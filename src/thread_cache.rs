@@ -96,13 +96,13 @@ impl ThreadCacheBin {
                 },
                 Some(block_size) => {
                     unsafe {
-                        let block_read = unsafe { *(self.block as *mut *mut usize) };
+                        let block_read = *(self.block as *mut *mut usize);
                         if block_read.is_null() {
                             self.block = self.block.add(block_size as usize);
                         } else if block_read as usize == std::usize::MAX {
                             self.block = null_mut();
                         } else {
-                            self.block = unsafe { *(self.block as *mut *mut u8) };
+                            self.block = *(self.block as *mut *mut u8);
                         }
                     }
                 }
