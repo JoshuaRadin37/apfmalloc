@@ -59,7 +59,7 @@ fn mass_stress_no_harness() {
 
 #[test]
 fn panic_uses_direct_allocation() {
-    if cfg!(debug_assertions) {
+    #[cfg(debug_assertions)]
         if lrmalloc_rs::TRACK_ALLOCATION_LOCATION {
             let thread = thread::spawn(|| panic!("I'm picnicking!"));
             match thread.join() {
@@ -69,5 +69,4 @@ fn panic_uses_direct_allocation() {
                 }
             }
         }
-    }
 }

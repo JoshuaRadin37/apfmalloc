@@ -19,7 +19,8 @@ static RECORDED_SC: usize = 41; // Size class to record and display graph of -- 
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
-    block_size: Option<usize>,
+    size_class: Option<usize>,
+    block_size: Option<u32>,
 }
 
 impl ThreadCacheBin {
@@ -27,6 +28,7 @@ impl ThreadCacheBin {
         Self {
             block: null_mut(),
             block_num: 0,
+            size_class: None,
             block_size: None,
         }
     }
@@ -34,11 +36,32 @@ impl ThreadCacheBin {
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
-        unsafe {
-            *(block as *mut *mut u8) = self.block;
+        match self.block_size {
+            None => {
+                unsafe {
+                    *(block as *mut *mut u8) = self.block;
+                }
+                self.block = block;
+                self.block_num += 1;
+            },
+            Some(block_size) => {
+                let old_loc = self.block as usize as isize;
+                let diff = old_loc - block as usize as isize;
+                if diff == block_size as isize {
+                    unsafe {
+                        *(block as *mut * mut u8) = null_mut();
+                    }
+                } else {
+                    unsafe {
+                        *(block as *mut *mut u8) = self.block;
+                    }
+
+                }
+                self.block = block;
+                self.block_num += 1;
+            }
         }
-        self.block = block;
-        self.block_num += 1;
+
     }
 
     /// Pushes a block list
@@ -66,11 +89,27 @@ impl ThreadCacheBin {
             panic!("Attempting to pop a block from cache while cache is empty")
         } else {
             let ret = self.block;
-            self.block = unsafe { *(self.block as *mut *mut u8) };
-            //self.block = unsafe { self.block.offset(-1) };
+            match self.block_size {
+                None => {
+                    self.block = unsafe { *(self.block as *mut *mut u8) };
+                    //self.block = unsafe { self.block.offset(-1) };
+                },
+                Some(block_size) => {
+                    unsafe {
+                        let block_read = unsafe { *(self.block as *mut *mut usize) };
+                        if block_read.is_null() {
+                            self.block = self.block.add(block_size as usize);
+                        } else if block_read as usize == std::usize::MAX {
+                            self.block = null_mut();
+                        } else {
+                            self.block = unsafe { *(self.block as *mut *mut u8) };
+                        }
+                    }
+                }
+            };
             self.block_num -= 1;
-
             ret
+
         }
     }
 
@@ -128,11 +167,13 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         );
     }
 
-    cache.block_size = Some(size_class_index);
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+    cache.block_size = Some(sc.block_size);
+    cache.size_class = Some(size_class_index);
 
     #[cfg(debug_assertions)]
     {
-        let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+
         debug_assert!(block_num > 0);
         debug_assert!(block_num <= sc.cache_block_num as usize);
     }
@@ -234,6 +275,9 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
             heap_push_partial(desc)
         }
     }
+
+    cache.size_class = None;
+    cache.block_size = None;
 }
 
 pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
@@ -264,7 +308,7 @@ impl Drop for ThreadCache {
         //info!("Flushing a thread cache");
         for bin_index in 0..self.len() {
             let bin = self.get_mut(bin_index).unwrap();
-            if let Some(sz_idx) = bin.block_size {
+            if let Some(sz_idx) = bin.size_class {
                 flush_cache(sz_idx, bin);
             }
         }
@@ -282,7 +326,7 @@ impl Drop for ThreadEmpty {
             for bin_index in 0..tcache.len() {
                 let cache = tcache.get_mut(bin_index).unwrap();
                 if cache.block_num > 0 {
-                    if let Some(size_class_index) = cache.block_size {
+                    if let Some(size_class_index) = cache.size_class {
                         flush_cache(size_class_index, cache);
                     }
                 }
