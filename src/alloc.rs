@@ -9,6 +9,7 @@ use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
 use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use std::ptr::slice_from_raw_parts_mut;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
@@ -204,17 +205,11 @@ pub fn malloc_from_new_sb(
     desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
-    /*
-    for idx in 0..(max_count - 1) {
-        unsafe {
-            let block = super_block.offset((idx * block_size as usize) as isize);
-            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
-            *(block as *mut *mut u8) = next;
-        }
-    }
-     */
+
     unsafe {
-        *(super_block.add(block_size as usize * max_count - block_size as usize) as *mut usize) = std::usize::MAX;
+        // Gets a pointer to the last block and sets it to 0xFF...F
+        let ptr = super_block.add(block_size as usize * max_count - block_size as usize);
+        *(ptr as *mut usize) = std::usize::MAX;
     }
 
     let block = super_block;
@@ -325,19 +320,10 @@ pub fn malloc_count_from_new_sb(
     desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
-    /*
-    for idx in 0..(max_count - 1) {
-        unsafe {
-            let block = super_block.offset((idx * block_size as usize) as isize);
-            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
-            *(block as *mut *mut u8) = next;
-        }
-    }
-
-     */
 
     unsafe {
         *(super_block.add(block_size as usize * max_count - block_size as usize) as *mut usize) = std::usize::MAX;
+
     }
 
     // Min of max_count and count

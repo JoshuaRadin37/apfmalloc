@@ -5,8 +5,8 @@ use crate::alloc::{
     malloc_count_from_partial, malloc_from_new_sb, malloc_from_partial, unregister_desc,
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
-use crate::mem_info::MAX_SZ_IDX;
-use crate::size_classes::SIZE_CLASSES;
+use crate::mem_info::{MAX_SZ_IDX, CACHE_LINE};
+use crate::size_classes::{SIZE_CLASSES, get_size_class};
 use core::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 use std::cell::UnsafeCell;
@@ -19,7 +19,6 @@ static RECORDED_SC: usize = 41; // Size class to record and display graph of -- 
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
-    size_class: Option<usize>,
     block_size: Option<u32>,
 }
 
@@ -28,7 +27,6 @@ impl ThreadCacheBin {
         Self {
             block: null_mut(),
             block_num: 0,
-            size_class: None,
             block_size: None,
         }
     }
@@ -36,15 +34,11 @@ impl ThreadCacheBin {
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
+
         match self.block_size {
-            None => {
-                unsafe {
-                    *(block as *mut *mut u8) = self.block;
-                }
-                self.block = block;
-                self.block_num += 1;
-            },
-            Some(block_size) => {
+            // If the block size is recorded and it's less than the CACHE_LINE, it may be slightly faster to attempt to push it back as
+            // a contiguous block
+            Some(block_size) if block_size < CACHE_LINE as u32 => {
                 let old_loc = self.block as usize as isize;
                 let diff = old_loc - block as usize as isize;
                 if diff == block_size as isize {
@@ -59,9 +53,23 @@ impl ThreadCacheBin {
                 }
                 self.block = block;
                 self.block_num += 1;
-            }
+            },
+            None | Some(_) => {
+                unsafe {
+                    *(block as *mut *mut u8) = self.block;
+                }
+                self.block = block;
+                self.block_num += 1;
+            },
         }
+        /*
+        unsafe {
+            *(block as *mut *mut u8) = self.block;
+        }
+        self.block = block;
+        self.block_num += 1;
 
+         */
     }
 
     /// Pushes a block list
@@ -169,7 +177,6 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 
     let sc = unsafe { &SIZE_CLASSES[size_class_index] };
     cache.block_size = Some(sc.block_size);
-    cache.size_class = Some(size_class_index);
 
     #[cfg(debug_assertions)]
     {
@@ -276,7 +283,6 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         }
     }
 
-    cache.size_class = None;
     cache.block_size = None;
 }
 
@@ -308,7 +314,8 @@ impl Drop for ThreadCache {
         //info!("Flushing a thread cache");
         for bin_index in 0..self.len() {
             let bin = self.get_mut(bin_index).unwrap();
-            if let Some(sz_idx) = bin.size_class {
+            if let Some(sz) = bin.block_size {
+                let sz_idx = get_size_class(sz as usize);
                 flush_cache(sz_idx, bin);
             }
         }
@@ -326,8 +333,9 @@ impl Drop for ThreadEmpty {
             for bin_index in 0..tcache.len() {
                 let cache = tcache.get_mut(bin_index).unwrap();
                 if cache.block_num > 0 {
-                    if let Some(size_class_index) = cache.size_class {
-                        flush_cache(size_class_index, cache);
+                    if let Some(sz) = cache.block_size {
+                        let sz_idx = get_size_class(sz as usize);
+                        flush_cache(sz_idx, cache);
                     }
                 }
             }

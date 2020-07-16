@@ -99,6 +99,10 @@ unsafe fn init_malloc() {
 ///     ptr.write(100);
 /// }
 /// ```
+///
+/// # Safety
+/// Although this function can not cause undefined behavior, the pointer created by this method should be deallocated using
+/// [`do_free()`](fn.do_free.html)
 pub fn allocate_type<T>() -> *mut T {
     let size = std::mem::size_of::<T>();
     let align = std::mem::align_of::<T>();
