@@ -60,13 +60,13 @@ fn mass_stress_no_harness() {
 #[test]
 fn panic_uses_direct_allocation() {
     #[cfg(debug_assertions)]
-        if lrmalloc_rs::TRACK_ALLOCATION_LOCATION {
-            let thread = thread::spawn(|| panic!("I'm picnicking!"));
-            match thread.join() {
-                Ok(_) => panic!("Should result in an error"),
-                Err(_) => {
-                    assert!(IN_BOOTSTRAP.load(Ordering::Acquire) > 0);
-                }
+    if lrmalloc_rs::TRACK_ALLOCATION_LOCATION {
+        let thread = thread::spawn(|| panic!("I'm picnicking!"));
+        match thread.join() {
+            Ok(_) => panic!("Should result in an error"),
+            Err(_) => {
+                assert!(IN_BOOTSTRAP.load(Ordering::Acquire) > 0);
             }
         }
+    }
 }

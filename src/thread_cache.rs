@@ -5,8 +5,8 @@ use crate::alloc::{
     malloc_count_from_partial, malloc_from_new_sb, malloc_from_partial, unregister_desc,
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
-use crate::mem_info::{MAX_SZ_IDX, CACHE_LINE};
-use crate::size_classes::{SIZE_CLASSES, get_size_class};
+use crate::mem_info::{CACHE_LINE, MAX_SZ_IDX};
+use crate::size_classes::{get_size_class, SIZE_CLASSES};
 use core::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 use std::cell::UnsafeCell;
@@ -34,7 +34,6 @@ impl ThreadCacheBin {
     /// Common and Fast
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
-
         match self.block_size {
             // If the block size is recorded and it's less than the CACHE_LINE, it may be slightly faster to attempt to push it back as
             // a contiguous block
@@ -43,24 +42,23 @@ impl ThreadCacheBin {
                 let diff = old_loc - block as usize as isize;
                 if diff == block_size as isize {
                     unsafe {
-                        *(block as *mut * mut u8) = null_mut();
+                        *(block as *mut *mut u8) = null_mut();
                     }
                 } else {
                     unsafe {
                         *(block as *mut *mut u8) = self.block;
                     }
-
                 }
                 self.block = block;
                 self.block_num += 1;
-            },
+            }
             None | Some(_) => {
                 unsafe {
                     *(block as *mut *mut u8) = self.block;
                 }
                 self.block = block;
                 self.block_num += 1;
-            },
+            }
         }
         /*
         unsafe {
@@ -101,23 +99,20 @@ impl ThreadCacheBin {
                 None => {
                     self.block = unsafe { *(self.block as *mut *mut u8) };
                     //self.block = unsafe { self.block.offset(-1) };
-                },
-                Some(block_size) => {
-                    unsafe {
-                        let block_read = *(self.block as *mut *mut usize);
-                        if block_read.is_null() {
-                            self.block = self.block.add(block_size as usize);
-                        } else if block_read as usize == std::usize::MAX {
-                            self.block = null_mut();
-                        } else {
-                            self.block = *(self.block as *mut *mut u8);
-                        }
-                    }
                 }
+                Some(block_size) => unsafe {
+                    let block_read = *(self.block as *mut *mut usize);
+                    if block_read.is_null() {
+                        self.block = self.block.add(block_size as usize);
+                    } else if block_read as usize == std::usize::MAX {
+                        self.block = null_mut();
+                    } else {
+                        self.block = *(self.block as *mut *mut u8);
+                    }
+                },
             };
             self.block_num -= 1;
             ret
-
         }
     }
 
@@ -180,7 +175,6 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 
     #[cfg(debug_assertions)]
     {
-
         debug_assert!(block_num > 0);
         debug_assert!(block_num <= sc.cache_block_num as usize);
     }

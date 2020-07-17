@@ -322,8 +322,8 @@ pub fn malloc_count_from_new_sb(
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
     unsafe {
-        *(super_block.add(block_size as usize * max_count - block_size as usize) as *mut usize) = std::usize::MAX;
-
+        *(super_block.add(block_size as usize * max_count - block_size as usize) as *mut usize) =
+            std::usize::MAX;
     }
 
     // Min of max_count and count
