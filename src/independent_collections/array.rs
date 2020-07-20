@@ -48,7 +48,9 @@ impl<T> RawArray<T> {
                 let old = std::mem::replace(&mut self.segment, Some(new_ptr));
                 if let Some(segment) = old {
                     if segment.get_ptr() != self.segment.as_ref().unwrap().get_ptr() {
-                        SEGMENT_ALLOCATOR.deallocate(segment);
+                        unsafe {
+                            SEGMENT_ALLOCATOR.deallocate(segment);
+                        }
                     }
                 }
             }

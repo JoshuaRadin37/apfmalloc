@@ -15,6 +15,14 @@ use std::sync::atomic::Ordering;
 
 static RECORDED_SC: usize = 41; // Size class to record and display graph of -- 41 if none
 
+/// This structure contains the stack of blocks of a certain size class that a thread has access to.
+/// It has two public fields:
+/// - `block`
+/// - `block_num`
+///
+/// These are used to keep easy track of the condition of the thread cache.
+///
+/// This struct implements Copy so that it can be created without using the heap when creating thread statics
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
@@ -23,6 +31,7 @@ pub struct ThreadCacheBin {
 }
 
 impl ThreadCacheBin {
+    /// Creates a new bin of undetermined class
     pub const fn new() -> Self {
         Self {
             block: null_mut(),
@@ -31,7 +40,8 @@ impl ThreadCacheBin {
         }
     }
 
-    /// Common and Fast
+    /// Common and Fast. Pushes a block to the top of the stack so it can be used again later. This function should be unsafe,
+    /// but because it is only ever called from an unsafe context, it's unnecessary.
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
         match self.block_size {
@@ -134,34 +144,34 @@ impl ThreadCacheBin {
         }
     }
 
+    /// Gives the pointer to the first block in the stack
     #[inline]
     pub fn peek_block(&self) -> *mut u8 {
         self.block
     }
 
+    /// Gets the number of blocks in the stack
     #[inline]
     pub fn get_block_num(&self) -> u32 {
         self.block_num
     }
 }
 
+/// Fills a cache with blocks of the `size_class_index`.
+///
+/// This either fills the cache using a partial list in the central reserve, or by creating a new super block.
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
     let mut used_partial = true;
 
+    // Uses a partial list from the central reserve
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
+        // Creates a new super block. Depending on the load on the kernel, the tail latency on this operation is high.
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
         used_partial = false;
     }
     if block_num == 0 || cache.block_num == 0 {
-        /*
-        error!("Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
-               used_partial,
-               block_num,
-               cache.block_num);
-
-         */
         panic!(
             "Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
             used_partial,
@@ -180,6 +190,7 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     }
 }
 
+/// Flushes the contents of a thread cache bin back to the central reserve.
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     // println!("Flushing Cache");
     //info!("Flushing size class {} cache...", size_class_index);
@@ -263,7 +274,9 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         if new_anchor.state() == SuperBlockState::EMPTY {
             unregister_desc(Some(heap), desc.super_block.as_ref().unwrap());
             if let Some(segment) = std::mem::replace(&mut desc.super_block, None) {
-                SEGMENT_ALLOCATOR.deallocate(segment);
+                unsafe {
+                    SEGMENT_ALLOCATOR.deallocate(segment);
+                }
             }
         } else if old_anchor.state() == SuperBlockState::FULL {
             /*info!("Pushing a partially used list to the heap (Size Class Index = {}, available = {}, count = {})",
@@ -316,10 +329,14 @@ impl Drop for ThreadCache {
     }
 }
 
+/// This is a zero sized structure. When a thread ends, all thread-static variables that implement drop are dropped. [ThreadCacheBins](struct.ThreadCacheBin.html)
+/// implement Copy, and therefore can not be dropped. By having a thread-static variable of this type initialized, we are able to
+/// simulate having a "de-constructor" for threads.
 pub struct ThreadEmpty;
 
 #[cfg(unix)]
 impl Drop for ThreadEmpty {
+    /// Flushes all of the [ThreadCacheBins](struct.ThreadCacheBin.html)
     fn drop(&mut self) {
         //info!("Flushing entire thread cache");
         thread_cache.with(|tcache| {
@@ -421,8 +438,9 @@ impl Copy for ThreadBool {}
 
 thread_local! {
     // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
+    /// The actual thread cache
     pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
-
+    /// Enables dropping of the thread cache bins (see [ThreadEmpty](struct.ThreadEmpty.html))
     pub static thread_init: ThreadEmpty = ThreadEmpty;
 
     #[cfg(unix)]
