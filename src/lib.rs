@@ -246,7 +246,6 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     // infinite recursion. As such, we must have a "bootstrap" bin that threads can use to initalize it's
     // own local bin
 
-    // todo: remove the true
     //let id = thread::current();
     let panic_status = std::thread::panicking();
 
@@ -271,6 +270,17 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
         unsafe { bootstrap_reserve.lock().allocate(size) }
     } else {
+        /*
+
+        This has been commented out because the bootstrapping problem has been solved by way of
+        the Copy/Drop thread stack difference.
+
+        Thus, initialization of thread caches can be done without using any heap allocated memory,
+        which would cause infinite recursion. Although this was originally solved using a "bootstrap" cache,
+        this would cause the program to be very slow and all threads to get memory from the bootstrap at
+        the same time.
+
+
         #[cfg(not(unix))]
         {
             set_use_bootstrap(true); // Sets the next allocation to use the bootstrap cache
@@ -288,6 +298,8 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 set_use_bootstrap(false) // Turns off the bootstrap
             });
         }
+
+         */
 
         #[cfg(debug_assertions)]
         if TRACK_ALLOCATION_LOCATION {
@@ -320,7 +332,6 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
-            #[cfg(unix)]
             {
                 if USE_APF {
                     thread_cache::skip.with(|b| unsafe {

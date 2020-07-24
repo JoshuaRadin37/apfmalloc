@@ -107,6 +107,7 @@ impl From<PageInfo> for _PageInfo {
  */
 
 impl PageInfo {
+    /// Sets the content of a PageInfo to a descritpor
     pub fn set(&mut self, desc: &mut Descriptor, sc_idx: usize) {
         let ptr = desc as *mut Descriptor;
 
