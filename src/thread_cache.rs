@@ -1,26 +1,37 @@
-use crate::allocation_data::{Anchor, Descriptor};
+use crate::allocation_data::Anchor;
 
 use crate::alloc::{
     compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb,
     malloc_count_from_partial, malloc_from_new_sb, malloc_from_partial, unregister_desc,
 };
 use crate::allocation_data::{get_heaps, SuperBlockState};
-use crate::mem_info::MAX_SZ_IDX;
-use crate::size_classes::SIZE_CLASSES;
+use crate::mem_info::{CACHE_LINE, MAX_SZ_IDX};
+use crate::size_classes::{get_size_class, SIZE_CLASSES};
 use core::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 use std::cell::UnsafeCell;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
+static RECORDED_SC: usize = 41; // Size class to record and display graph of -- 41 if none
+
+/// This structure contains the stack of blocks of a certain size class that a thread has access to.
+/// It has two public fields:
+/// - `block`
+/// - `block_num`
+///
+/// These are used to keep easy track of the condition of the thread cache.
+///
+/// This struct implements Copy so that it can be created without using the heap when creating thread statics
 #[derive(Debug, Copy, Clone)]
 pub struct ThreadCacheBin {
     pub(crate) block: *mut u8,
     pub(crate) block_num: u32,
-    block_size: Option<usize>,
+    block_size: Option<u32>,
 }
 
 impl ThreadCacheBin {
+    /// Creates a new bin of undetermined class
     pub const fn new() -> Self {
         Self {
             block: null_mut(),
@@ -29,14 +40,44 @@ impl ThreadCacheBin {
         }
     }
 
-    /// Common and Fast
+    /// Common and Fast. Pushes a block to the top of the stack so it can be used again later. This function should be unsafe,
+    /// but because it is only ever called from an unsafe context, it's unnecessary.
     #[inline]
     pub fn push_block(&mut self, block: *mut u8) {
+        match self.block_size {
+            // If the block size is recorded and it's less than the CACHE_LINE, it may be slightly faster to attempt to push it back as
+            // a contiguous block
+            Some(block_size) if block_size < CACHE_LINE as u32 => {
+                let old_loc = self.block as usize as isize;
+                let diff = old_loc - block as usize as isize;
+                if diff == block_size as isize {
+                    unsafe {
+                        *(block as *mut *mut u8) = null_mut();
+                    }
+                } else {
+                    unsafe {
+                        *(block as *mut *mut u8) = self.block;
+                    }
+                }
+                self.block = block;
+                self.block_num += 1;
+            }
+            None | Some(_) => {
+                unsafe {
+                    *(block as *mut *mut u8) = self.block;
+                }
+                self.block = block;
+                self.block_num += 1;
+            }
+        }
+        /*
         unsafe {
             *(block as *mut *mut u8) = self.block;
         }
         self.block = block;
         self.block_num += 1;
+
+         */
     }
 
     /// Pushes a block list
@@ -64,10 +105,23 @@ impl ThreadCacheBin {
             panic!("Attempting to pop a block from cache while cache is empty")
         } else {
             let ret = self.block;
-            self.block = unsafe { *(self.block as *mut *mut u8) };
-            //self.block = unsafe { self.block.offset(-1) };
+            match self.block_size {
+                None => {
+                    self.block = unsafe { *(self.block as *mut *mut u8) };
+                    //self.block = unsafe { self.block.offset(-1) };
+                }
+                Some(block_size) => unsafe {
+                    let block_read = *(self.block as *mut *mut usize);
+                    if block_read.is_null() {
+                        self.block = self.block.add(block_size as usize);
+                    } else if block_read as usize == std::usize::MAX {
+                        self.block = null_mut();
+                    } else {
+                        self.block = *(self.block as *mut *mut u8);
+                    }
+                },
+            };
             self.block_num -= 1;
-
             ret
         }
     }
@@ -90,34 +144,34 @@ impl ThreadCacheBin {
         }
     }
 
+    /// Gives the pointer to the first block in the stack
     #[inline]
     pub fn peek_block(&self) -> *mut u8 {
         self.block
     }
 
+    /// Gets the number of blocks in the stack
     #[inline]
     pub fn get_block_num(&self) -> u32 {
         self.block_num
     }
 }
 
+/// Fills a cache with blocks of the `size_class_index`.
+///
+/// This either fills the cache using a partial list in the central reserve, or by creating a new super block.
 pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut block_num = 0;
     let mut used_partial = true;
 
+    // Uses a partial list from the central reserve
     malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
+        // Creates a new super block. Depending on the load on the kernel, the tail latency on this operation is high.
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
         used_partial = false;
     }
     if block_num == 0 || cache.block_num == 0 {
-        /*
-        error!("Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
-               used_partial,
-               block_num,
-               cache.block_num);
-
-         */
         panic!(
             "Didn't allocate any blocks to the cache. USED PARTIAL={}, block_num={}, cache.block_num={}",
             used_partial,
@@ -126,16 +180,17 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         );
     }
 
-    cache.block_size = Some(size_class_index);
+    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
+    cache.block_size = Some(sc.block_size);
 
     #[cfg(debug_assertions)]
-        {
-            let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-            debug_assert!(block_num > 0);
-            debug_assert!(block_num <= sc.cache_block_num as usize);
-        }
+    {
+        debug_assert!(block_num > 0);
+        debug_assert!(block_num <= sc.cache_block_num as usize);
+    }
 }
 
+/// Flushes the contents of a thread cache bin back to the central reserve.
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     // println!("Flushing Cache");
     //info!("Flushing size class {} cache...", size_class_index);
@@ -152,10 +207,14 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let head = cache.peek_block();
         let mut tail = head;
         let info = get_page_info_for_ptr(head);
-        let desc = unsafe { match info.get_desc() {
-            None => { return;},
-            Some(desc) => {&mut *desc},
-        } };
+        let desc = unsafe {
+            match info.get_desc() {
+                None => {
+                    return;
+                }
+                Some(desc) => &mut *desc,
+            }
+        };
         //info!("Descriptor: {:?}", desc);
         //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
@@ -215,7 +274,9 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         if new_anchor.state() == SuperBlockState::EMPTY {
             unregister_desc(Some(heap), desc.super_block.as_ref().unwrap());
             if let Some(segment) = std::mem::replace(&mut desc.super_block, None) {
-                SEGMENT_ALLOCATOR.deallocate(segment);
+                unsafe {
+                    SEGMENT_ALLOCATOR.deallocate(segment);
+                }
             }
         } else if old_anchor.state() == SuperBlockState::FULL {
             /*info!("Pushing a partially used list to the heap (Size Class Index = {}, available = {}, count = {})",
@@ -228,6 +289,8 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
             heap_push_partial(desc)
         }
     }
+
+    cache.block_size = None;
 }
 
 pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
@@ -254,23 +317,26 @@ impl DerefMut for ThreadCache {
 
 impl Drop for ThreadCache {
     fn drop(&mut self) {
-
         //let thread_cache_bins  = &mut self.get_mut();
         //info!("Flushing a thread cache");
         for bin_index in 0..self.len() {
             let bin = self.get_mut(bin_index).unwrap();
-            if let Some(sz_idx) = bin.block_size {
+            if let Some(sz) = bin.block_size {
+                let sz_idx = get_size_class(sz as usize);
                 flush_cache(sz_idx, bin);
             }
         }
-
     }
 }
 
+/// This is a zero sized structure. When a thread ends, all thread-static variables that implement drop are dropped. [ThreadCacheBins](struct.ThreadCacheBin.html)
+/// implement Copy, and therefore can not be dropped. By having a thread-static variable of this type initialized, we are able to
+/// simulate having a "de-constructor" for threads.
 pub struct ThreadEmpty;
 
 #[cfg(unix)]
 impl Drop for ThreadEmpty {
+    /// Flushes all of the [ThreadCacheBins](struct.ThreadCacheBin.html)
     fn drop(&mut self) {
         //info!("Flushing entire thread cache");
         thread_cache.with(|tcache| {
@@ -278,8 +344,9 @@ impl Drop for ThreadEmpty {
             for bin_index in 0..tcache.len() {
                 let cache = tcache.get_mut(bin_index).unwrap();
                 if cache.block_num > 0 {
-                    if let Some(size_class_index) = cache.block_size {
-                        flush_cache(size_class_index, cache);
+                    if let Some(sz) = cache.block_size {
+                        let sz_idx = get_size_class(sz as usize);
+                        flush_cache(sz_idx, cache);
                     }
                 }
             }
@@ -293,7 +360,13 @@ pub fn init_tuners() {
         apf_tuners.with(|tuners| {
             for i in 0..MAX_SZ_IDX {
                 unsafe {
-                    (&mut *tuners.get()).push(ApfTuner::new(i, check, fetch, ret));
+                    (&mut *tuners.get()).push(ApfTuner::new(
+                        i,
+                        check,
+                        fetch,
+                        ret,
+                        i == RECORDED_SC,
+                    ));
                 }
             }
         });
@@ -323,7 +396,6 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
 
     let mut block_num = 100.max(count);
 
-
     malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
 
     // Handles no partial block and insufficient partial block cases
@@ -352,7 +424,7 @@ fn ret(size_class_index: usize, count: u32) -> bool {
 }
 
 use crate::apf::ApfTuner;
-use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator};
+use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 
 #[cfg(not(unix))]
 impl Clone for ThreadBool {
@@ -366,8 +438,9 @@ impl Copy for ThreadBool {}
 
 thread_local! {
     // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
+    /// The actual thread cache
     pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
-
+    /// Enables dropping of the thread cache bins (see [ThreadEmpty](struct.ThreadEmpty.html))
     pub static thread_init: ThreadEmpty = ThreadEmpty;
 
     #[cfg(unix)]
@@ -400,7 +473,6 @@ pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
 #[cfg(test)]
 mod test {
     use crate::thread_cache::ThreadCacheBin;
-
 
     #[test]
     fn check_bin_consistency() {

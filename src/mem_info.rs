@@ -13,7 +13,6 @@ pub const LG_PAGE: usize = 12;
 /// a huge page is 2mb
 pub const LG_HUGE_PAGE: usize = 21;
 
-
 pub const PTR_SIZE: usize = 1usize << LG_PTR;
 pub const CACHE_LINE: usize = 1usize << LG_CACHE_LINE;
 pub const PAGE: usize = 1usize << LG_PAGE;
@@ -28,13 +27,16 @@ pub const MIN_ALIGN: usize = LG_PTR;
 pub const DESCRIPTOR_BLOCK_SZ: usize = 16 * PAGE;
 
 pub fn align_val(val: usize, align: usize) -> usize {
-
     (val + align - 1) & (!align + 1)
 }
 
-/// Given a size and an alignment, gives an adjusted alignment
+/// Given a size and an alignment, gives an adjusted size
 pub fn align_size(size: usize, align: usize) -> usize {
-    align_val(size, align)
+    if align < size {
+        align_val(size, align)
+    } else {
+        align
+    }
 }
 
 pub fn align_addr(addr: usize, align: usize) -> *const usize {

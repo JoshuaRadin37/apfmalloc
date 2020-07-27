@@ -1,11 +1,10 @@
 use crate::thread_cache::no_tuning;
-use crate::{ do_realloc, allocate_type };
+use crate::{allocate_type, do_realloc};
 
-
+use crate::apf::constants::INIT_HISTOGRAM_LENGTH;
+use crate::pages::external_mem_reservation::AllocationError;
 use std::ffi::c_void;
 use std::mem::size_of;
-use crate::pages::external_mem_reservation::AllocationError;
-use crate::apf::constants::INIT_HISTOGRAM_LENGTH;
 use std::slice::from_raw_parts_mut;
 
 /*
@@ -14,29 +13,30 @@ use std::slice::from_raw_parts_mut;
 #[derive(Debug)]
 pub struct Histogram<'a> {
     histogram: &'a mut [usize],
-    max_key: usize
+    max_key: usize,
 }
+
+
 
 impl<'a> Histogram<'a> {
     pub fn new() -> Histogram<'a> {
-        let page = allocate_type::<[usize; INIT_HISTOGRAM_LENGTH]>() as * mut usize;
-        assert!(!page.is_null(), "Error initializing histogram: {:?}", AllocationError::AllocationFailed(INIT_HISTOGRAM_LENGTH, errno::errno()));
+        let page = allocate_type::<[usize; INIT_HISTOGRAM_LENGTH]>() as *mut usize;
+        assert!(
+            !page.is_null(),
+            "Error initializing histogram: {:?}",
+            AllocationError::AllocationFailed(INIT_HISTOGRAM_LENGTH, errno::errno())
+        );
 
         let ptr = page;
-        let histogram = unsafe {
-            from_raw_parts_mut(
-                ptr, 
-                INIT_HISTOGRAM_LENGTH
-            )
-        };
+        let histogram = unsafe { from_raw_parts_mut(ptr, INIT_HISTOGRAM_LENGTH) };
 
         for i in 0..INIT_HISTOGRAM_LENGTH {
-            unsafe { (&mut histogram[i]as *mut usize).write(0) };
+            unsafe { (&mut histogram[i] as *mut usize).write(0) };
         }
 
         Histogram {
             histogram: histogram,
-            max_key: INIT_HISTOGRAM_LENGTH
+            max_key: INIT_HISTOGRAM_LENGTH,
         }
     }
 
@@ -55,7 +55,6 @@ impl<'a> Histogram<'a> {
 
         self.histogram[key] = self.histogram[key] + val;
         // unsafe { (&mut self.histogram[key]as *mut usize).write(self.histogram[key] + val) };
-
     }
 
     pub fn get(&self, key: usize) -> usize {
@@ -79,9 +78,16 @@ impl<'a> Histogram<'a> {
             output
         };
         let page = no_tuning(|| unsafe {
-            do_realloc(self.histogram.as_mut_ptr() as *mut c_void, new_max * size_of::<usize>()) as *mut u8
+            do_realloc(
+                self.histogram.as_mut_ptr() as *mut c_void,
+                new_max * size_of::<usize>(),
+            ) as *mut u8
         });
-        assert!(!page.is_null(), "Error initializing histogram: {:?}", AllocationError::AllocationFailed(new_max, errno::errno()));
+        assert!(
+            !page.is_null(),
+            "Error initializing histogram: {:?}",
+            AllocationError::AllocationFailed(new_max, errno::errno())
+        );
 
         let ptr = page as *mut usize;
         let histogram = unsafe { from_raw_parts_mut(ptr, new_max) };

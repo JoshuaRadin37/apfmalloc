@@ -42,14 +42,13 @@ impl BootstrapReserve {
     pub fn init(&mut self) {
         match &mut self.mem {
             None => {
-                std::mem::replace(
-                    &mut self.mem,
+
+                self.mem =
                     Some(
                         SEGMENT_ALLOCATOR
                             .allocate(self.max)
                             .unwrap_or_else(|_| exit(-1)),
-                    ),
-                );
+                    );
                 // self.mem = Some(SEGMENT_ALLOCATOR.allocate(self.avail).unwrap_or_else(|_| exit(-1)));
                 self.next = self.mem.as_ref().unwrap().get_ptr() as *mut u8;
                 self.avail = self.max;

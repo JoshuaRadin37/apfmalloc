@@ -8,8 +8,7 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-
-use crate::pages::external_mem_reservation::{Segment, SEGMENT_ALLOCATOR, SegAllocator};
+use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
@@ -36,7 +35,9 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
             }
         }
 
-        if let Ok(_) = list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed) {
+        if let Ok(_) =
+            list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed)
+        {
             return Some(old_desc);
         }
     }
@@ -132,9 +133,7 @@ pub fn malloc_from_partial(
     let desc = heap_pop_partial(heap);
 
     match desc {
-        None => {
-
-        }
+        None => {}
         Some(desc) => {
             //info!("Allocating blocks from a partial list...");
             let old_anchor = desc.anchor.load(Ordering::Acquire);
@@ -205,12 +204,11 @@ pub fn malloc_from_new_sb(
     desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
-    for idx in 0..(max_count - 1) {
-        unsafe {
-            let block = super_block.offset((idx * block_size as usize) as isize);
-            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
-            *(block as *mut *mut u8) = next;
-        }
+
+    unsafe {
+        // Gets a pointer to the last block and sets it to 0xFF...F
+        let ptr = super_block.add(block_size as usize * max_count - block_size as usize);
+        *(ptr as *mut usize) = std::usize::MAX;
     }
 
     let block = super_block;
@@ -302,8 +300,8 @@ pub fn malloc_count_from_partial(
 
 pub fn malloc_count_from_new_sb(
     size_class_index: usize,
-    cache: &mut ThreadCacheBin,
-    block_num: &mut usize,
+    _cache: &mut ThreadCacheBin,
+    _block_num: &mut usize,
     count: usize,
 ) {
     let heap = get_heaps().get_heap_at_mut(size_class_index);
@@ -321,12 +319,10 @@ pub fn malloc_count_from_new_sb(
     desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
-    for idx in 0..(max_count - 1) {
-        unsafe {
-            let block = super_block.offset((idx * block_size as usize) as isize);
-            let next = super_block.offset(((idx + 1) * block_size as usize) as isize);
-            *(block as *mut *mut u8) = next;
-        }
+
+    unsafe {
+        *(super_block.add(block_size as usize * max_count - block_size as usize) as *mut usize) =
+            std::usize::MAX;
     }
 
     // Min of max_count and count
@@ -335,16 +331,19 @@ pub fn malloc_count_from_new_sb(
         false => max_count,
     };
 
+    /*
     for i in 0..c {
         let block = unsafe { super_block.offset(i as isize * block_size as isize) };
-        cache.push_block(block);
-        *block_num += 1;
+        _cache.push_block(block);
+        *_block_num += 1;
     }
+
+     */
 
     let mut anchor: Anchor = Anchor::default();
     anchor.set_avail(c as u64);
     anchor.set_count(max_count as u64 - c as u64);
-    
+
     anchor.set_state(match max_count > count {
         true => SuperBlockState::PARTIAL,
         false => SuperBlockState::EMPTY,

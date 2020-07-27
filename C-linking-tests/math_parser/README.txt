@@ -1,3 +1,9 @@
+
+  This program takes in a math expression, and prints the the parse tree
+	generator by either a recursive decent parser or a table parser.
+	It then evaluates the answer
+
+
 HOW TO USE
 		Build the program by using the "make" command in bash in the folder with all the files
 		Then use the below command

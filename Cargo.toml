@@ -1,7 +1,7 @@
 [package]
 name = "lrmalloc-rs"
 description = "An implementation of (LRMalloc)[https://github.com/ricleite/lrmalloc], but improved with APF tuning (Li et. al., 2019)"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Joshua Radin <jradin2@u.rochester.edu>",
             "Elias Neuman-Donihue <eneumand@u.rochester.edu>"]
 edition = "2018"
@@ -38,6 +38,7 @@ spin = "0.5.2"
 thread_local = "1.0.1"
 errno = "0.2.5"
 lazy_static = "1.4.0"
+gnuplot = "^0.0.37"
 
 [lib]
 bench = false

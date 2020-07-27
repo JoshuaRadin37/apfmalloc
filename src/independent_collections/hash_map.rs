@@ -1,77 +1,74 @@
-use std::hash::{Hash, BuildHasher, Hasher};
-use crate::independent_collections::{Array};
-use std::hash::BuildHasherDefault;
+use crate::independent_collections::Array;
 use std::collections::hash_map::DefaultHasher;
-use std::iter::{Iterator};
-use std::ops::{Index, IndexMut};
 use std::fmt::Debug;
 use std::fmt::Formatter;
+use std::hash::BuildHasherDefault;
+use std::hash::{BuildHasher, Hash, Hasher};
+use std::iter::Iterator;
+use std::ops::{Index, IndexMut};
 
 struct Bucket<K, V>
-    where
-        K: Eq + Hash {
+where
+    K: Eq + Hash,
+{
     hash: u64,
     key: K,
-    value: V
+    value: V,
 }
-
 
 struct HashMapInner<K, V>
-    where
-        K: Eq + Hash {
-    buckets: Array<Array<Bucket<K, V>>>
+where
+    K: Eq + Hash,
+{
+    buckets: Array<Array<Bucket<K, V>>>,
 }
 
-impl<K, V> HashMapInner<K, V> where
-    K: Eq + Hash {
-
-
+impl<K, V> HashMapInner<K, V>
+where
+    K: Eq + Hash,
+{
     fn get_hash<H>(&self, mut hasher: H, key: &K) -> u64
-        where
-            H : Hasher {
+    where
+        H: Hasher,
+    {
         key.hash(&mut hasher);
         let ret = hasher.finish();
         ret % self.buckets.len() as u64
     }
 }
 
-
 pub struct HashMap<K, V>
-    where
-        K: Eq + Hash {
+where
+    K: Eq + Hash,
+{
     hash: BuildHasherDefault<DefaultHasher>,
     inner: HashMapInner<K, V>,
     containers_used: usize,
-    len: usize
+    len: usize,
 }
 
-impl <K : Eq + Hash, V> Debug for HashMap<K, V> {
+impl<K: Eq + Hash, V> Debug for HashMap<K, V> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "(size = {})", self.len())
     }
 }
 
-
-
-impl<K, V> HashMap<K, V> where
-    K: Eq + Hash {
-
+impl<K, V> HashMap<K, V>
+where
+    K: Eq + Hash,
+{
     pub fn new() -> Self {
         static INITIAL_CAPACITY: usize = 1001;
         Self::with_capacity(INITIAL_CAPACITY)
     }
 
-
-
     pub fn with_capacity(capacity: usize) -> Self {
         let buckets = Array::of_size(capacity);
         Self {
             hash: Default::default(),
-            inner: HashMapInner {
-                buckets: buckets
-            },
+            inner: HashMapInner { buckets: buckets },
             containers_used: 0,
-            len: 0
+            len: 0,
         }
     }
 
@@ -98,7 +95,6 @@ impl<K, V> HashMap<K, V> where
         ret % new_capacity as u64
     }
 
-
     fn grow(&mut self) {
         let mut new_array = Array::new();
         let new_capacity = self.inner.buckets.len() * 2 + 1;
@@ -106,9 +102,7 @@ impl<K, V> HashMap<K, V> where
             new_array.push(Array::new())
         }
 
-        let old = std::mem::replace(&mut self.inner, HashMapInner {
-            buckets: new_array
-        });
+        let old = std::mem::replace(&mut self.inner, HashMapInner { buckets: new_array });
 
         self.containers_used = 0;
 
@@ -155,19 +149,15 @@ impl<K, V> HashMap<K, V> where
         self.len += 1;
         match old_index {
             None => {
-                let bucket = Bucket {
-                    hash,
-                    key,
-                    value
-                };
+                let bucket = Bucket { hash, key, value };
                 buckets.push(bucket);
                 (None, &buckets.last().unwrap().key)
-            },
+            }
             Some(old_index) => {
                 let bucket = &mut buckets[old_index];
                 let val = std::mem::replace(&mut bucket.value, value);
                 (Some(val), &bucket.key)
-            },
+            }
         }
     }
 
@@ -183,14 +173,12 @@ impl<K, V> HashMap<K, V> where
         }
 
         match old_index {
-            None => {
-                Err(())
-            },
+            None => Err(()),
             Some(old_index) => {
                 let bucket = &mut buckets[old_index];
                 let val = std::mem::replace(&mut bucket.value, value);
                 Ok(val)
-            },
+            }
         }
     }
 
@@ -226,11 +214,11 @@ impl<K, V> HashMap<K, V> where
         }
         self.len -= 1;
         match old_index {
-            None => { None },
+            None => None,
             Some(index) => {
                 let bucket = buckets.remove(index).unwrap();
                 Some(bucket.value)
-            },
+            }
         }
     }
 
@@ -252,66 +240,61 @@ impl<K, V> HashMap<K, V> where
     pub fn entry(&mut self, key: K) -> HashMapEntry<'_, K, V> {
         HashMapEntry::get_from_map(self, key)
     }
-
 }
 
 enum HashMapEntryInner {
     Present { bucket: usize, index: usize },
-    NotPresent
+    NotPresent,
 }
 
-pub struct HashMapEntry<'a, K : Hash + Eq, V> {
+pub struct HashMapEntry<'a, K: Hash + Eq, V> {
     map: &'a mut HashMap<K, V>,
     key: K,
-    entry: HashMapEntryInner
+    entry: HashMapEntryInner,
 }
 
 impl<'a, K: Hash + Eq, V> HashMapEntry<'a, K, V> {
-
     fn get_from_map(map: &'a mut HashMap<K, V>, key: K) -> HashMapEntry<'a, K, V> {
         let hash = map.get_hash(&key);
-        let entry =
-            match map.inner.buckets[hash as usize]
-                .iter()
-                .position(|bucket| &bucket.key == &key) {
-                None => {
-                    HashMapEntryInner::NotPresent
-                },
-                Some(index) => {
-                    HashMapEntryInner::Present { bucket: hash as usize, index }
-                },
-            };
+        let entry = match map.inner.buckets[hash as usize]
+            .iter()
+            .position(|bucket| &bucket.key == &key)
+        {
+            None => HashMapEntryInner::NotPresent,
+            Some(index) => HashMapEntryInner::Present {
+                bucket: hash as usize,
+                index,
+            },
+        };
 
-        HashMapEntry {
-            map,
-            key,
-            entry
-        }
+        HashMapEntry { map, key, entry }
     }
 
     pub fn or_insert(self, value: V) -> &'a mut V {
         match self.entry {
-            HashMapEntryInner::Present { bucket, index } => {
-                unsafe {
-                    &mut self.map.inner.buckets.get_unchecked_mut(bucket).get_unchecked_mut(index).value
-                }
+            HashMapEntryInner::Present { bucket, index } => unsafe {
+                &mut self
+                    .map
+                    .inner
+                    .buckets
+                    .get_unchecked_mut(bucket)
+                    .get_unchecked_mut(index)
+                    .value
             },
             HashMapEntryInner::NotPresent => {
                 let map = self.map;
-                let key =
-                    unsafe {
-                        let ptr = map.insert_keep_key(self.key, value).1 as *const K as *mut K;
-                        & *ptr
-                    };
+                let key = unsafe {
+                    let ptr = map.insert_keep_key(self.key, value).1 as *const K as *mut K;
+                    &*ptr
+                };
 
                 map.get_mut(key).unwrap()
-            },
+            }
         }
     }
 }
 
-
-impl<K : Hash + Eq, V> Index<&K> for HashMap<K, V> {
+impl<K: Hash + Eq, V> Index<&K> for HashMap<K, V> {
     type Output = V;
 
     fn index(&self, index: &K) -> &Self::Output {
@@ -319,16 +302,15 @@ impl<K : Hash + Eq, V> Index<&K> for HashMap<K, V> {
     }
 }
 
-impl<K : Hash + Eq, V> IndexMut<&K> for HashMap<K, V> {
+impl<K: Hash + Eq, V> IndexMut<&K> for HashMap<K, V> {
     fn index_mut(&mut self, index: &K) -> &mut Self::Output {
         self.get_mut(&index).expect("Key not present in map")
     }
 }
 
-pub struct HashSet<K : Hash + Eq>(HashMap<K, ()>);
+pub struct HashSet<K: Hash + Eq>(HashMap<K, ()>);
 
 impl<K: Hash + Eq> HashSet<K> {
-
     pub fn new() -> Self {
         Self(HashMap::new())
     }
@@ -348,10 +330,7 @@ impl<K: Hash + Eq> HashSet<K> {
     pub fn contains(&self, val: &K) -> bool {
         self.0.contains(val)
     }
-
-
 }
-
 
 #[cfg(test)]
 mod test {
@@ -383,11 +362,12 @@ mod test {
         map.insert(5, "Hello World!");
         assert!(map.contains(&5));
         assert_eq!(map.len(), 1);
-        let val = map.remove(&5).expect("If gotten here, the value must exist");
+        let val = map
+            .remove(&5)
+            .expect("If gotten here, the value must exist");
         assert!(!map.contains(&5));
         assert!(map.is_empty());
         assert_eq!(val, "Hello World!")
-
     }
 
     #[test]
@@ -407,4 +387,3 @@ mod test {
         assert_ne!(map.entry(10).or_insert(0), &mut 0);
     }
 }
-

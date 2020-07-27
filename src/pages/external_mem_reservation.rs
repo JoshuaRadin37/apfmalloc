@@ -21,10 +21,11 @@ use errno::Errno;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use winapi::shared::minwindef::LPVOID;
-use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Represents a "segment" in memory- a contiguous section of memory.
 #[derive(Debug)]
 pub struct Segment {
     ptr: *mut c_void,
@@ -56,6 +57,7 @@ impl Segment {
     }
 }
 
+/// The struct that implements [SegAllocator](trait.SegAllocator.html)
 pub struct SegmentAllocator;
 
 #[derive(Debug)]
@@ -75,7 +77,10 @@ impl Display for AllocationError {
 
 impl std::error::Error for AllocationError {}
 
+/// The struct that contains the API to request memory from the kernel. It can also deallocate requested memory.
+///
 pub static SEGMENT_ALLOCATOR: SegmentAllocator = SegmentAllocator;
+/// If necessary, this can be used to lock the SEGMENT_ALLOCATOR so only one thread can access it at a time
 pub static LOCK: AtomicBool = AtomicBool::new(false);
 
 /// This trait allows for multiple implementations for the SegmentAllocator, instead of needing different structs and statics for different
@@ -86,11 +91,15 @@ pub trait SegAllocator {
     /// It must no panic when called
     fn allocate(&self, size: usize) -> Result<Segment, AllocationError>;
 
-    /// Allocates a MASSIVE amount of space
+    /// Allocates a MASSIVE amount of space, but should not cause an out of memory error. The method by which this achieved is system dependent
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError>;
 
-    /// De-allocates a segment. Depending on the platform, this may not do anything
-    fn deallocate(&self, segment: Segment) -> bool;
+    /// De-allocates a segment. Depending on the platform, this may not do anything.
+    ///
+    /// # Safety
+    /// This function is marked unsafe because arbitrary segments can be created. Only
+    /// segments created by [allocate()](trait.SegAllocator.html#tymethod.allocate) are guaranteed to not fail
+    unsafe fn deallocate(&self, segment: Segment) -> bool;
 }
 
 #[cfg(windows)]
@@ -167,22 +176,20 @@ impl SegAllocator for SegmentAllocator {
         }
     }
 
-    fn deallocate(&self, segment: Segment) -> bool {
-        unsafe {
+    unsafe fn deallocate(&self, segment: Segment) -> bool {
             let heap: HANDLE = segment.heap;
             if heap != GetProcessHeap() {
                 VirtualFree(heap as LPVOID, segment.length, MEM_RELEASE) != 0
             } else {
                 HeapFree(heap, 0, segment.ptr) != 0
             }
-        }
     }
 }
 
 #[cfg(unix)]
 impl SegAllocator for SegmentAllocator {
     fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -202,7 +209,7 @@ impl SegAllocator for SegmentAllocator {
     }
 
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
-        while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+        while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -221,11 +228,11 @@ impl SegAllocator for SegmentAllocator {
         }
     }
 
-    fn deallocate(&self, segment: Segment) -> bool {
+
+    unsafe fn deallocate(&self, segment: Segment) -> bool {
         // while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
-        let ret =  unsafe { libc::munmap(segment.ptr, segment.length) == 0 };
+        libc::munmap(segment.ptr, segment.length) == 0
         // LOCK.store(false, Ordering::Release);
-        ret
     }
 }
 
@@ -237,17 +244,17 @@ mod test {
 
     #[test]
     pub fn get_segment() {
-        SEGMENT_ALLOCATOR.allocate(PAGE).expect("Test must fail is this fails");
+        SEGMENT_ALLOCATOR
+            .allocate(PAGE)
+            .expect("Test must fail is this fails");
     }
 
     #[test]
     pub fn free_segment() {
-
         let segment = SEGMENT_ALLOCATOR
             .allocate(PAGE)
             .expect("Test must fail is this fails");
-        assert!(SEGMENT_ALLOCATOR.deallocate(segment));
-
+        assert!(unsafe { SEGMENT_ALLOCATOR.deallocate(segment) });
     }
 
     #[test]
@@ -275,6 +282,8 @@ mod test {
         let seg = SEGMENT_ALLOCATOR
             .allocate_massive(size as usize)
             .expect("Must be able to create a massive page for allocator to function");
-        SEGMENT_ALLOCATOR.deallocate(seg);
+        unsafe{
+            SEGMENT_ALLOCATOR.deallocate(seg);
+        }
     }
 }

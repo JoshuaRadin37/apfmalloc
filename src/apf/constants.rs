@@ -6,25 +6,5 @@ pub const REUSE_HIBERNATION_PERIOD: usize = 6000;
 pub const USE_ALLOCATION_CLOCK: bool = true;
 use crate::thread_cache::no_tuning;
 lazy_static::lazy_static! {
-pub static ref TARGET_APF: usize = no_tuning(|| option_env!("TARGET_APF").map(|apf| apf.parse::<usize>().unwrap_or(1000)).unwrap_or(1000));
+pub static ref TARGET_APF: usize = no_tuning(|| option_env!("TARGET_APF").map(|apf| apf.parse::<usize>().unwrap_or(2500)).unwrap_or(2500));
 }
-/*
-{
-    crate::thread_cache::skip_tuners.with(
-            |b| unsafe {
-                *b.get() = true;
-            }
-        );
-    let target = option_env!("TARGET_APF").map(|apf| apf.parse::<usize>().unwrap_or(100)).unwrap_or(100);
-    crate::thread_cache::skip_tuners.with(
-            |b| unsafe {
-                *b.get() = false;
-            }
-        );
-    target
-}; // No idea what this should be
-}
-
- */
-#[allow(unused)]
-pub const MAX_N: usize = 150;
