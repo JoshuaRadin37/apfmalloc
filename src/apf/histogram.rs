@@ -16,6 +16,8 @@ pub struct Histogram<'a> {
     max_key: usize,
 }
 
+
+
 impl<'a> Histogram<'a> {
     pub fn new() -> Histogram<'a> {
         let page = allocate_type::<[usize; INIT_HISTOGRAM_LENGTH]>() as *mut usize;

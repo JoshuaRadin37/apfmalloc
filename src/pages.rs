@@ -532,7 +532,7 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
     let mut segment_holder = SEGMENT_HOLDER.lock();
     let is_none = segment_holder.size_map.is_none();
     if is_none {
-        std::mem::replace(&mut segment_holder.size_map, Some(HashMap::new()));
+        segment_holder.size_map = Some(HashMap::new());
     }
     let segment = SEGMENT_ALLOCATOR.allocate(size)?;
     let ptr = segment.get_ptr() as *mut u8;
@@ -571,7 +571,7 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
     let mut segment_holder = SEGMENT_HOLDER.lock();
     let is_none = segment_holder.size_map.is_none();
     if is_none {
-        std::mem::replace(&mut segment_holder.size_map, Some(HashMap::new()));
+        segment_holder.size_map = Some(HashMap::new());
     }
     let segment = SEGMENT_ALLOCATOR.allocate_massive(size)?;
     let ptr = segment.get_ptr() as *mut u8;

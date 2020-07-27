@@ -116,6 +116,34 @@ pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     }
 }
 
+/// Uses the posix mem align. This is equivalent to aligned_alloc
+///
+/// Returns EINVAL if alignment is not a multiple of sizeof(void*)
+/// Returns ENOMEM is no more memory is available
+#[no_mangle]
+pub extern "C" fn posix_memalign(ptr: *mut *mut std::ffi::c_void, alignment: usize, size: usize) -> i32 {
+    unsafe {
+        OVERRIDE_ALIGNED_ALLOC = true;
+    }
+    if alignment % std::mem::size_of::<usize>() != 0 {
+        return libc::EINVAL;
+    }
+    let out_ptr = if cfg!(target_os = "macos") {
+        let alignment = alignment.max(16);
+        do_aligned_alloc(alignment, size) as *mut c_void
+    } else {
+        do_aligned_alloc(alignment, size) as *mut c_void
+    };
+    if ptr.is_null() {
+        return libc::ENOMEM;
+    }
+
+    unsafe {
+        ptr.write(out_ptr);
+    }
+    0
+}
+
 #[no_mangle]
 pub extern "C" fn check_override() -> u8 {
     unsafe {

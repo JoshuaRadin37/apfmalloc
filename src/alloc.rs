@@ -9,7 +9,6 @@ use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
 use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
-use std::ptr::slice_from_raw_parts_mut;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
@@ -301,8 +300,8 @@ pub fn malloc_count_from_partial(
 
 pub fn malloc_count_from_new_sb(
     size_class_index: usize,
-    cache: &mut ThreadCacheBin,
-    block_num: &mut usize,
+    _cache: &mut ThreadCacheBin,
+    _block_num: &mut usize,
     count: usize,
 ) {
     let heap = get_heaps().get_heap_at_mut(size_class_index);
@@ -335,8 +334,8 @@ pub fn malloc_count_from_new_sb(
     /*
     for i in 0..c {
         let block = unsafe { super_block.offset(i as isize * block_size as isize) };
-        cache.push_block(block);
-        *block_num += 1;
+        _cache.push_block(block);
+        *_block_num += 1;
     }
 
      */

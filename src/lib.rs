@@ -575,7 +575,7 @@ mod tests {
             unsafe { &mut *(super::do_malloc(size_of::<usize>()) as *mut MaybeUninit<usize>) };
         *ptr = MaybeUninit::new(8);
         assert_eq!(
-            &unsafe { *(ptr as *const MaybeUninit<usize> as *const u8) },
+            &unsafe { *(ptr as *const MaybeUninit<usize> as *const usize) },
             &8
         ); // should be trivial
         unsafe {

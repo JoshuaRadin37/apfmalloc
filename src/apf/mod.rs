@@ -131,6 +131,7 @@ impl ApfTuner<'_> {
         true
     }
 
+    #[allow(dead_code)]
     fn count_fetch(&mut self) {
         self.fetch_count += 1;
         if self.fetch_count > 1 {
@@ -173,6 +174,7 @@ impl ApfTuner<'_> {
         }
     }
 
+    #[allow(dead_code)]
     fn show_record(&mut self) {
         match &self.record {
             Some(rec) => {
