@@ -387,9 +387,14 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 /// to this is if both the old size class and the new size class are part of the size class 0, which does not have a specific size. If this is
 /// the case, then the re-alloc operation is performed only if the new size greater than the old size.
 ///
+/// If a NULL pointer is passed through, it's equivalent to calling `malloc(size)`
+///
 /// # Safety
 /// If an invalid pointer is passed to this function, then a SEGFAULT will occur. As such, this function is marked as unsafe.
 pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    if ptr.is_null() {
+        return do_malloc(size) as *mut c_void;
+    }
     let new_size_class = get_size_class(size);
     let old_size = match get_allocation_size(ptr) {
         Ok(size) => size as usize,
