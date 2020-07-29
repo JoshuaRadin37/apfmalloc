@@ -4,7 +4,7 @@ use atomic::{Atomic, Ordering};
 
 use crate::allocation_data::proc_heap::ProcHeap;
 use crate::independent_collections::Array;
-use crate::mem_info::{CACHE_LINE_MASK, DESCRIPTOR_BLOCK_SZ};
+use crate::mem_info::{CACHE_LINE_MASK, DESCRIPTOR_BLOCK_SZ, CACHE_LINE};
 use crate::pages::external_mem_reservation::Segment;
 use crate::pages::page_alloc;
 use crate::AVAILABLE_DESC;
@@ -33,7 +33,8 @@ impl DescriptorNode {
     pub fn set(&mut self, desc: Option<&'static Descriptor>, count: u64) {
         if desc.is_some() {
             let usize_desc = desc.unwrap() as *const Descriptor as u64;
-            assert_eq!(usize_desc & CACHE_LINE_MASK as u64, 0);
+            let size  = std::mem::size_of::<Descriptor>();
+           // assert_eq!(usize_desc & CACHE_LINE_MASK as u64, 0);
             let pointer = (usize_desc | (count & CACHE_LINE_MASK as u64)) as *mut Descriptor;
             self.desc = pointer;
         } else {
@@ -135,10 +136,11 @@ impl Descriptor {
 
         let desc = old_head.get_desc();
         if desc.is_none() {
-            let page = page_alloc(DESCRIPTOR_BLOCK_SZ).expect("Creating a descriptor block failed");
+            let mut page = page_alloc(DESCRIPTOR_BLOCK_SZ).expect("Creating a descriptor block failed");
+            let mut count = DESCRIPTOR_BLOCK_SZ / std::mem::size_of::<Descriptor>();
             let mut ptr = Array::<Descriptor>::from_ptr(
                 page as *mut Descriptor,
-                DESCRIPTOR_BLOCK_SZ / std::mem::size_of::<Descriptor>(),
+                count
             );
 
             {

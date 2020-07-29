@@ -136,7 +136,7 @@ impl<T: Default> Array<T> {
             size: length,
             no_dealloc: true,
             array: RawArray {
-                segment: Some(Segment::new(ptr as *mut c_void, length)),
+                segment: Some(Segment::new(ptr as *mut c_void, #[cfg(windows)] null_mut(), length)),
                 no_dealloc: true,
                 _phantom: PhantomData,
             },

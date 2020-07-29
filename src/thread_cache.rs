@@ -426,16 +426,6 @@ fn ret(size_class_index: usize, count: u32) -> bool {
 use crate::apf::ApfTuner;
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 
-#[cfg(not(unix))]
-impl Clone for ThreadBool {
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
-
-#[cfg(not(unix))]
-impl Copy for ThreadBool {}
-
 thread_local! {
     // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
     /// The actual thread cache
@@ -443,10 +433,10 @@ thread_local! {
     /// Enables dropping of the thread cache bins (see [ThreadEmpty](struct.ThreadEmpty.html))
     pub static thread_init: ThreadEmpty = ThreadEmpty;
 
-    #[cfg(unix)]
+    // #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
 
-    #[cfg(unix)]
+    //#[cfg(unix)]
     pub static skip_tuners: UnsafeCell<usize> = UnsafeCell::new(1);
 
     // Probably don't want a static lifetime here

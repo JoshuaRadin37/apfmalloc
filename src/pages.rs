@@ -16,6 +16,7 @@ use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
+#[cfg(windows)] use winapi::um::heapapi::GetProcessHeap;
 
 pub mod external_mem_reservation;
 
@@ -594,7 +595,7 @@ pub fn page_free(ptr: *const u8) -> bool {
     if segment_holder.size_map.as_mut().unwrap().contains(&holder) {
         let size = segment_holder.size_map.as_mut().unwrap()[&holder];
         let ret = unsafe {
-            SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, size))
+             SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, GetProcessHeap(), size))
         };
         segment_holder.size_map.as_mut().unwrap().remove(&holder);
         ret

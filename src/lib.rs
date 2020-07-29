@@ -48,6 +48,8 @@ pub mod thread_cache;
 
 mod bootstrap;
 pub use bootstrap::set_use_bootstrap;
+use std::borrow::{BorrowMut, Borrow};
+use std::process::exit;
 
 pub mod ptr {
     pub mod auto_ptr;
@@ -332,6 +334,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
+            // #[cfg(unix)]
             {
                 if USE_APF {
                     thread_cache::skip.with(|b| unsafe {
@@ -399,7 +402,8 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     let old_size = match get_allocation_size(ptr) {
         Ok(size) => size as usize,
         Err(_) => {
-            return null_mut();
+            exit(libc::EINVAL);
+            //return null_mut();
         }
     };
     let old_size_class = get_size_class(old_size);
@@ -410,7 +414,8 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     }
 
     let ret = do_malloc(size) as *mut c_void;
-    if !ret.is_null() {
+
+    if !ret.is_null() && ret != ptr {
         libc::memcpy(ret, ptr, old_size);
     }
     do_free(ptr);
@@ -483,10 +488,11 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
 
             if force_bootstrap {
             } else {
+                /*
                 #[cfg(not(unix))]
                 {
                     set_use_bootstrap(true);
-                    thread_cache::thread_init.with(|val| {
+                    thread_cache::thread_init.with(|mut val| {
                         if !*val.borrow() {
                             thread_cache::thread_cache.with(|tcache| {
                                 let _tcache = tcache;
@@ -496,6 +502,8 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
                         set_use_bootstrap(false)
                     });
                 }
+
+                 */
 
                 /* WARNING -- ELIAS CODE -- WARNING */
 

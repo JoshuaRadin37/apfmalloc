@@ -105,8 +105,7 @@ pub trait SegAllocator {
 #[cfg(windows)]
 impl SegAllocator for SegmentAllocator {
     fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
-        static allocation_mutex: NoHeapMutex<()> = NoHeapMutex::new(());
-        let _mutex = allocation_mutex.lock();
+        while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
         unsafe {
             let heap: HANDLE = GetProcessHeap();
             if heap.is_null() {
@@ -114,6 +113,7 @@ impl SegAllocator for SegmentAllocator {
             }
 
             let alloc = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);
+            LOCK.store(false, Ordering::Release);
             #[cfg(debug_assertions)]
             #[allow(non_snake_case)]
             if !alloc.is_null() {
@@ -143,7 +143,7 @@ impl SegAllocator for SegmentAllocator {
                 }
             }
             if alloc.is_null() {
-                Err(AllocationError::AllocationFailed(size))
+                Err(AllocationError::AllocationFailed(size, errno::errno()))
             } else {
                 let seg = Segment::new(alloc, heap, size);
                 Ok(seg)
@@ -152,8 +152,6 @@ impl SegAllocator for SegmentAllocator {
     }
 
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
-        static allocation_mutex: NoHeapMutex<()> = NoHeapMutex::new(());
-        let _mutex = allocation_mutex.lock();
 
         unsafe {
             let alloc = VirtualAlloc(null_mut(), size, MEM_RESERVE, PAGE_READWRITE);
@@ -168,7 +166,7 @@ impl SegAllocator for SegmentAllocator {
 
              */
             if alloc.is_null() {
-                Err(AllocationError::AllocationFailed(size))
+                Err(AllocationError::AllocationFailed(size, errno::errno()))
             } else {
                 let seg = Segment::new(alloc, alloc, size);
                 Ok(seg)
@@ -178,7 +176,7 @@ impl SegAllocator for SegmentAllocator {
 
     unsafe fn deallocate(&self, segment: Segment) -> bool {
             let heap: HANDLE = segment.heap;
-            if heap != GetProcessHeap() {
+            let ret = if heap != GetProcessHeap() {
                 VirtualFree(heap as LPVOID, segment.length, MEM_RELEASE) != 0
             } else {
                 HeapFree(heap, 0, segment.ptr) != 0
