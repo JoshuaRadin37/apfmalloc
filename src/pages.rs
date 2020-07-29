@@ -595,7 +595,7 @@ pub fn page_free(ptr: *const u8) -> bool {
     if segment_holder.size_map.as_mut().unwrap().contains(&holder) {
         let size = segment_holder.size_map.as_mut().unwrap()[&holder];
         let ret = unsafe {
-             SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, GetProcessHeap(), size))
+             SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, #[cfg(windows)] GetProcessHeap(), size))
         };
         segment_holder.size_map.as_mut().unwrap().remove(&holder);
         ret
