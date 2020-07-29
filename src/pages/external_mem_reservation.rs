@@ -175,12 +175,13 @@ impl SegAllocator for SegmentAllocator {
     }
 
     unsafe fn deallocate(&self, segment: Segment) -> bool {
-            let heap: HANDLE = segment.heap;
-            let ret = if heap != GetProcessHeap() {
-                VirtualFree(heap as LPVOID, segment.length, MEM_RELEASE) != 0
-            } else {
-                HeapFree(heap, 0, segment.ptr) != 0
-            }
+        let heap: HANDLE = segment.heap;
+        let ret = if heap != GetProcessHeap() {
+            VirtualFree(heap as LPVOID, segment.length, MEM_RELEASE) != 0
+        } else {
+            HeapFree(heap, 0, segment.ptr) != 0
+        };
+        ret
     }
 }
 
