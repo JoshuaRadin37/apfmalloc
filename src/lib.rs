@@ -402,6 +402,7 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     let old_size = match get_allocation_size(ptr) {
         Ok(size) => size as usize,
         Err(_) => {
+            eprintln!("Given a pointer that isn't in the heap");
             exit(libc::EINVAL);
             //return null_mut();
         }
