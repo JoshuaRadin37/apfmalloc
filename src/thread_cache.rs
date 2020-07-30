@@ -107,6 +107,9 @@ impl ThreadCacheBin {
             let ret = self.block;
             match self.block_size {
                 None => {
+                    if (self.block as *mut u8).is_null() {
+                        return null_mut();
+                    }
                     self.block = unsafe { *(self.block as *mut *mut u8) };
                     //self.block = unsafe { self.block.offset(-1) };
                 }
