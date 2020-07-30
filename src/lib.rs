@@ -78,7 +78,7 @@ unsafe fn init_malloc() {
     S_PAGE_MAP.init();
 
     let option = option_env!("USE_APF");
-    if option.map(|s| s.to_uppercase()) == Some("FALSE") {
+    if option.map(|s| s.to_uppercase()) == Some("FALSE".to_string()) {
         USE_APF = false;
     }
 
