@@ -39,6 +39,7 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_MALLOC = true;
     }
+    /*
 
     #[cfg(not(target_os = "macos"))]
     {
@@ -47,8 +48,12 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
     #[cfg(target_os = "macos")]
     {
         // MacOS requires that memory is aligned to atleast 16 bytes
+
         do_aligned_alloc(16, size) as *mut c_void
     }
+
+     */
+    do_malloc(size) as *mut c_void
 }
 
 /// Allocates memory for an array of num objects of size and initializes all bytes in the allocated storage to zero.
@@ -60,6 +65,9 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
 pub extern "C" fn calloc(num: usize, size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_CALLOC = true;
+    }
+    if num.checked_mul(size).is_none() {
+        return null_mut();
     }
     let ret = malloc(num * size) as *mut u8;
     unsafe {
@@ -207,6 +215,7 @@ mod rust_global {
 
 #[cfg(not(feature = "no-rust"))]
 pub use rust_global::*;
+use std::ptr::null_mut;
 
 #[no_mangle]
 #[doc(hidden)]
@@ -280,3 +289,86 @@ mod test {
         }
     }
 }
+
+#[cfg(test)]
+mod behavior {
+    use super::*;
+
+    #[test]
+    fn allocates() {
+        let ptr = malloc(std::mem::size_of::<usize>());
+        assert!(!ptr.is_null());
+        unsafe {
+            do_free(ptr);
+        }
+    }
+
+    #[test]
+    fn zero_bytes_malloc_no_fail() {
+        let ptr = malloc(0);
+        assert!(!ptr.is_null());
+        unsafe {
+            do_free(ptr);
+        }
+    }
+
+    #[test]
+    fn calloc_fails_on_overflow() {
+        assert!(calloc(std::usize::MAX, 2).is_null())
+    }
+
+    #[test]
+    fn calloc_zeroes() {
+        let ptr = calloc(std::mem::size_of::<u8>(), 16) as *mut u8;
+        assert!(!ptr.is_null());
+        unsafe {
+            for i in 0..16 {
+                assert_eq!(*ptr.add(i), 0)
+            }
+
+            do_free(ptr);
+        }
+    }
+
+    #[test]
+    fn aligned_alloc_checks_consistency() {
+        assert!(aligned_alloc(std::mem::size_of::<usize>() + 1, 8).is_null(), "Alignment required to be power of 2");
+        assert!(aligned_alloc(std::mem::size_of::<usize>(), std::mem::size_of::<usize>() * 3 / 2).is_null(), "Size must be a multiple of alignment");
+    }
+
+    #[test]
+    fn realloc_on_null() {
+        let ptr = unsafe {
+            realloc(null_mut(), 16)
+        };
+
+        assert!(!ptr.is_null());
+        unsafe {
+            do_free(ptr);
+        }
+    }
+
+
+    #[test]
+    fn realloc_moves_data() {
+
+        let ptr1 = malloc(std::mem::size_of::<usize>()) as *mut usize;
+        assert!(!ptr1.is_null());
+
+        unsafe {
+            *ptr1 = 16;
+            let ptr2 = realloc(ptr1 as *mut c_void, std::mem::size_of::<usize>() * 4) as *mut usize;
+            assert_ne!(ptr1, ptr2);
+            assert_eq!(16, *ptr2);
+
+            do_free(ptr2);
+        }
+
+
+    }
+
+
+
+
+}
+

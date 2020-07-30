@@ -175,7 +175,7 @@ fn is_power_of_two(x: usize) -> bool {
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
-    if !is_power_of_two(align) {
+    if !(is_power_of_two(align) && size % align == 0) {
         return null_mut();
     }
 
@@ -769,7 +769,28 @@ mod tests {
 
         dump_info!();
     }
+
+    #[test]
+    fn big_allocs_on_aligned() {
+        let size = 4096 * 16;
+        let mut allocs = vec![];
+
+        for i in 0..10_000 {
+            let ptr = do_aligned_alloc(4096, size);
+            assert!(!ptr.is_null(), "Allocation of large size failed failed after {} attempts", i);
+            allocs.push(
+                ptr
+            );
+        }
+
+        for ptr in allocs {
+            unsafe {
+                do_free(ptr);
+            }
+        }
+    }
 }
+
 
 #[cfg(test)]
 mod track_allocation_tests {
@@ -799,4 +820,6 @@ mod track_allocation_tests {
         }
         dump_info!();
     }
+
+
 }
