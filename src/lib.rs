@@ -89,7 +89,7 @@ unsafe fn init_malloc() {
         heap.size_class_index = idx;
     }
 
-    // bootstrap_reserve.lock().init();
+    bootstrap_reserve.lock().init();
 
     //info!("Malloc Initialized")
 }
