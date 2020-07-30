@@ -48,8 +48,6 @@ pub mod thread_cache;
 
 mod bootstrap;
 pub use bootstrap::set_use_bootstrap;
-use std::borrow::{BorrowMut, Borrow};
-use std::process::exit;
 
 pub mod ptr {
     pub mod auto_ptr;
