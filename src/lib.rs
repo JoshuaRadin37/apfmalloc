@@ -63,7 +63,7 @@ pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
-static USE_APF: bool = true;
+static mut USE_APF: bool = true;
 
 /// Tells the allocator to remember the total amount allocated to a thread cache or the bootstrap. Only available in builds
 /// with debug_assertions
@@ -76,6 +76,11 @@ unsafe fn init_malloc() {
     init_size_class();
 
     S_PAGE_MAP.init();
+
+    let option = option_env!("USE_APF");
+    if option == Some("FALSE") {
+        USE_APF = false;
+    }
 
     for idx in 0..MAX_SZ_IDX {
         let heap = get_heaps().get_heap_at_mut(idx);
@@ -334,7 +339,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             // #[cfg(unix)]
             {
-                if USE_APF {
+                if unsafe { USE_APF } {
                     thread_cache::skip.with(|b| unsafe {
                         if !*b.get() {
                             let skip = b.get();
