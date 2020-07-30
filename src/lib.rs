@@ -78,7 +78,7 @@ unsafe fn init_malloc() {
     S_PAGE_MAP.init();
 
     let option = option_env!("USE_APF");
-    if option == Some("FALSE") {
+    if option.map(|s| s.to_uppercase()) == Some("FALSE") {
         USE_APF = false;
     }
 
@@ -89,7 +89,7 @@ unsafe fn init_malloc() {
         heap.size_class_index = idx;
     }
 
-    bootstrap_reserve.lock().init();
+    // bootstrap_reserve.lock().init();
 
     //info!("Malloc Initialized")
 }
