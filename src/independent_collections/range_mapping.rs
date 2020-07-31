@@ -1,8 +1,7 @@
 use crate::page_map::PageInfo;
 use crate::independent_collections::Array;
-use winapi::_core::ptr::null_mut;
-use winapi::_core::ops::RangeInclusive;
-use std::ptr::null;
+use std::ptr::null_mut;
+use std::ops::RangeInclusive;
 use crate::allocation_data::{ProcHeap, Descriptor};
 use crate::mem_info::PAGE_MASK;
 
@@ -16,9 +15,9 @@ impl Node {
     fn create_parent_node(&self, other: &Self) -> Self {
         let new_range = *self.range.start().min(other.range.start())..=*self.range.end().max(other.range.end());
         let (less, more) = if self.range.end() < other.range.start() {
-            (self as *const Node, other as *const Node)
+            (self as *const Node as *mut Node, other as *const Node as *mut Node)
         } else {
-            (other as *const Node, self as *const Node)
+            (other as *const Node as *mut Node, self as *const Node as *mut Node)
         };
 
         Node {
