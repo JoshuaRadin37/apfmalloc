@@ -15,6 +15,7 @@ repository = "https://github.com/JoshuaRadin37/lrmalloc.rs"
 [features]
 default = []
 track_allocation = []
+no_met_stack = []
 
 [workspace]
 members = [

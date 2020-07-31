@@ -47,7 +47,7 @@ impl ThreadCacheBin {
         match self.block_size {
             // If the block size is recorded and it's less than the CACHE_LINE, it may be slightly faster to attempt to push it back as
             // a contiguous block
-            Some(block_size) if block_size < CACHE_LINE as u32 => {
+            Some(block_size) if block_size < CACHE_LINE as u32 && !cfg!(feature = "no_met_stack") => {
                 let old_loc = self.block as usize as isize;
                 let diff = old_loc - block as usize as isize;
                 if diff == block_size as isize {
@@ -112,15 +112,23 @@ impl ThreadCacheBin {
                     }
                     self.block = unsafe { *(self.block as *mut *mut u8) };
                     //self.block = unsafe { self.block.offset(-1) };
+
                 }
-                Some(block_size) => unsafe {
-                    let block_read = *(self.block as *mut *mut usize);
-                    if block_read.is_null() {
-                        self.block = self.block.add(block_size as usize);
-                    } else if block_read as usize == std::usize::MAX {
-                        self.block = null_mut();
-                    } else {
-                        self.block = *(self.block as *mut *mut u8);
+                Some(block_size) => if cfg!(feature = "no_met_stack") {
+                    if (self.block as *mut u8).is_null() {
+                        return null_mut();
+                    }
+                    self.block = unsafe { *(self.block as *mut *mut u8) };
+                } else {
+                    unsafe {
+                        let block_read = *(self.block as *mut *mut usize);
+                        if block_read.is_null() {
+                            self.block = self.block.add(block_size as usize);
+                        } else if block_read as usize == std::usize::MAX {
+                            self.block = null_mut();
+                        } else {
+                            self.block = *(self.block as *mut *mut u8);
+                        }
                     }
                 },
             };
@@ -187,10 +195,10 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     cache.block_size = Some(sc.block_size);
 
     #[cfg(debug_assertions)]
-    {
-        debug_assert!(block_num > 0);
-        debug_assert!(block_num <= sc.cache_block_num as usize);
-    }
+        {
+            debug_assert!(block_num > 0);
+            debug_assert!(block_num <= sc.cache_block_num as usize);
+        }
 }
 
 /// Flushes the contents of a thread cache bin back to the central reserve.

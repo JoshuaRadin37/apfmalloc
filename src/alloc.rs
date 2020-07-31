@@ -36,7 +36,7 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
         }
 
         if let Ok(_) =
-            list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed)
+        list.compare_exchange_weak(old_head, new_head, Ordering::Acquire, Ordering::Relaxed)
         {
             return Some(old_desc);
         }
@@ -205,11 +205,27 @@ pub fn malloc_from_new_sb(
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
-    unsafe {
-        // Gets a pointer to the last block and sets it to 0xFF...F
-        let ptr = super_block.add(block_size as usize * max_count - block_size as usize);
-        *(ptr as *mut usize) = std::usize::MAX;
-    }
+    #[cfg(not(feature = "no_met_stack"))]
+        {
+            unsafe {
+                // Gets a pointer to the last block and sets it to 0xFF...F
+                let ptr = super_block.add(block_size as usize * max_count - block_size as usize);
+                *(ptr as *mut usize) = std::usize::MAX;
+            }
+        }
+    #[cfg(feature = "no_met_stack")]
+        {
+            unsafe {
+                // let mut ptr = super_block.add(block_size as usize * max_count - block_size as usize) as *mut *mut u8;
+                let mut last: *mut u8 = null_mut();
+                for block_num in (0..desc.max_count).rev() {
+                    let current = super_block.add((block_size * block_num) as usize);
+                    *(current as *mut *mut u8) = last;
+                    last = current;
+                    // ptr = current as *mut *mut u8;
+                }
+            }
+        }
 
     let block = super_block;
     cache.push_list(block, max_count as u32);
