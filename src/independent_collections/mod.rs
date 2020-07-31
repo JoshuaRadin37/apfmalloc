@@ -7,3 +7,6 @@ pub use array::*;
 
 mod hash_map;
 pub use hash_map::*;
+
+mod range_mapping;
+pub use range_mapping::*;

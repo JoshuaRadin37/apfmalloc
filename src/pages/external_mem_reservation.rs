@@ -8,11 +8,11 @@ use winapi::{
     shared::{ntdef::HANDLE, winerror::S_OK},
     um::{
         heapapi::{
-            GetProcessHeap, HeapAlloc, HeapCreate, HeapDestroy, HeapFree, HeapSummary,
+            GetProcessHeap, HeapAlloc, HeapFree, HeapSummary,
             HEAP_SUMMARY, LPHEAP_SUMMARY,
         },
         memoryapi::{VirtualAlloc, VirtualFree},
-        winnt::{HEAP_ZERO_MEMORY, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE},
+        winnt::{HEAP_ZERO_MEMORY, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE},
     },
 };
 

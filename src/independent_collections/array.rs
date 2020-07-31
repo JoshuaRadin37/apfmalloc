@@ -303,6 +303,10 @@ impl<T> Array<T> {
             array: arr,
         }
     }
+
+    pub fn capacity(&self) -> usize {
+        self.array.capacity()
+    }
 }
 
 impl Array<u8> {

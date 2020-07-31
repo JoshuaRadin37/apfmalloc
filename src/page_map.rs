@@ -23,8 +23,6 @@ use winapi::um::memoryapi::VirtualAlloc;
 use winapi::um::memoryapi::VirtualQuery;
 #[cfg(windows)]
 use winapi::um::winnt::{MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_READWRITE};
-#[cfg(windows)]
-use winapi::um::winuser::OffsetRect;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
