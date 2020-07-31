@@ -48,8 +48,6 @@ pub mod thread_cache;
 
 mod bootstrap;
 pub use bootstrap::set_use_bootstrap;
-use std::borrow::{BorrowMut, Borrow};
-use std::process::exit;
 
 pub mod ptr {
     pub mod auto_ptr;
@@ -65,7 +63,7 @@ pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
 
-static USE_APF: bool = true;
+static mut USE_APF: bool = true;
 
 /// Tells the allocator to remember the total amount allocated to a thread cache or the bootstrap. Only available in builds
 /// with debug_assertions
@@ -78,6 +76,11 @@ unsafe fn init_malloc() {
     init_size_class();
 
     S_PAGE_MAP.init();
+
+    let option = option_env!("USE_APF");
+    if option == Some("false") {
+        USE_APF = false;
+    }
 
     for idx in 0..MAX_SZ_IDX {
         let heap = get_heaps().get_heap_at_mut(idx);
@@ -177,7 +180,7 @@ fn is_power_of_two(x: usize) -> bool {
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
-    if !is_power_of_two(align) {
+    if !(is_power_of_two(align) && size % align == 0) {
         return null_mut();
     }
 
@@ -336,7 +339,7 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
             // #[cfg(unix)]
             {
-                if USE_APF {
+                if unsafe { USE_APF } {
                     thread_cache::skip.with(|b| unsafe {
                         if !*b.get() {
                             let skip = b.get();
@@ -771,7 +774,28 @@ mod tests {
 
         dump_info!();
     }
+
+    #[test]
+    fn big_allocs_on_aligned() {
+        let size = 4096 * 16;
+        let mut allocs = vec![];
+
+        for i in 0..10_000 {
+            let ptr = do_aligned_alloc(4096, size);
+            assert!(!ptr.is_null(), "Allocation of large size failed failed after {} attempts", i);
+            allocs.push(
+                ptr
+            );
+        }
+
+        for ptr in allocs {
+            unsafe {
+                do_free(ptr);
+            }
+        }
+    }
 }
+
 
 #[cfg(test)]
 mod track_allocation_tests {
@@ -801,4 +825,6 @@ mod track_allocation_tests {
         }
         dump_info!();
     }
+
+
 }
