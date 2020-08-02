@@ -436,6 +436,7 @@ fn ret(size_class_index: usize, count: u32) -> bool {
 
 use crate::apf::ApfTuner;
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
+use crate::bootstrap::use_bootstrap;
 
 thread_local! {
     // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
@@ -443,6 +444,8 @@ thread_local! {
     pub static thread_cache: UnsafeCell<[ThreadCacheBin; MAX_SZ_IDX]> = UnsafeCell::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
     /// Enables dropping of the thread cache bins (see [ThreadEmpty](struct.ThreadEmpty.html))
     pub static thread_init: ThreadEmpty = ThreadEmpty;
+
+    pub static kind_init: bool = true;
 
     // #[cfg(unix)]
     pub static skip: UnsafeCell<bool> = UnsafeCell::new(false);
@@ -454,20 +457,53 @@ thread_local! {
     pub static apf_tuners: UnsafeCell<Vec<ApfTuner<'static>>> = UnsafeCell::new(Vec::<ApfTuner>::new());
     pub static apf_init: RefCell<bool> = RefCell::new(false);
 
-    pub static thread_use_bootstrap: UnsafeCell<bool> = UnsafeCell::new(false);
+    pub static thread_use_bootstrap: UnsafeCell<usize> = UnsafeCell::new(0);
 }
 
 #[inline]
 pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
-    crate::thread_cache::skip_tuners.with(|b| unsafe {
-        *b.get() += 1;
-    });
+    if !use_bootstrap() {
+        crate::thread_cache::skip_tuners.with(|b| unsafe {
+            *b.get() += 1;
+        });
+    }
     let ret = func();
-    crate::thread_cache::skip_tuners.with(|b| unsafe {
-        if *b.get() > 0 {
-            *b.get() -= 1;
+    if !use_bootstrap() {
+        crate::thread_cache::skip_tuners.with(|b| unsafe {
+            if *b.get() > 0 {
+                *b.get() -= 1;
+            }
+        });
+    }
+
+    ret
+}
+
+pub fn get_thread_is_bootstrap() -> bool {
+    thread_use_bootstrap.with(|cell|
+        unsafe {
+            *cell.get() > 0
         }
-    });
+    )
+}
+
+pub fn use_in_bootstrap<R, F : Fn() -> R>(func: F) -> R {
+    thread_use_bootstrap.with(
+        |cell|
+            unsafe {
+                *cell.get() += 1;
+            }
+    );
+    let ret = func();
+    thread_use_bootstrap.with(
+        |cell|
+            unsafe {
+                let count = &mut *cell.get();
+                if *count > 0 {
+                    *count += 1;
+                }
+            }
+    );
     ret
 }
 
