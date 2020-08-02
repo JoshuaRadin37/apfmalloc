@@ -5,17 +5,19 @@ extern crate bitfield;
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 
 use atomic::Ordering;
 use spin::Mutex;
 
+pub use bootstrap::set_use_bootstrap;
+
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
-use crate::allocation_data::{get_heaps, Anchor, Descriptor, DescriptorNode, SuperBlockState};
+use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
 use crate::bootstrap::{bootstrap_reserve, use_bootstrap};
 use crate::mem_info::{align_addr, align_size, MAX_SZ, MAX_SZ_IDX, PAGE};
 use crate::page_map::S_PAGE_MAP;
-
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
@@ -47,8 +49,6 @@ pub mod size_classes;
 pub mod thread_cache;
 
 mod bootstrap;
-pub use bootstrap::set_use_bootstrap;
-use winapi::_core::sync::atomic::AtomicBool;
 
 pub mod ptr {
     pub mod auto_ptr;
@@ -601,15 +601,15 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
 #[cfg(test)]
 mod tests {
     use core::mem::MaybeUninit;
+    use std::thread;
 
     use bitfield::size_of;
 
     use crate::allocation_data::get_heaps;
     use crate::ptr::auto_ptr::AutoPtr;
+    use crate::size_classes::SIZE_CLASSES;
 
     use super::*;
-    use crate::size_classes::SIZE_CLASSES;
-    use std::thread;
 
     #[test]
     fn heaps_valid() {
