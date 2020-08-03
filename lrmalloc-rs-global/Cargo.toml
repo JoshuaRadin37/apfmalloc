@@ -18,7 +18,7 @@ no-rust-global = []
 use-hooks = []
 
 [lib]
-crate-type = ["lib"]
+crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 lrmalloc-rs = { path = "../"}

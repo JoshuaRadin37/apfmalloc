@@ -2,6 +2,7 @@
 use crate::apf::liveness_counter::LivenessCounter;
 use crate::apf::reuse_counter::ReuseCounter;
 
+#[cfg(feature = "show_records")]
 use gnuplot::{Caption, Color, Figure};
 
 mod constants;
@@ -131,6 +132,7 @@ impl ApfTuner<'_> {
         true
     }
 
+    #[cfg(feature = "show_records")]
     #[allow(dead_code)]
     fn count_fetch(&mut self) {
         self.fetch_count += 1;
@@ -166,6 +168,7 @@ impl ApfTuner<'_> {
         }
     }
 
+    #[cfg(feature = "show_records")]
     pub fn record(&self) -> Option<Vec<(usize, usize)>> {
         if self.record.is_some() {
             self.record.clone()
@@ -175,6 +178,7 @@ impl ApfTuner<'_> {
     }
 
     #[allow(dead_code)]
+    #[cfg(feature = "show_records")]
     fn show_record(&mut self) {
         match &self.record {
             Some(rec) => {
