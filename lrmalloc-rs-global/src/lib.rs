@@ -120,12 +120,49 @@ pub extern "C" fn aligned_alloc(alignment: usize, size: usize) -> *mut c_void {
     unsafe {
         OVERRIDE_ALIGNED_ALLOC = true;
     }
+    if size % alignment != 0 {
+        return null_mut();
+    }
+    /*
     if cfg!(target_os = "macos") {
-        let alignment = alignment.max(16);
+        let alignment = alignment.max(16); // macos alignment is 16 bytes (?)
+        let size = size.max(alignment); // rewrite size if alignment is larger
         do_aligned_alloc(alignment, size) as *mut c_void
     } else {
         do_aligned_alloc(alignment, size) as *mut c_void
     }
+
+     */
+    do_aligned_alloc(alignment, size) as *mut c_void
+}
+
+
+/// Uses the posix mem align. This is equivalent to aligned_alloc
+///
+/// Returns EINVAL if alignment is not a multiple of sizeof(void*)
+/// Returns ENOMEM is no more memory is available
+#[no_mangle]
+pub extern "C" fn posix_memalign(ptr: *mut *mut std::ffi::c_void, alignment: usize, size: usize) -> i32 {
+    unsafe {
+        OVERRIDE_ALIGNED_ALLOC = true;
+    }
+    if alignment % std::mem::size_of::<usize>() != 0 {
+        return libc::EINVAL;
+    }
+    let out_ptr = if cfg!(target_os = "macos") {
+        let alignment = alignment.max(16);
+        aligned_alloc(alignment, size) as *mut c_void
+    } else {
+        aligned_alloc(alignment, size) as *mut c_void
+    };
+    if ptr.is_null() {
+        return libc::ENOMEM;
+    }
+
+    unsafe {
+        ptr.write(out_ptr);
+    }
+    0
 }
 
 #[no_mangle]
@@ -173,12 +210,12 @@ mod rust_global {
 
     unsafe impl GlobalAlloc for RustAllocator {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            aligned_alloc(layout.align(), layout.size()) as *mut u8
+            do_aligned_alloc(layout.align(), layout.size()) as *mut u8
         }
 
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             let _ = layout;
-            free(ptr as *mut c_void)
+            do_free(ptr as *mut c_void)
         }
 
         unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
@@ -186,7 +223,7 @@ mod rust_global {
         }
 
         unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-            realloc(ptr as *mut c_void, align_val(new_size, layout.align())) as *mut u8
+            do_realloc(ptr as *mut c_void, align_val(new_size, layout.align())) as *mut u8
         }
     }
 }

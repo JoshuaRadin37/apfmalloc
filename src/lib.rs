@@ -174,11 +174,13 @@ fn is_power_of_two(x: usize) -> bool {
     (if x != 0 { true } else { false }) && (if (!(x & (x - 1))) != 0 { true } else { false })
 }
 
+
+
 /// Allocates a space in memory of length `size`, that is aligned to `align`. `align` must be a power of 2.
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
-    if !(is_power_of_two(align) && size % align == 0) {
+    if !is_power_of_two(align) {
         return null_mut();
     }
 

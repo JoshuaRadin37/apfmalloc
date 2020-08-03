@@ -445,6 +445,25 @@ impl<T> IntoIterator for Array<T> {
     }
 }
 
+impl<'a, T> IntoIterator for &'a Array<T> {
+    type Item = &'a T;
+    type IntoIter = ArrayIterator<&'a T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut out: Array<&'a T> = Array::with_capacity(self.len());
+
+        for i in 0..self.len() {
+            let item = self.get(i).unwrap();
+            out.push(item);
+        }
+
+        ArrayIterator {
+            index: 0,
+            array: out
+        }
+    }
+}
+
 impl<T> Deref for Array<T> {
     type Target = [T];
 
@@ -820,5 +839,14 @@ mod test {
         assert_eq!(q.pop_front(), Some(1));
         assert_eq!(q.pop_front(), Some(2));
         assert_eq!(q.pop_front(), None);
+    }
+
+    #[test]
+    fn reference_iterator() {
+        let arr = array![0, 1, 2, 3, 4];
+
+        for (index, i) in (&arr).into_iter().enumerate() {
+            assert_eq!(i, &index);
+        }
     }
 }
