@@ -246,9 +246,10 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 
         let index = compute_index(super_block, head, size_class_index);
 
-        let old_anchor = desc.anchor.load(Ordering::Acquire);
+
         let mut new_anchor: Anchor;
-        loop {
+        let old_anchor = loop {
+            let old_anchor = desc.anchor.load(Ordering::Acquire);
             unsafe {
                 // update avail
                 let next = super_block.offset((old_anchor.avail() * block_size as u64) as isize);
@@ -278,9 +279,9 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
                 .compare_exchange_weak(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
                 .is_ok()
             {
-                break;
+                break old_anchor;
             }
-        }
+        };
 
         if new_anchor.state() == SuperBlockState::EMPTY {
             unregister_desc(Some(heap), desc.super_block.as_ref().unwrap());
