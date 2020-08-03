@@ -485,11 +485,13 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
             desc.retire();
         }
         Some(size_class_index) => {
+            /*
             let force_bootstrap = bootstrap_reserve.lock().ptr_in_bootstrap(ptr)
                 || use_bootstrap()
                 || std::thread::panicking()
                 || (!cfg!(unix) && thread_cache::thread_init.try_with(|_| {}).is_err());
-
+             */
+            let force_bootstrap = false;
             #[cfg(feature = "track_allocation")]
             crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
