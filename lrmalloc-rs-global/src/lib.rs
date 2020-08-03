@@ -3,8 +3,12 @@
 
 extern crate lrmalloc_rs;
 
-pub use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
 use std::ffi::c_void;
+use std::ptr::null_mut;
+
+pub use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
+#[cfg(not(feature = "no-rust"))]
+pub use rust_global::*;
 
 /// Checks if a call to `malloc` use the lrmalloc-rs implementation.
 ///
@@ -152,12 +156,14 @@ pub extern "C" fn check_override() -> u8 {
 
 #[cfg(not(feature = "no-rust"))]
 mod rust_global {
-    use super::*;
-    use lrmalloc_rs::mem_info::align_val;
     use std::alloc::{GlobalAlloc, Layout};
 
+    use lrmalloc_rs::mem_info::align_val;
+
+    use super::*;
+
     /// Allows Rust to use aligned allocation instead of using malloc when calling alloc, as alignment data would be lost. This is important
-    /// for creating the internal structures of the allocator
+        /// for creating the internal structures of the allocator
     pub struct RustAllocator;
 
     /// The global allocator structure
@@ -185,18 +191,17 @@ mod rust_global {
     }
 }
 
-#[cfg(not(feature = "no-rust"))]
-pub use rust_global::*;
-use std::ptr::null_mut;
 
 #[no_mangle]
 #[doc(hidden)]
+#[cfg(feature = "no-rust")]
 pub fn __rust_alloc(size: usize, align: usize) -> *mut u8 {
     aligned_alloc(align, size) as *mut u8
 }
 
 #[no_mangle]
 #[doc(hidden)]
+#[cfg(feature = "no-rust")]
 pub fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
     unsafe {
         OVERRIDE_CALLOC = true;
@@ -212,15 +217,19 @@ pub fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 
 #[no_mangle]
 #[doc(hidden)]
+#[cfg(feature = "no-rust")]
 pub fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
     unsafe { free(ptr as *mut c_void) }
 }
 
 #[no_mangle]
 #[doc(hidden)]
+#[cfg(feature = "no-rust")]
 pub fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: usize) -> *mut u8 {
     unsafe { realloc(ptr as *mut c_void, new_size) as *mut u8 }
 }
+
+
 
 #[cfg(test)]
 mod test {
