@@ -351,6 +351,7 @@ impl Drop for ThreadEmpty {
     /// Flushes all of the [ThreadCacheBins](struct.ThreadCacheBin.html)
     fn drop(&mut self) {
         //info!("Flushing entire thread cache");
+        /*
         thread_cache.with(|tcache| {
             let tcache = unsafe { &mut *tcache.get() };
             for bin_index in 0..tcache.len() {
@@ -363,6 +364,8 @@ impl Drop for ThreadEmpty {
                 }
             }
         });
+
+         */
     }
 }
 // APF Functions
