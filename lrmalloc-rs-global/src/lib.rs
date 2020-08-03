@@ -210,11 +210,13 @@ mod rust_global {
 
     unsafe impl GlobalAlloc for RustAllocator {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            OVERRIDE_ALIGNED_ALLOC = true;
             do_aligned_alloc(layout.align(), layout.size()) as *mut u8
         }
 
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             let _ = layout;
+            OVERRIDE_FREE = true;
             do_free(ptr as *mut c_void)
         }
 
@@ -223,6 +225,7 @@ mod rust_global {
         }
 
         unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            OVERRIDE_REALLOC = true;
             do_realloc(ptr as *mut c_void, align_val(new_size, layout.align())) as *mut u8
         }
     }
