@@ -5,13 +5,10 @@ extern crate bitfield;
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
-use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 
 use atomic::Ordering;
 use spin::Mutex;
-
-pub use bootstrap::set_use_bootstrap;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
@@ -21,7 +18,7 @@ use crate::page_map::S_PAGE_MAP;
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
-use crate::thread_cache::{fill_cache, flush_cache, get_thread_is_bootstrap};
+use crate::thread_cache::{fill_cache, flush_cache};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -63,7 +60,6 @@ pub static IN_CACHE: AtomicUsize = AtomicUsize::new(0);
 pub static IN_BOOTSTRAP: AtomicUsize = AtomicUsize::new(0);
 
 static MALLOC_INIT_S: SingleAccess = SingleAccess::new();
-static MALLOC_INIT: AtomicBool = AtomicBool::new(false);
 
 static mut USE_APF: bool = true;
 
@@ -75,8 +71,6 @@ pub const TRACK_ALLOCATION_LOCATION: bool = false;
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
 unsafe fn init_malloc() {
-    bootstrap_reserve.lock().init();
-
     init_size_class();
 
     S_PAGE_MAP.init();
@@ -86,9 +80,6 @@ unsafe fn init_malloc() {
         USE_APF = false;
     }
 
-    thread_cache::kind_init.with(|_| { });
-
-
     for idx in 0..MAX_SZ_IDX {
         let heap = get_heaps().get_heap_at_mut(idx);
 
@@ -96,8 +87,7 @@ unsafe fn init_malloc() {
         heap.size_class_index = idx;
     }
 
-    set_use_bootstrap(false);
-
+    bootstrap_reserve.lock().init();
 
     //info!("Malloc Initialized")
 }
@@ -141,12 +131,7 @@ pub fn allocate_val<T>(val: T) -> *mut T {
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_malloc(size: usize) -> *mut u8 {
-    //MALLOC_INIT_S.with(|| unsafe { init_malloc() });
-    if !MALLOC_INIT.compare_and_swap(false, true, Ordering::Acquire) {
-        unsafe {
-            init_malloc();
-        }
-    }
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
     /*
     unsafe {
         if !MALLOC_SKIP {
@@ -199,11 +184,7 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
     let mut size = align_size(size, align);
 
-    if !MALLOC_INIT.compare_and_swap(false, true, Ordering::Acquire) {
-        unsafe {
-            init_malloc();
-        }
-    }
+    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -269,12 +250,9 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
     // own local bin
 
     //let id = thread::current();
+    let panic_status = std::thread::panicking();
 
-
-
-    //let panic_status = thread_cache::use_in_bootstrap(std::thread::panicking);
-
-    if use_bootstrap() || thread_cache::use_in_bootstrap(std::thread::panicking) || get_thread_is_bootstrap() {
+    if panic_status || use_bootstrap() {
         // This is a global state, and tells to allocate from the bootstrap cache
         /*
         unsafe {
@@ -333,7 +311,6 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 
         // If we are able to reach this piece of code, we know that the thread local cache is initalized
         let ret = thread_cache::thread_cache.with(|tcache| {
-
             let cache = unsafe {
                 (*tcache.get()).get_mut(size_class_index).unwrap() // Gets the correct bin based on size class index
             };
@@ -421,11 +398,6 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     if ptr.is_null() {
         return do_malloc(size) as *mut c_void;
-    }
-    if !MALLOC_INIT.compare_and_swap(false, true, Ordering::Acquire) {
-        unsafe {
-            init_malloc();
-        }
     }
     let new_size_class = get_size_class(size);
     let old_size = match get_allocation_size(ptr) {

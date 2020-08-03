@@ -9,7 +9,7 @@ use std::ptr::null_mut;
 pub static mut bootstrap_cache: Mutex<[ThreadCacheBin; MAX_SZ_IDX]> =
     Mutex::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
 
-static _use_bootstrap: Mutex<bool> = Mutex::new(true);
+static _use_bootstrap: Mutex<bool> = Mutex::new(false);
 
 pub fn use_bootstrap() -> bool {
     *_use_bootstrap.lock()

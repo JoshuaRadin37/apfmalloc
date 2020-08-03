@@ -1,4 +1,4 @@
-// extern crate lrmalloc_rs;
+extern crate lrmalloc_rs;
 
 use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
 use lrmalloc_rs::{do_aligned_alloc, do_free};
