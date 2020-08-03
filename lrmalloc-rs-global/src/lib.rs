@@ -182,8 +182,8 @@ pub extern "C" fn check_override() -> u8 {
         if !OVERRIDE_CALLOC {
             return 0;
         }
-        do_free(new_ptr);
-        do_free(calloced);
+        free(new_ptr);
+        free(calloced);
         if !OVERRIDE_FREE {
             return 0;
         }
