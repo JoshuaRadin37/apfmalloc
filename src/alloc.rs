@@ -316,8 +316,8 @@ pub fn malloc_count_from_partial(
 
 pub fn malloc_count_from_new_sb(
     size_class_index: usize,
-    _cache: &mut ThreadCacheBin,
-    _block_num: &mut usize,
+    cache: &mut ThreadCacheBin,
+    block_num: &mut usize,
     count: usize,
 ) {
     let heap = get_heaps().get_heap_at_mut(size_class_index);
@@ -336,38 +336,42 @@ pub fn malloc_count_from_new_sb(
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
-    unsafe {
-        *(super_block.add(block_size as usize * max_count - block_size as usize) as *mut usize) =
-            std::usize::MAX;
-    }
+    let c = max_count.min(count);
 
-    // Min of max_count and count
-    let c = match max_count > count {
-        true => count,
-        false => max_count,
-    };
+    #[cfg(not(feature = "no_met_stack"))]
+        {
+            unsafe {
+                // Gets a pointer to the last block and sets it to 0xFF...F
+                let ptr = super_block.add(block_size as usize * c - block_size as usize);
+                *(ptr as *mut usize) = std::usize::MAX;
+            }
+        }
+    #[cfg(feature = "no_met_stack")]
+        {
+            unsafe {
+                // let mut ptr = super_block.add(block_size as usize * max_count - block_size as usize) as *mut *mut u8;
+                let mut last: *mut u8 = null_mut();
+                for block_num in (0..c).rev() {
+                    let current = super_block.add((block_size * block_num) as usize);
+                    *(current as *mut *mut u8) = last;
+                    last = current;
+                    // ptr = current as *mut *mut u8;
+                }
+            }
+        }
 
-    /*
-    for i in 0..c {
-        let block = unsafe { super_block.offset(i as isize * block_size as isize) };
-        _cache.push_block(block);
-        *_block_num += 1;
-    }
-
-     */
+    let block = super_block;
+    cache.push_list(block, c as u32);
 
     let mut anchor: Anchor = Anchor::default();
     anchor.set_avail(c as u64);
-    anchor.set_count(max_count as u64 - c as u64);
-
-    anchor.set_state(match max_count > count {
-        true => SuperBlockState::PARTIAL,
-        false => SuperBlockState::EMPTY,
-    });
+    anchor.set_count(0);
+    anchor.set_state(SuperBlockState::FULL);
 
     desc.anchor.store(anchor, Ordering::SeqCst);
 
     register_desc(desc);
+    *block_num += max_count;
 }
 
 /* END ELIAS CODE */

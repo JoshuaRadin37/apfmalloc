@@ -59,6 +59,7 @@ winapi = { version = "0.3.8", features=["std", "winuser", "heapapi", "ntdef", "w
 [dev-dependencies]
 criterion = "0.3"
 benchmarking-tools = { path = "benchmarking-tools"}
+rand = "0.7.3"
 
 # Show Records depencdency
 

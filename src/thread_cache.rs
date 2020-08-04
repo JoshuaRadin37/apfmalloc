@@ -409,7 +409,7 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
     let cache = &mut thread_cache
         .with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
-    let mut block_num = 100.max(count);
+    let mut block_num = 0;
 
     malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
 

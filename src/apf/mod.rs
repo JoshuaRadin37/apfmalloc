@@ -79,7 +79,8 @@ impl ApfTuner<'_> {
         self.r_counter.inc_timer();
 
         // If out of free blocks, fetch
-        if (self.check)(self.id) == 0 {
+        let free_blocks = (self.check)(self.id);
+        if free_blocks == 0 {
             let demand;
 
             match self.demand(self.calculate_dapf().into()) {
@@ -98,7 +99,7 @@ impl ApfTuner<'_> {
             }
 
             (self.get)(self.id, demand.ceil() as usize);
-            //self.count_fetch();
+            self.count_fetch();
         }
 
         return true;
@@ -132,10 +133,10 @@ impl ApfTuner<'_> {
         true
     }
 
-    #[cfg(feature = "show_records")]
-    #[allow(dead_code)]
+
     fn count_fetch(&mut self) {
         self.fetch_count += 1;
+    #[cfg(feature = "show_records")]
         if self.fetch_count > 1 {
             self.show_record();
         }
