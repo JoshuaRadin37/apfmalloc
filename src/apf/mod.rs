@@ -47,7 +47,7 @@ impl ApfTuner<'_> {
         ApfTuner {
             id,
             l_counter: LivenessCounter::new(),
-            r_counter: ReuseCounter::new(REUSE_BURST_LENGTH, REUSE_HIBERNATION_PERIOD),
+            r_counter: ReuseCounter::new(*REUSE_BURST_LENGTH, *REUSE_HIBERNATION_PERIOD),
             time: 0,
             fetch_count: 0,
             _dapf: 0,
