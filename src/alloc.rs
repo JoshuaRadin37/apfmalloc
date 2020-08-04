@@ -329,14 +329,16 @@ pub fn malloc_count_from_new_sb(
     let block_size = sc.block_size;
     let max_count = sc.get_block_num();
 
+    let c = max_count.min(count);
+
     desc.proc_heap = heap;
     desc.block_size = block_size;
     desc.max_count = max_count as u32;
-    desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.sb_size as usize).ok();
+    desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.block_size as usize * c).ok();
 
     let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
 
-    let c = max_count.min(count);
+
 
     #[cfg(not(feature = "no_met_stack"))]
         {
