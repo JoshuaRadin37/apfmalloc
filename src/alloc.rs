@@ -354,7 +354,7 @@ pub fn malloc_count_from_new_sb(
                 // let mut ptr = super_block.add(block_size as usize * max_count - block_size as usize) as *mut *mut u8;
                 let mut last: *mut u8 = null_mut();
                 for block_num in (0..c).rev() {
-                    let current = super_block.add((block_size * block_num) as usize);
+                    let current = super_block.add((block_size as usize * block_num) as usize);
                     *(current as *mut *mut u8) = last;
                     last = current;
                     // ptr = current as *mut *mut u8;
