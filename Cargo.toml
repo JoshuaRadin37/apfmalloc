@@ -31,7 +31,7 @@ opt-level = 0
 opt-level = 0
 
 [profile.release]
-opt-level = 0
+opt-level = 3
 
 [dependencies]
 bitfield = "0.13.2"
