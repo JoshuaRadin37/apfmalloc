@@ -1,4 +1,4 @@
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier, RwLock};
 use std::thread;

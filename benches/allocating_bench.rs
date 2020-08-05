@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use lrmalloc_rs::{do_free, do_malloc};
+use apfmalloc_lib::{do_free, do_malloc};
 use std::iter::Iterator;
 
 fn allocate_one_thread(c: &mut Criterion) {

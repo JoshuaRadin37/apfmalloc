@@ -1,9 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use lrmalloc_rs::apf::histogram::Histogram;
-use lrmalloc_rs::apf::liveness_counter::LivenessCounter;
-use lrmalloc_rs::apf::reuse_counter::ReuseCounter;
-use lrmalloc_rs::apf::trace::{Event, Trace};
-use lrmalloc_rs::apf::ApfTuner;
+use apfmalloc_lib::apf::histogram::Histogram;
+use apfmalloc_lib::apf::liveness_counter::LivenessCounter;
+use apfmalloc_lib::apf::reuse_counter::ReuseCounter;
+use apfmalloc_lib::apf::trace::{Event, Trace};
+use apfmalloc_lib::apf::ApfTuner;
 
 fn trace_add(c: &mut Criterion) {
     let mut t = Trace::new();

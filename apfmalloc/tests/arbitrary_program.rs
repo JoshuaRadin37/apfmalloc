@@ -1,4 +1,4 @@
-extern crate lrmalloc_rs_global;
+extern crate apfmalloc_lib;
 
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -77,7 +77,7 @@ fn fast_fib_no_fail_global() {
     }
 
     assert!(unsafe {
-        lrmalloc_rs_global::OVERRIDE_MALLOC || lrmalloc_rs_global::OVERRIDE_ALIGNED_ALLOC
+        apfmalloc::OVERRIDE_MALLOC || apfmalloc::OVERRIDE_ALIGNED_ALLOC
     })
 }
 

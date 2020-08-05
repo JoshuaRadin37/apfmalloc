@@ -1,12 +1,12 @@
 //! A package that creates FFI bindings for LRMalloc-rs to C programs. It also includes an Rust Allocator that, which the user can either
 //! disable being set as the global allocator, or not include entirely.
 
-extern crate lrmalloc_rs;
+extern crate apfmalloc_lib;
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
 
-pub use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, do_realloc};
+pub use apfmalloc_lib::{do_aligned_alloc, do_free, do_malloc, do_realloc};
 #[cfg(not(feature = "no-rust"))]
 pub use rust_global::*;
 
@@ -195,7 +195,7 @@ pub extern "C" fn check_override() -> u8 {
 mod rust_global {
     use std::alloc::{GlobalAlloc, Layout};
 
-    use lrmalloc_rs::mem_info::align_val;
+    use apfmalloc_lib::mem_info::align_val;
 
     use super::*;
 

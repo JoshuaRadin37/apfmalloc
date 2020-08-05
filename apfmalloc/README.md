@@ -42,8 +42,8 @@ void* aligned_alloc(size_t alignment, size_t _size);
 
 To link in rust, you 
 
-## The header file: lrmalloc_rs.h
-Optionally, a header file named lrmalloc_rs.h can be included. This is unnecessary to include
+## The header file: apfmalloc.h
+Optionally, a header file named apfmalloc.h can be included. This is unnecessary to include
 in the project if the library, but does expose one additional function, which is also available in the
 rust library. The function `check_override()` will run a few very quick tests to see if the
 correct implementation of `malloc`, `calloc`, etc. are being used.

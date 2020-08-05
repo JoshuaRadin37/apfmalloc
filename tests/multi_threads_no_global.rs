@@ -1,5 +1,5 @@
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-use lrmalloc_rs::{IN_BOOTSTRAP, IN_CACHE};
+use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
+use apfmalloc_lib::{IN_BOOTSTRAP, IN_CACHE};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;

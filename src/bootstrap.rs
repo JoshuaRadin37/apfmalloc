@@ -96,6 +96,7 @@ impl BootstrapReserve {
         ret
     }
 
+    #[allow(unused)]
     pub fn ptr_in_bootstrap<T: ?Sized>(&self, ptr: *const T) -> bool {
         for segment in &self.mem {
             let start = segment.get_ptr() as usize;

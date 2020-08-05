@@ -1,5 +1,5 @@
-use lrmalloc_rs::allocation_data::get_heaps;
-use lrmalloc_rs::{do_free, do_malloc, dump_info};
+use apfmalloc_lib::allocation_data::get_heaps;
+use apfmalloc_lib::{do_free, do_malloc, dump_info};
 use std::sync::atomic::Ordering;
 use std::thread;
 

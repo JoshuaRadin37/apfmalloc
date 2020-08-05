@@ -1,8 +1,8 @@
-extern crate lrmalloc_rs;
+extern crate apfmalloc_lib;
 
 use core::sync::atomic::Ordering;
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-use lrmalloc_rs::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
+use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
+use apfmalloc_lib::{do_aligned_alloc, do_free, IN_BOOTSTRAP, IN_CACHE};
 use std::alloc::{GlobalAlloc, Layout};
 use std::sync::{Arc, Mutex};
 use std::thread;

@@ -1,7 +1,7 @@
-extern crate lrmalloc_rs;
+extern crate apfmalloc_lib;
 
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-use lrmalloc_rs::{do_aligned_alloc, do_free};
+use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
+use apfmalloc_lib::{do_aligned_alloc, do_free};
 use std::alloc::{GlobalAlloc, Layout};
 use std::thread;
 

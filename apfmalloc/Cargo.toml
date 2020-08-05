@@ -1,5 +1,5 @@
 [package]
-name = "lrmalloc-rs-global"
+name = "apfmalloc"
 description = "A package that creates FFI bindings for LRMalloc-rs to C programs. It also includes an Rust Allocator that, which the user can either disable being set as the global allocator, or not include entirely."
 version = "1.2.0"
 authors = ["Joshua Radin <jradin2@u.rochester.edu>"]
@@ -21,7 +21,7 @@ use-hooks = []
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
-lrmalloc-rs = { path = "../"}
+apfmalloc-lib = { path = "../"}
 libc = "0.2.71"
 
 [dev-dependencies]

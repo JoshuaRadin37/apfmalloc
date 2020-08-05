@@ -1,4 +1,4 @@
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
 use std::thread;
 use std::time::{Duration, Instant};
 

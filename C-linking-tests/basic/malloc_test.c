@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "lrmalloc_rs.h"
+#include "apfmalloc.h"
 
 typedef struct tree_node {
 	void* value;

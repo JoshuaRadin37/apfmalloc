@@ -21,7 +21,7 @@ use errno::Errno;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool};
 #[cfg(windows)]
 use winapi::shared::minwindef::LPVOID;
 

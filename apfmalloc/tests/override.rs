@@ -1,4 +1,4 @@
-use lrmalloc_rs_global::{OVERRIDE_ALIGNED_ALLOC, OVERRIDE_CALLOC, OVERRIDE_MALLOC};
+use apfmalloc::{OVERRIDE_ALIGNED_ALLOC, OVERRIDE_CALLOC, OVERRIDE_MALLOC};
 
 #[test]
 fn test() {

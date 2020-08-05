@@ -1,4 +1,4 @@
-use lrmalloc_rs::{do_free, do_malloc};
+use apfmalloc_lib::{do_free, do_malloc};
 use rand::{thread_rng, Rng};
 
 const ALLOCATIONS: usize = 10_000; // _000;

@@ -1,6 +1,6 @@
 use bitfield::size_of;
 use core::ptr::null_mut;
-use lrmalloc_rs::{do_free, do_malloc};
+use apfmalloc_lib::{do_free, do_malloc};
 use std::mem::MaybeUninit;
 use std::thread;
 
@@ -23,7 +23,7 @@ fn create_and_destroy() {
 
 mod mass_stress {
     use super::*;
-    use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
+    use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
 
     #[test]
     fn mass_thread_spawn_stress() {

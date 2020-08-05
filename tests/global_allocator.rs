@@ -1,4 +1,4 @@
-use lrmalloc_rs::{do_aligned_alloc, do_free, do_malloc, IN_BOOTSTRAP};
+use apfmalloc_lib::{do_aligned_alloc, do_free, do_malloc, IN_BOOTSTRAP};
 use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
 use std::collections::HashMap;
@@ -60,7 +60,7 @@ fn mass_stress_no_harness() {
 #[test]
 fn panic_uses_direct_allocation() {
     #[cfg(debug_assertions)]
-    if lrmalloc_rs::TRACK_ALLOCATION_LOCATION {
+    if apfmalloc_lib::TRACK_ALLOCATION_LOCATION {
         let thread = thread::spawn(|| panic!("I'm picnicking!"));
         match thread.join() {
             Ok(_) => panic!("Should result in an error"),

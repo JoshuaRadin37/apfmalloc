@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use lrmalloc_rs::alloc::malloc_from_new_sb;
-use lrmalloc_rs::allocation_data::Descriptor;
-use lrmalloc_rs::mem_info::{MAX_SZ_IDX, PAGE};
-use lrmalloc_rs::pages::{page_alloc, page_free};
-use lrmalloc_rs::ptr::auto_ptr::AutoPtr;
-use lrmalloc_rs::thread_cache::{fill_cache, ThreadCacheBin};
+use apfmalloc_lib::alloc::malloc_from_new_sb;
+use apfmalloc_lib::allocation_data::Descriptor;
+use apfmalloc_lib::mem_info::{MAX_SZ_IDX, PAGE};
+use apfmalloc_lib::pages::{page_alloc, page_free};
+use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
+use apfmalloc_lib::thread_cache::{fill_cache, ThreadCacheBin};
 use std::io::{stdout, Write};
 use std::time::Duration;
 use std::time::Instant;

@@ -96,7 +96,7 @@ unsafe fn init_malloc() {
 ///
 /// # Example
 /// ```
-/// use lrmalloc_rs::allocate_type;
+/// use apfmalloc::allocate_type;
 /// let ptr = allocate_type::<usize>();
 /// unsafe {
 ///     ptr.write(100);

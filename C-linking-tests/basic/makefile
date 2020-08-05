@@ -7,7 +7,7 @@ malloc_test.o: malloc_test.c
 liblrmalloc_rs_global.a: ../../target/debug/liblrmalloc_rs_global.a
 	cp ../../target/debug/liblrmalloc_rs_global.a liblrmalloc_rs_global.a
 
-../../target/debug/liblrmalloc_rs_global.a: ../../*/*.rs ../../lrmalloc-rs-global/src/lib.rs
+../../target/debug/liblrmalloc_rs_global.a: ../../*/*.rs ../../apfmalloc
 	cargo build --manifest-path=../../Cargo.toml --workspace
 
 clean:

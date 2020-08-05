@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 
-extern crate lrmalloc_rs_global;
+extern crate apfmalloc;
 
 pub struct HashedStack<T, H: Hash + Eq = T> {
     stack: VecDeque<T>,
