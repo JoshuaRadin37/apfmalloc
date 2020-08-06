@@ -24,7 +24,7 @@ impl<T> AutoPtr<T> {
     ///
     /// # Example
     /// ```
-    /// use apfmalloc::ptr::auto_ptr::AutoPtr;
+    /// use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
     /// let ptr = AutoPtr::new(100usize);
     /// assert_eq!(*ptr, 100usize);
     /// let value = ptr.take();
@@ -45,9 +45,9 @@ impl<T> AutoPtr<T> {
     ///
     /// # Example
     /// ```
-    /// use apfmalloc::ptr::auto_ptr::AutoPtr;
+    /// use apfmalloc_lib::ptr::auto_ptr::AutoPtr;
     /// use std::ptr::null_mut;
-    /// use apfmalloc::do_free;
+    /// use apfmalloc_lib::do_free;
     /// let mut unsafe_ptr = null_mut();
     /// {
     ///     let ptr = AutoPtr::new(100usize);
