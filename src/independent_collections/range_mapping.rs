@@ -1,3 +1,6 @@
+//! This a range based binary tree, meant to track the page info for pointers without taking exactly
+//! 2 TB of space required by the original implementation of the page map
+
 use crate::page_map::PageInfo;
 use crate::independent_collections::Array;
 use std::ptr::null_mut;
@@ -55,6 +58,19 @@ impl Node {
             None
         }
     }
+
+    pub fn depth(&self) -> usize {
+        match &self.inner {
+            NodeInner::Info(_) => {
+                1
+            },
+            NodeInner::Children { less, more } => {
+                unsafe {
+                    (**less).depth().max((**more).depth())
+                }
+            },
+        }
+    }
 }
 
 enum NodeInner {
@@ -62,6 +78,25 @@ enum NodeInner {
     Children { less: *mut Node, more: *mut Node }
 }
 
+/// A struct that is able to store the information of Page mappings by storing the ranges of pointers
+/// The objective of this struct is to be able to get the [`PageInfo`] of a pointer in `O(log n)` time, where
+/// `n` is the total amount of super blocks allocated
+///
+/// # Example
+/// ```
+/// use apfmalloc_lib::independent_collections::PageRangeMapping;
+/// use apfmalloc_lib::allocation_data::{get_heaps, desc::Descriptor};
+/// use apfmalloc_lib::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator};
+/// let mut page_map = PageRangeMapping::new();
+/// // Optional
+/// page_map.init_with_capacity(100);
+/// let heap = get_heaps().get_heap_at_mut(1);
+/// let ptr = SEGMENT_ALLOCATOR.allocate(4096).unwrap().get_ptr() as *mut u8;
+/// let desc = Descriptor::allocate();
+/// page_map.update_page_map(Some(heap), ptr, Some(desc), 1);
+/// ```
+///
+/// [`PageInfo`]: ../../page_map/struct.PageInfo.html
 pub struct PageRangeMapping {
     head: *mut Node,
     memory_array: Array<Node>
@@ -69,11 +104,19 @@ pub struct PageRangeMapping {
 
 impl PageRangeMapping {
 
+    /// Creates a new `PageRangeMapping` with no capacity
     pub const fn new() -> Self {
         PageRangeMapping {
             head: null_mut(),
             memory_array: Array::new()
         }
+    }
+
+    /// Grows the capacity of the backing array to `(self.capacity() + 1) * 2`
+    pub fn grow(&mut self) -> usize {
+        let new_capacity = (self.capacity() + 1) * 2;
+        self.memory_array.reserve(new_capacity);
+        self.capacity()
     }
 
     pub fn init_with_capacity(&mut self, capacity: usize) {
@@ -176,7 +219,38 @@ impl PageRangeMapping {
         }
     }
 
+    pub fn capacity(&self) -> usize {
+        self.memory_array.capacity()
+    }
 
+    pub fn len(&self) -> usize {
+        self.memory_array.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.memory_array.is_empty()
+    }
+
+    pub fn depth(&self) -> usize {
+        if !self.head.is_null() {
+            unsafe {
+                (*self.head).depth()
+            }
+        } else {
+            0
+        }
+    }
+
+
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn collection_grows() {
+
+    }
 }
 
 

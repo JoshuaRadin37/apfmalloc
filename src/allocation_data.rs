@@ -8,8 +8,8 @@ pub enum SuperBlockState {
     EMPTY,
 }
 
-mod desc;
-mod proc_heap;
+pub mod desc;
+pub mod proc_heap;
 pub use desc::{Descriptor, DescriptorNode};
 pub use proc_heap::{get_heaps, Heaps, ProcHeap};
 

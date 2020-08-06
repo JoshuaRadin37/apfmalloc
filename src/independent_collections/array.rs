@@ -307,6 +307,10 @@ impl<T> Array<T> {
     pub fn capacity(&self) -> usize {
         self.array.capacity()
     }
+
+    pub fn reserve(&mut self, new_capacity: usize) {
+        self.array.reserve(new_capacity);
+    }
 }
 
 impl Array<u8> {
