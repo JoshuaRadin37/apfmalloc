@@ -43,7 +43,7 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     }
 }
 
-pub fn list_push_partial(desc: &'static mut Descriptor) {
+pub fn list_push_partial(desc: &'static Descriptor) {
     //info!("Pushing descriptor (Count = {}) to heap", desc.anchor.load(Ordering::Acquire).count());
     let heap = desc.proc_heap;
     let list = unsafe { &(*heap).partial_list };
@@ -116,7 +116,7 @@ pub fn list_push_partial(desc: &'static mut Descriptor) {
     }
 }
 
-pub fn heap_push_partial(desc: &'static mut Descriptor) {
+pub fn heap_push_partial(desc: &'static Descriptor) {
     list_push_partial(desc)
 }
 

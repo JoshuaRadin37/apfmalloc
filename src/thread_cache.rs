@@ -233,13 +233,35 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
 
         let mut block_count = 1;
         while cache.get_block_num() > block_count {
-            let ptr = unsafe { *(tail as *mut *mut u8) };
-            if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
-                break;
-            }
+            if cfg!(feature = "no_met_stack") || cache.block_size.is_none() || cache.block_size == Some(0)
+            {
+                let ptr = unsafe { *(tail as *mut *mut u8) };
+                if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
+                    break;
+                }
 
-            block_count += 1;
-            tail = ptr;
+                block_count += 1;
+                tail = ptr;
+            } else {
+                // let ptr = tail as *mut usize;
+                unsafe {
+                    if (*(tail as *mut *mut u8)).is_null() {
+                        tail = tail.add(cache.block_size.unwrap() as usize);
+                        block_count += 1;
+                    } else if *(tail as *const usize) == std::usize::MAX {
+                        block_count += 1;
+                        break;
+                    } else {
+                        let ptr = *(tail as *mut *mut u8);
+                        if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
+                            break;
+                        }
+
+                        block_count += 1;
+                        tail = ptr;
+                    }
+                }
+            }
         }
         //info!("Reclaiming {} blocks", block_count);
         cache.pop_list(unsafe { *(tail as *mut *mut u8) }, block_count);
@@ -351,7 +373,7 @@ impl Drop for ThreadEmpty {
     /// Flushes all of the [ThreadCacheBins](struct.ThreadCacheBin.html)
     fn drop(&mut self) {
         //info!("Flushing entire thread cache");
-        /*
+
         thread_cache.with(|tcache| {
             let tcache = unsafe { &mut *tcache.get() };
             for bin_index in 0..tcache.len() {
@@ -365,7 +387,6 @@ impl Drop for ThreadEmpty {
             }
         });
 
-         */
     }
 }
 // APF Functions
@@ -415,11 +436,11 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
 
     // Handles no partial block and insufficient partial block cases
     // Shouldn't need to loop more than once unless fetching *really* large count
-    while block_num < count {
+    if block_num == 0 {
         malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
     }
 
-    return false;
+    return block_num > 0;
 }
 
 fn ret(size_class_index: usize, count: u32) -> bool {

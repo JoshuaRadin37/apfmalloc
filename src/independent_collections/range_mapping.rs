@@ -92,7 +92,7 @@ enum NodeInner {
 /// page_map.init_with_capacity(100);
 /// let heap = get_heaps().get_heap_at_mut(1);
 /// let ptr = SEGMENT_ALLOCATOR.allocate(4096).unwrap().get_ptr() as *mut u8;
-/// let desc = Descriptor::allocate();
+/// let desc = unsafe { &mut *Descriptor::alloc() };
 /// page_map.update_page_map(Some(heap), ptr, Some(desc), 1);
 /// ```
 ///
