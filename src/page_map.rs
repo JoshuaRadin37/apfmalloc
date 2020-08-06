@@ -176,7 +176,8 @@ impl PageMap<'_> {
         // assert_eq!(size_of::<PageInfo>(), size_of::<PageInfo>());
         // println!("PageInfo size = {:?}", size_of::<PageInfo>());
         // println!("PM_SZ = {:?}", PM_SZ);
-        let map = page_alloc_over_commit(PM_SZ as usize);
+        let size = PM_SZ as usize;
+        let map = page_alloc_over_commit(size);
         match map {
             Ok(map) => {
                 let ptr = map as *mut Atomic<PageInfo>;

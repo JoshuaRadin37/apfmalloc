@@ -38,7 +38,6 @@ pub mod independent_collections;
 pub mod info_dump;
 #[allow(unused)]
 pub mod mem_info;
-#[doc(hidden)]
 pub mod page_map;
 pub mod pages;
 pub mod single_access;
