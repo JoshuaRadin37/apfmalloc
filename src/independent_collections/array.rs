@@ -26,7 +26,7 @@ impl<T> RawArray<T> {
     }
 
     pub fn reserve(&mut self, new_capacity: usize) {
-        if self.segment.is_some() && new_capacity < self.capacity() {
+        if new_capacity == 0 || self.segment.is_some() && new_capacity < self.capacity() {
             return;
         }
 

@@ -1,4 +1,5 @@
 #![allow(non_upper_case_globals)]
+#![deny(unused_imports)]
 
 #[macro_use]
 extern crate bitfield;
@@ -12,9 +13,8 @@ use spin::Mutex;
 
 use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update_page_map};
 use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
-use crate::bootstrap::{bootstrap_reserve, use_bootstrap};
+use crate::bootstrap::{bootstrap_reserve, use_bootstrap, set_use_bootstrap};
 use crate::mem_info::{align_addr, align_size, MAX_SZ, MAX_SZ_IDX, PAGE};
-use crate::page_map::S_PAGE_MAP;
 use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
@@ -70,9 +70,16 @@ pub const TRACK_ALLOCATION_LOCATION: bool = false;
 /// Initializes malloc. Only needs to ran once for the entire program, and manually running it again will cause all of the memory saved
 /// in the central reserve to be lost
 unsafe fn init_malloc() {
+    bootstrap_reserve.lock().init();
+
     init_size_class();
 
-    S_PAGE_MAP.init();
+    // S_PAGE_MAP.init();
+    /*
+    let mut guard = RANGE_PAGE_MAP.write().unwrap();
+    guard.init_with_capacity(PAGE / std::mem::size_of::<PageInfo>());
+     */
+
 
     let option = option_env!("USE_APF");
     if option == Some("false") {
@@ -86,8 +93,7 @@ unsafe fn init_malloc() {
         heap.size_class_index = idx;
     }
 
-    bootstrap_reserve.lock().init();
-
+    set_use_bootstrap(false);
     //info!("Malloc Initialized")
 }
 
@@ -130,7 +136,14 @@ pub fn allocate_val<T>(val: T) -> *mut T {
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_malloc(size: usize) -> *mut u8 {
-    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
+    let mut ret = null_mut();
+    MALLOC_INIT_S.with_else(
+        || unsafe { init_malloc() },
+        || unsafe { ret = bootstrap_reserve.lock().allocate(size) }
+    );
+    if !ret.is_null() {
+        return ret;
+    }
     /*
     unsafe {
         if !MALLOC_SKIP {
@@ -184,8 +197,14 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     }
 
     let mut size = align_size(size, align);
-
-    MALLOC_INIT_S.with(|| unsafe { init_malloc() });
+    let mut ret = null_mut();
+    MALLOC_INIT_S.with_else(
+        || unsafe { init_malloc() },
+        || unsafe { ret = bootstrap_reserve.lock().allocate(size) }
+    );
+    if !ret.is_null() {
+        return ret;
+    }
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -223,7 +242,14 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
         if need_more_pages {
             ptr = align_addr(ptr as usize, align) as *mut u8;
 
-            update_page_map(None, ptr, Some(desc), 0);
+            unsafe {
+                /*
+                let mut guard = RANGE_PAGE_MAP.write().unwrap();
+                guard.update_page_map(None, ptr, Some(desc), 0);
+
+                 */
+                update_page_map(None, ptr, Some(desc), 0);
+            }
         }
 
         return ptr;
@@ -323,16 +349,16 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
                 }
             }
             #[cfg(feature = "track_allocation")]
-            {
-                let ret = cache.pop_block();
-                let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
-                crate::info_dump::log_malloc(size);
-                #[cfg(feature = "show_all_allocations")]
-                dump_info!();
-                ret
-            }
+                {
+                    let ret = cache.pop_block();
+                    let size = get_allocation_size(ret as *const c_void).unwrap() as usize;
+                    crate::info_dump::log_malloc(size);
+                    #[cfg(feature = "show_all_allocations")]
+                    dump_info!();
+                    ret
+                }
             #[cfg(not(feature = "track_allocation"))]
-            let ptr = cache.pop_block(); // Pops the block from the thread cache bin
+                let ptr = cache.pop_block(); // Pops the block from the thread cache bin
 
             /* WARNING -- ELIAS CODE -- WARNING */
 
@@ -445,8 +471,11 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
 ///
 /// If a pointer has already been freed, a second free to that pointer will cause undefined behavior, and likely a SEGFAULT
 pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
-    if ptr.is_null() {
-        return;
+    {
+        let bootstrap = bootstrap_reserve.lock();
+        if ptr.is_null() || bootstrap.ptr_in_bootstrap(ptr) {
+            return;
+        }
     }
     let info = get_page_info_for_ptr(ptr);
     let desc = &mut *match info.get_desc() {
@@ -455,7 +484,7 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
             // #[cfg(debug_assertions)]
             // println!("Free failed at {:?}", ptr);
             return; // todo: Band-aid fix
-                    // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
+            // panic!("Descriptor not found for the pointer {:x?} with page info {:?}", ptr, info);
         }
     };
 
@@ -492,7 +521,7 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
              */
             let force_bootstrap = false;
             #[cfg(feature = "track_allocation")]
-            crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
+                crate::info_dump::log_free(get_allocation_size(ptr as *const c_void).unwrap() as usize);
             #[cfg(feature = "show_all_allocations")]
             dump_info!();
 
@@ -520,8 +549,8 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
                 // Should always be initialized at this point
                 if USE_APF
                     && thread_cache::apf_init
-                        .try_with(|init| *init.borrow())
-                        .unwrap_or(false)
+                    .try_with(|init| *init.borrow())
+                    .unwrap_or(false)
                 {
                     let _r1 = thread_cache::skip_tuners
                         .try_with(|b| {

@@ -7,12 +7,15 @@ use crate::independent_collections::Array;
 use crate::mem_info::MAX_SZ_IDX;
 use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 use crate::thread_cache::ThreadCacheBin;
+// use crate::page_map::RANGE_PAGE_MAP;
+// use crate::allocation_data::Descriptor;
+// use std::ffi::c_void;
 
 #[allow(unused)]
 pub static mut bootstrap_cache: Mutex<[ThreadCacheBin; MAX_SZ_IDX]> =
     Mutex::new([ThreadCacheBin::new(); MAX_SZ_IDX]);
 
-static _use_bootstrap: Mutex<bool> = Mutex::new(false);
+static _use_bootstrap: Mutex<bool> = Mutex::new(true);
 
 pub fn use_bootstrap() -> bool {
     *_use_bootstrap.lock()
@@ -91,6 +94,20 @@ impl BootstrapReserve {
         }
 
         let ret = self.next;
+        /*
+        let mut guard = RANGE_PAGE_MAP.write();
+        let desc = &mut *Descriptor::alloc();
+        desc.block_size = size as u32;
+        desc.max_count = 1;
+        desc.super_block = Some(Segment::new(ret as *mut c_void, size));
+        guard.update_page_map(
+            None,
+            ret,
+            Some(desc),
+            0
+        );
+
+         */
         self.next = self.next.offset(size as isize);
         self.avail -= size;
         ret

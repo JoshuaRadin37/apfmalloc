@@ -2,13 +2,14 @@ use crate::allocation_data::{
     get_heaps, Anchor, Descriptor, DescriptorNode, ProcHeap, SuperBlockState,
 };
 use crate::mem_info::{PAGE, PAGE_MASK};
-use crate::page_map::{PageInfo, S_PAGE_MAP};
+use crate::page_map::{PageInfo, RANGE_PAGE_MAP};
 use crate::size_classes::SIZE_CLASSES;
 use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
 use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use std::process::exit;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
     let list = &heap.partial_list;
@@ -378,7 +379,15 @@ pub fn malloc_count_from_new_sb(
 
 /* END ELIAS CODE */
 
-pub fn update_page_map(
+use crate::page_map::HASH_PAGE_MAP;
+///
+/// Updates the page map for a pointer
+///
+/// # Safety
+///
+/// Inherently unsafe, as it's updating raw pointers
+///
+pub unsafe fn update_page_map(
     heap: Option<&mut ProcHeap>,
     ptr: *mut u8,
     desc: Option<&mut Descriptor>,
@@ -395,7 +404,13 @@ pub fn update_page_map(
     );
     if heap.is_none() {
         unsafe {
-            S_PAGE_MAP.set_page_info(ptr, info);
+            // S_PAGE_MAP.set_page_info(ptr, info);
+            /*
+            let mut guard = RANGE_PAGE_MAP.write().unwrap();
+            guard.set_page_info(ptr, info);
+
+             */
+            HASH_PAGE_MAP.set_page_info(ptr, info);
             return;
         }
     }
@@ -408,9 +423,8 @@ pub fn update_page_map(
         "sb_size must be a multiple of a page"
     );
     for index in 0..(sb_size / PAGE as u32) {
-        unsafe {
-            S_PAGE_MAP.set_page_info(ptr.offset((index * PAGE as u32) as isize), info.clone())
-        }
+        //S_PAGE_MAP.set_page_info(ptr.add(index as usize), info.clone())
+        HASH_PAGE_MAP.set_page_info(ptr.add((index as usize) * PAGE), info);
     }
 }
 
@@ -422,16 +436,59 @@ pub fn register_desc(desc: &mut Descriptor) {
     };
     let ptr = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
     let size_class_index = 0;
-    update_page_map(heap, ptr, Some(desc), size_class_index);
+    unsafe {
+        /*
+        let mut guard = RANGE_PAGE_MAP.write().unwrap();
+        guard.update_page_map(heap, ptr, Some(desc), size_class_index);
+
+         */
+        update_page_map(heap, ptr, Some(desc), size_class_index);
+    }
 }
 
 pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: &Segment) {
-    update_page_map(heap, super_block.get_ptr() as *mut u8, None, 0)
+    unsafe {
+        /*
+        let mut guard = RANGE_PAGE_MAP.write().unwrap();
+        guard.update_page_map(heap, super_block.get_ptr() as *mut u8, None, 0)
+
+         */
+        update_page_map(heap, super_block.get_ptr() as *mut u8, None, 0)
+    }
 }
 
 pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> PageInfo {
-    unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
+    //unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
+    unsafe {
+        /*
+        let guard = RANGE_PAGE_MAP.read().unwrap();
+        PageInfoWrapper(ptr, guard.get_page_info(ptr).map(|p| p.clone()))
+
+         */
+        HASH_PAGE_MAP.get_page_info(ptr)
+    }
 }
+
+pub struct PageInfoWrapper<T : ?Sized>(*const T, Option<PageInfo>);
+
+impl <T : ?Sized> PageInfoWrapper<T> {
+
+    pub fn unwrap(self) -> PageInfo {
+        match self.1 {
+            None => {
+                let guard = RANGE_PAGE_MAP.read().unwrap();
+                eprintln!("Failed to get page info for {}", self.0 as *mut u8 as usize);
+                eprintln!("Page Map Full Range: {:?}", guard.address_range());
+                exit(-1);
+            },
+            Some(page) => {
+                page
+            },
+        }
+    }
+}
+
+
 
 macro_rules! size_classes_match {
 /*

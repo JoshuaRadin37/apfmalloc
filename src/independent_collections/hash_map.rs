@@ -6,6 +6,8 @@ use std::hash::BuildHasherDefault;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::iter::Iterator;
 use std::ops::{Index, IndexMut};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicU32;
 
 struct Bucket<K, V>
 where
@@ -45,6 +47,8 @@ where
     inner: HashMapInner<K, V>,
     containers_used: usize,
     len: usize,
+    growing: AtomicBool,
+    writers: AtomicU32
 }
 
 impl<K: Eq + Hash, V> Debug for HashMap<K, V> {
@@ -69,6 +73,8 @@ where
             inner: HashMapInner { buckets: buckets },
             containers_used: 0,
             len: 0,
+            growing: AtomicBool::new(false),
+            writers: AtomicU32::new(0)
         }
     }
 
@@ -96,11 +102,21 @@ where
     }
 
     fn grow(&mut self) {
-        let mut new_array = Array::new();
+
+        while self.growing.compare_and_swap(false, true, Ordering::AcqRel) {
+            // get growing status
+        }
+        while self.writers.load(Ordering::Acquire) > 0{
+            // wait for writers to finish
+        }
+        let new_array = Array::of_size_using(|| Array::new(), self.inner.buckets.len() * 2 + 1);
         let new_capacity = self.inner.buckets.len() * 2 + 1;
+        /*
         for _ in 0..new_capacity {
             new_array.push(Array::new())
         }
+
+         */
 
         let old = std::mem::replace(&mut self.inner, HashMapInner { buckets: new_array });
 
@@ -118,6 +134,7 @@ where
                 array.push(bucket);
             }
         }
+        self.growing.store(false, Ordering::Release);
     }
 
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
@@ -126,6 +143,7 @@ where
     }
 
     pub fn insert_keep_key(&mut self, key: K, value: V) -> (Option<V>, &K) {
+        self.wait_for_end_grow();
         {
             if self.len() >= self.inner.buckets.len() / 2 && self.spread() < 0.5
                 || self.len() == self.inner.buckets.len() - 1
@@ -133,6 +151,7 @@ where
                 self.grow();
             }
         }
+        self.writers.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
         let buckets = &mut self.inner.buckets[hash as usize];
         if buckets.len() == 0 {
@@ -147,7 +166,7 @@ where
         }
 
         self.len += 1;
-        match old_index {
+        let ret = match old_index {
             None => {
                 let bucket = Bucket { hash, key, value };
                 buckets.push(bucket);
@@ -158,11 +177,14 @@ where
                 let val = std::mem::replace(&mut bucket.value, value);
                 (Some(val), &bucket.key)
             }
-        }
+        };
+        self.writers.fetch_sub(1, Ordering::AcqRel);
+        ret
     }
 
     /// Inserts the key value pair only if the key was already present in the map
     pub fn replace(&mut self, key: K, value: V) -> Result<V, ()> {
+        self.writers.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
         let buckets = &mut self.inner.buckets[hash as usize];
         let mut old_index = None;
@@ -172,17 +194,20 @@ where
             }
         }
 
-        match old_index {
+        let ret = match old_index {
             None => Err(()),
             Some(old_index) => {
                 let bucket = &mut buckets[old_index];
                 let val = std::mem::replace(&mut bucket.value, value);
                 Ok(val)
             }
-        }
+        };
+        self.writers.fetch_sub(1, Ordering::AcqRel);
+        ret
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
+        self.wait_for_end_grow();
         let hash = self.get_hash(key);
         let buckets = &self.inner.buckets[hash as usize];
         for bucket in buckets.iter() {
@@ -193,6 +218,7 @@ where
         None
     }
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        self.wait_for_end_grow();
         let hash = self.get_hash(key);
         let buckets = &mut self.inner.buckets[hash as usize];
         for bucket in buckets.iter_mut() {
@@ -204,7 +230,9 @@ where
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
+        self.writers.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
+
         let buckets = &mut self.inner.buckets[hash as usize];
         let mut old_index = None;
         for (index, bucket) in buckets.iter().enumerate() {
@@ -213,16 +241,19 @@ where
             }
         }
         self.len -= 1;
-        match old_index {
+        let ret = match old_index {
             None => None,
             Some(index) => {
                 let bucket = buckets.remove(index).unwrap();
                 Some(bucket.value)
             }
-        }
+        };
+        self.writers.fetch_sub(1, Ordering::AcqRel);
+        ret
     }
 
     pub fn contains(&self, key: &K) -> bool {
+        self.wait_for_end_grow();
         let hash = self.get_hash(&key);
         let buckets = &self.inner.buckets[hash as usize];
         for bucket in buckets.iter() {
@@ -237,6 +268,14 @@ where
         self.len == 0
     }
 
+    fn wait_for_end_grow(&self) {
+        while self.growing.load(Ordering::Relaxed) {}
+    }
+
+
+}
+
+impl <'a, K: Hash + Eq + Clone, V> HashMap<K, V> {
     pub fn entry(&mut self, key: K) -> HashMapEntry<'_, K, V> {
         HashMapEntry::get_from_map(self, key)
     }
@@ -253,17 +292,21 @@ pub struct HashMapEntry<'a, K: Hash + Eq, V> {
     entry: HashMapEntryInner,
 }
 
-impl<'a, K: Hash + Eq, V> HashMapEntry<'a, K, V> {
+impl<'a, K: Hash + Eq + Clone, V> HashMapEntry<'a, K, V> {
     fn get_from_map(map: &'a mut HashMap<K, V>, key: K) -> HashMapEntry<'a, K, V> {
+        map.wait_for_end_grow();
         let hash = map.get_hash(&key);
         let entry = match map.inner.buckets[hash as usize]
             .iter()
             .position(|bucket| &bucket.key == &key)
         {
             None => HashMapEntryInner::NotPresent,
-            Some(index) => HashMapEntryInner::Present {
-                bucket: hash as usize,
-                index,
+            Some(index) => {
+                map.writers.fetch_add(1, Ordering::AcqRel);
+                HashMapEntryInner::Present {
+                    bucket: hash as usize,
+                    index,
+                }
             },
         };
 
@@ -273,6 +316,9 @@ impl<'a, K: Hash + Eq, V> HashMapEntry<'a, K, V> {
     pub fn or_insert(self, value: V) -> &'a mut V {
         match self.entry {
             HashMapEntryInner::Present { bucket, index } => unsafe {
+
+                self.map.writers.fetch_sub(1, Ordering::AcqRel);
+
                 &mut self
                     .map
                     .inner
@@ -283,12 +329,8 @@ impl<'a, K: Hash + Eq, V> HashMapEntry<'a, K, V> {
             },
             HashMapEntryInner::NotPresent => {
                 let map = self.map;
-                let key = unsafe {
-                    let ptr = map.insert_keep_key(self.key, value).1 as *const K as *mut K;
-                    &*ptr
-                };
-
-                map.get_mut(key).unwrap()
+                map.insert(self.key.clone(), value);
+                map.get_mut(&self.key).unwrap()
             }
         }
     }
@@ -307,6 +349,8 @@ impl<K: Hash + Eq, V> IndexMut<&K> for HashMap<K, V> {
         self.get_mut(&index).expect("Key not present in map")
     }
 }
+
+
 
 pub struct HashSet<K: Hash + Eq>(HashMap<K, ()>);
 

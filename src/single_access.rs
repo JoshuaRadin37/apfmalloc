@@ -31,6 +31,22 @@ impl SingleAccessInternal {
         }
     }
 
+    pub fn with_else<F1, F2>(&mut self, func: F1, e: F2)
+        where
+            F1: FnOnce(),
+            F2: FnOnce(),
+    {
+        if !self.skip {
+            if !self.access.compare_and_swap(false, true, Ordering::Acquire) {
+                func();
+                self.wait = false;
+                self.skip = true;
+            } else {
+                e();
+            }
+        }
+    }
+
     fn with_then<F1, F2>(&mut self, func: F1, after: F2)
     where
         F1: FnOnce(),
@@ -67,12 +83,29 @@ impl SingleAccess {
     ///
     /// While multiple threads are within this function, they are spin locked until the executing thread completes the function
     /// # Panic
-    /// If the execuitng thread panics while other threads are within this function, they will never be released.
+    /// If the executng thread panics while other threads are within this function, they will never be released.
     pub fn with<F>(&self, func: F)
     where
         F: FnOnce(),
     {
         unsafe { (*self.internal.get()).with(func) }
+    }
+
+    /// When multiple threads have access to the same same `SingleAccess` struct, only one thread will ever execute the
+    /// the `func`tion. This ensured initially atomically, then un-atomically after the function has completed.
+    ///
+    /// If a thread attempts to access the single access while it's waiting, but not after skipping, `e` will
+    /// execute
+    ///
+    /// While multiple threads are within this function, they are spin locked until the executing thread completes the function
+    /// # Panic
+    /// If the execuitng thread panics while other threads are within this function, they will never be released.
+    pub fn with_else<F1, F2>(&self, func: F1, e: F2)
+        where
+            F1: FnOnce(),
+            F2: FnOnce(),
+    {
+        unsafe { (*self.internal.get()).with_else(func, e) }
     }
 
     /// When multiple threads have access to the same same `SingleAccess` struct, only one thread will ever execute the
