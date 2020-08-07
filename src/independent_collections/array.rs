@@ -1,4 +1,4 @@
-use crate::mem_info::align_val;
+use crate::mem_info::{align_size};
 use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -33,7 +33,7 @@ impl<T> RawArray<T> {
         }
 
         let initial_size = new_capacity * std::mem::size_of::<T>();
-        let actual_size = align_val(initial_size, std::mem::align_of::<T>());
+        let actual_size = align_size(initial_size, std::mem::align_of::<T>());
         let new_ptr = SEGMENT_ALLOCATOR.allocate(actual_size).unwrap();
         match &mut self.segment {
             None => {

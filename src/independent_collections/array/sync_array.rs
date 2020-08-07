@@ -3,10 +3,33 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::ops::{Index, IndexMut, Deref};
 use std::iter::FromIterator;
 use std::fmt::{Debug, Formatter};
-use crate::ptr::auto_ptr::AutoPtr;
+use crate::ptr::auto_ptr::{AutoPtr, AlignedAllocator};
+use crate::mem_info::{align_size};
+use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
+use std::ffi::c_void;
+
+pub struct IndependentAllocator;
+
+impl AlignedAllocator for IndependentAllocator {
+    fn aligned_alloc(align: usize, size: usize) -> *mut u8 {
+        let actual_size = align_size(size, align);
+        let new_ptr = SEGMENT_ALLOCATOR.allocate(actual_size).unwrap();
+        new_ptr.get_ptr() as *mut u8
+    }
+
+    unsafe fn free<T>(ptr: *mut T) {
+        let size = align_size(std::mem::size_of::<T>(), std::mem::align_of::<T>());
+        let segment =
+            Segment::new(
+                ptr as *mut c_void,
+                size
+            );
+        SEGMENT_ALLOCATOR.deallocate(segment);
+    }
+}
 
 pub struct SyncArray<T> {
-    array: Array<AutoPtr<T>>,
+    array: Array<AutoPtr<T, IndependentAllocator>>,
     growing: AtomicBool,
     writers: AtomicU32
 }
@@ -19,7 +42,7 @@ impl<T: Default> SyncArray<T> {
     pub unsafe fn from_ptr(ptr: *mut T, length: usize) -> Self {
         let array = Array::from_ptr(ptr, length);
         Self {
-            array: array.into_iter().map(|s| AutoPtr::new(s)).collect(),
+            array: array.into_iter().map(|s| AutoPtr::with_allocator(s)).collect(),
             growing: Default::default(),
             writers: Default::default()
         }
@@ -71,7 +94,7 @@ impl<T> SyncArray<T> {
             F: Fn() -> T,
     {
         let mut ret = Self {
-            array: Array::of_size_using(|| AutoPtr::new(default()), size),
+            array: Array::of_size_using(|| AutoPtr::with_allocator(default()), size),
             growing: Default::default(),
             writers: Default::default()
         };
@@ -101,9 +124,10 @@ impl<T> SyncArray<T> {
     }
 
     pub fn push(&mut self, val: T) {
+        self.wait_for_end_grow();
         let capacity = self.array.capacity();
         if self.len() >= capacity {
-            while self.growing.compare_and_swap(false, true, Ordering::AcqRel) {
+            while self.growing.compare_and_swap(false, true, Ordering::Release) {
                 // get growing status
             }
             while self.writers.load(Ordering::Acquire) > 0{
@@ -112,10 +136,11 @@ impl<T> SyncArray<T> {
 
             let new_size = if self.array.size > 0 { self.array.size * 2 } else { 1 };
             self.array.reserve(new_size);
+            self.growing.store(false, Ordering::Release);
         }
         with_write!(
             &self.writers,
-            self.array.push(AutoPtr::new(val))
+            self.array.push(AutoPtr::with_allocator(val))
         )
     }
 
@@ -140,7 +165,7 @@ impl<T> SyncArray<T> {
     pub fn swap(&mut self, index: usize, val: T) -> Option<T> {
         self.wait_for_end_grow();
         with_write!(&self.writers, {
-            let ret = self.array.swap(index, AutoPtr::new(val));
+            let ret = self.array.swap(index, AutoPtr::with_allocator(val));
             ret.map(|ptr| ptr.take())
         })
     }
@@ -164,6 +189,12 @@ impl<T> SyncArray<T> {
         self.wait_for_end_grow();
         self.into_iter()
     }
+
+    pub fn iter_mut(&mut self) -> ArrayIterator<&mut T> {
+        self.wait_for_end_grow();
+        self.into_iter()
+    }
+
 
 
     pub fn capacity(&self) -> usize {
@@ -252,6 +283,28 @@ impl<'a, T> IntoIterator for &'a SyncArray<T> {
         for i in 0..self.len() {
             let item = self.get(i).unwrap();
             out.push(item);
+        }
+
+        ArrayIterator {
+            index: 0,
+            array: out
+        }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut SyncArray<T> {
+    type Item = &'a mut T;
+    type IntoIter = ArrayIterator<&'a mut T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut out: SyncArray<&'a mut T> = SyncArray::with_capacity(self.len());
+
+        for i in 0..self.len() {
+            let item = unsafe {
+                let auto = self.array.get_unchecked_mut(i);
+                &mut *auto.get_ptr_mut()
+            };
+            out.push(item)
         }
 
         ArrayIterator {

@@ -1,23 +1,73 @@
-use crate::{do_aligned_alloc, do_free};
+use crate::{do_free, do_aligned_alloc};
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::drop_in_place;
+use std::marker::PhantomData;
 
-/// Similar to Box, but directly calls the [`do_aligned_alloc`](fn.do_aligned_alloc.html) and free for dropping
-pub struct AutoPtr<T> {
-    data: *mut T,
+pub trait AlignedAllocator {
+
+    fn aligned_alloc(align: usize, size: usize) -> *mut u8;
+    unsafe fn free<T>(ptr: * mut T);
 }
 
-impl<T> AutoPtr<T> {
+pub struct DefaultAlignedAllocator;
+impl AlignedAllocator for DefaultAlignedAllocator {
+    fn aligned_alloc(align: usize, size: usize) -> *mut u8 {
+        do_aligned_alloc(align, size)
+    }
+    unsafe fn free<T>(ptr: * mut T) {
+        do_free(ptr)
+    }
+}
+
+
+/// Similar to Box, but directly calls the [`do_aligned_alloc`](fn.do_aligned_alloc.html) and free for dropping
+pub struct AutoPtr<T, A : AlignedAllocator = DefaultAlignedAllocator> {
+    data: *mut T,
+    _phantom: PhantomData<A>
+}
+
+impl <T> AutoPtr<T> {
     /// Creates a new AutoPtr
     pub fn new(data: T) -> Self {
-        let ptr = do_aligned_alloc(std::mem::align_of::<T>(), std::mem::size_of::<T>()) as *mut T;
+        let ptr = DefaultAlignedAllocator::aligned_alloc(std::mem::align_of::<T>(), std::mem::size_of::<T>()) as *mut T;
+        if ptr.is_null() {
+            panic!("Failed to allocate to the heap")
+        }
         unsafe {
             ptr.write(data);
         }
-        Self { data: ptr }
+        Self { data: ptr, _phantom: PhantomData::default() }
+    }
+
+    /// Turns an un-managed pointer into a managed one
+    ///
+    /// # Safety
+    /// This function is unsafe because we can't guarantee that the pointer goes to a valid object
+    /// of type T, or that the pointer doesn't point to de-allocated space.
+    ///
+    /// For this function to have safe behavior, it must be assured that the un-managed pointer is never used
+    /// after this function is called on it, or at least the un-managed pointer isn't used after the scope of
+    /// the AutoPtr is finished. This causes data pointed to by the un-managed pointer to be freed, and potentially
+    /// double freed as a result
+    pub unsafe fn from_ptr(ptr: *mut T) -> Self {
+        Self { data: ptr, _phantom: PhantomData::default() }
+    }
+}
+
+impl<T, A : AlignedAllocator> AutoPtr<T, A> {
+
+    pub fn with_allocator(data: T) -> Self {
+        let ptr = A::aligned_alloc(std::mem::align_of::<T>(), std::mem::size_of::<T>()) as *mut T;
+        if ptr.is_null() {
+            panic!("Failed to allocate to the heap")
+        }
+        unsafe {
+            ptr.write(data);
+        }
+        Self { data: ptr, _phantom: PhantomData::default() }
     }
 
     /// Takes the data in the pointer, and de-allocates the space in the heap.
@@ -32,7 +82,7 @@ impl<T> AutoPtr<T> {
     /// ```
     pub fn take(self) -> T {
         unsafe {
-            let Self { data } = &self;
+            let Self { data, _phantom } = &self;
             let deref = *data;
             let output = std::ptr::read(deref);
             do_free(*data);
@@ -65,6 +115,14 @@ impl<T> AutoPtr<T> {
         data
     }
 
+    pub unsafe fn get_ptr(&self) -> *const T {
+        self.data
+    }
+
+    pub unsafe fn get_ptr_mut(&mut self) -> *mut T {
+        self.data
+    }
+
     /// Replaces the data stored in the pointer, and returns the old data
     pub fn replace(&mut self, new: T) -> T {
         unsafe {
@@ -78,22 +136,10 @@ impl<T> AutoPtr<T> {
         let _ = self.replace(new);
     }
 
-    /// Turns an un-managed pointer into a managed one
-    ///
-    /// # Safety
-    /// This function is unsafe because we can't guarantee that the pointer goes to a valid object
-    /// of type T, or that the pointer doesn't point to de-allocated space.
-    ///
-    /// For this function to have safe behavior, it must be assured that the un-managed pointer is never used
-    /// after this function is called on it, or at least the un-managed pointer isn't used after the scope of
-    /// the AutoPtr is finished. This causes data pointed to by the un-managed pointer to be freed, and potentially
-    /// double freed as a result
-    pub unsafe fn from_ptr(ptr: *mut T) -> Self {
-        Self { data: ptr }
-    }
+
 }
 
-impl<T> Deref for AutoPtr<T> {
+impl<T, A : AlignedAllocator> Deref for AutoPtr<T, A> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -101,41 +147,41 @@ impl<T> Deref for AutoPtr<T> {
     }
 }
 
-impl<T> DerefMut for AutoPtr<T> {
+impl<T, A : AlignedAllocator> DerefMut for AutoPtr<T, A> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.data }
     }
 }
 
-impl<T> Drop for AutoPtr<T> {
+impl<T, A : AlignedAllocator> Drop for AutoPtr<T, A> {
     fn drop(&mut self) {
         unsafe {
             drop_in_place(self.data);
-            do_free(self.data);
+            A::free(self.data);
         }
     }
 }
 
-unsafe impl<T: Send> Send for AutoPtr<T> {}
-unsafe impl<T: Sync> Sync for AutoPtr<T> {}
+unsafe impl<T: Send, A : AlignedAllocator> Send for AutoPtr<T, A> {}
+unsafe impl<T: Sync, A : AlignedAllocator> Sync for AutoPtr<T, A> {}
 
-impl<T: Debug> Debug for AutoPtr<T> {
+impl<T: Debug, A : AlignedAllocator> Debug for AutoPtr<T, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.deref().fmt(f)
     }
 }
 
-impl<T: Display> Display for AutoPtr<T> {
+impl<T: Display, A : AlignedAllocator> Display for AutoPtr<T, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.deref().fmt(f)
     }
 }
 
-impl<T: Clone> Clone for AutoPtr<T> {
+impl<T: Clone, A : AlignedAllocator> Clone for AutoPtr<T, A> {
     fn clone(&self) -> Self {
         let data = self.deref();
         let clone = data.clone();
-        AutoPtr::new(clone)
+        AutoPtr::with_allocator(clone)
     }
 }
 

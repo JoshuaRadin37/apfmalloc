@@ -1,11 +1,31 @@
 use std::hash::{BuildHasherDefault, Hash, BuildHasher, Hasher};
 use crate::independent_collections::Array;
-use super::{HashMapInner, Bucket};
+use super::{Bucket};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Debug, Formatter};
 use std::ops::{IndexMut, Index};
 
+struct HashMapInner<K, V>
+    where
+        K: Eq + Hash,
+{
+    buckets: Array<Array<Bucket<K, V>>>,
+}
+
+impl<K, V> HashMapInner<K, V>
+    where
+        K: Eq + Hash,
+{
+    fn get_hash<H>(&self, mut hasher: H, key: &K) -> u64
+        where
+            H: Hasher,
+    {
+        key.hash(&mut hasher);
+        let ret = hasher.finish();
+        ret % self.buckets.len() as u64
+    }
+}
 pub struct SyncHashMap<K, V>
     where
         K: Eq + Hash,
@@ -107,11 +127,6 @@ impl<K, V> SyncHashMap<K, V>
     }
 
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        let (ret, _) = self.insert_keep_key(key, value);
-        ret
-    }
-
-    pub fn insert_keep_key(&mut self, key: K, value: V) -> (Option<V>, &K) {
         self.wait_for_end_grow();
         {
             if self.len() >= self.inner.buckets.len() / 2 && self.spread() < 0.5
@@ -139,12 +154,12 @@ impl<K, V> SyncHashMap<K, V>
             None => {
                 let bucket = Bucket { hash, key, value };
                 buckets.push(bucket);
-                (None, &buckets.last().unwrap().key)
+                None
             }
             Some(old_index) => {
                 let bucket = &mut buckets[old_index];
                 let val = std::mem::replace(&mut bucket.value, value);
-                (Some(val), &bucket.key)
+                Some(val)
             }
         };
         self.writers.fetch_sub(1, Ordering::AcqRel);
@@ -318,3 +333,6 @@ impl<K: Hash + Eq, V> IndexMut<&K> for SyncHashMap<K, V> {
         self.get_mut(&index).expect("Key not present in map")
     }
 }
+
+unsafe impl <K: Hash + Eq, V : Send + Sync> Send for SyncHashMap<K, V> { }
+unsafe impl <K: Hash + Eq, V : Send + Sync> Sync for SyncHashMap<K, V> { }
