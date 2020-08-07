@@ -10,3 +10,8 @@ pub use hash_map::*;
 
 mod range_mapping;
 pub use range_mapping::*;
+
+pub mod sync {
+    pub use super::array::sync_array::*;
+    pub use super::hash_map::sync_hash_map::*;
+}

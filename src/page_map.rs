@@ -20,7 +20,7 @@ use winapi::um::memoryapi::VirtualQuery;
 use winapi::um::winnt::{MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_READWRITE};
 
 use crate::allocation_data::Descriptor;
-use crate::independent_collections::{HashMap, PageRangeMapping};
+use crate::independent_collections::{PageRangeMapping};
 use crate::mem_info::{LG_PAGE, MAX_SZ, MAX_SZ_IDX};
 #[cfg(not(unix))]
 use crate::mem_info::PAGE;
@@ -28,6 +28,7 @@ use crate::pages::page_alloc_over_commit;
 use crate::size_classes::get_size_class;
 use std::cell::UnsafeCell;
 use std::ops::{Deref};
+use crate::independent_collections::sync::SyncHashMap;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -48,6 +49,7 @@ pub const PM_KEY_MASK: u64 = (1u64 << PM_SB as u64) - 1;
 pub const SC_MASK: u64 = (1u64 << 6) - 1;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
+#[repr(transparent)]
 pub struct PageInfo {
     desc: *mut Descriptor,
 }
@@ -390,13 +392,13 @@ lazy_static! {
 pub static ref RANGE_PAGE_MAP: RwLock<PageRangeMapping> = RwLock::new(PageRangeMapping::new());
 }
 
-pub struct HashedPageMap(UnsafeCell<HashMap<usize, Atomic<PageInfo>>>);
+pub struct HashedPageMap(UnsafeCell<SyncHashMap<usize, Atomic<PageInfo>>>);
 
 unsafe impl Sync for HashedPageMap {}
 unsafe impl Send for HashedPageMap {}
 
 impl Deref for HashedPageMap {
-    type Target = HashMap<usize, Atomic<PageInfo>>;
+    type Target = SyncHashMap<usize, Atomic<PageInfo>>;
 
     fn deref(&self) -> &Self::Target {
         unsafe {
@@ -405,14 +407,14 @@ impl Deref for HashedPageMap {
     }
 }
 
-
+const INITIAL_BUCKETS: usize = 511; //1 << PM_SB >> 16;
 
 impl HashedPageMap {
     pub fn new() -> Self {
-        Self(UnsafeCell::new(HashMap::new()))
+        Self(UnsafeCell::new(SyncHashMap::with_capacity(INITIAL_BUCKETS)))
     }
 
-    pub fn get_map(&self) -> &mut HashMap<usize, Atomic<PageInfo>> {
+    pub fn get_map(&self) -> &mut SyncHashMap<usize, Atomic<PageInfo>> {
         unsafe {
             &mut *self.0.get()
         }

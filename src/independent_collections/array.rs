@@ -10,6 +10,8 @@ use std::ptr::slice_from_raw_parts;
 use std::ptr::{null_mut, slice_from_raw_parts_mut};
 use std::slice::Iter;
 
+pub(super) mod sync_array;
+
 struct RawArray<T> {
     segment: Option<Segment>,
     no_dealloc: bool,
