@@ -472,11 +472,17 @@ pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
 ///
 /// If a pointer has already been freed, a second free to that pointer will cause undefined behavior, and likely a SEGFAULT
 pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
+    /*
     {
         let bootstrap = bootstrap_reserve.lock();
         if ptr.is_null() || bootstrap.ptr_in_bootstrap(ptr) {
             return;
         }
+    }
+
+     */
+    if ptr.is_null() {
+        return;
     }
     let info = match get_page_info_for_ptr(ptr) {
         None => { return },

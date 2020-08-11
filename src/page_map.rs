@@ -396,7 +396,7 @@ unsafe impl Sync for HashedPageMap {}
 unsafe impl Send for HashedPageMap {}
 
 
-const INITIAL_BUCKETS: usize = 511; //1 << PM_SB >> 16;
+const INITIAL_BUCKETS: usize = 1 << PM_SB >> 16;
 
 impl HashedPageMap {
     pub fn new() -> Self {

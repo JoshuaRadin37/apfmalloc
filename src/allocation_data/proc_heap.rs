@@ -1,13 +1,10 @@
 use crate::allocation_data::DescriptorNode;
 use crate::mem_info::MAX_SZ_IDX;
 use crate::size_classes::{SizeClassData, SIZE_CLASSES};
-use std::ptr::slice_from_raw_parts_mut;
 
 use crate::single_access::SingleAccess;
 use atomic::Atomic;
-use bitfield::size_of;
-use memmap::MmapMut;
-use std::mem::MaybeUninit;
+use crate::independent_collections::Array;
 
 #[repr(align(64))]
 pub struct ProcHeap {
@@ -59,28 +56,20 @@ impl Default for ProcHeap {
 }
 
 #[repr(transparent)]
-pub struct Heaps(Option<MmapMut>);
+pub struct Heaps(Array<ProcHeap>);
 
 impl Heaps {
     const fn uninit() -> Self {
-        Heaps(None)
+        Heaps(Array::new())
     }
 
     fn as_heaps_mut(&mut self) -> &mut [ProcHeap] {
-        unsafe {
-            let map = &mut self.0.as_mut().unwrap()[0];
-            let ptr: *mut ProcHeap = (map as *mut u8) as *mut ProcHeap;
-            std::slice::from_raw_parts_mut(ptr, MAX_SZ_IDX)
-        }
+        &mut *self.0
     }
 
     #[allow(unused)]
     fn as_heaps(&self) -> &[ProcHeap] {
-        unsafe {
-            let map = &self.0.as_ref().unwrap()[0];
-            let ptr = map as *const u8 as *const ProcHeap;
-            std::slice::from_raw_parts(ptr, MAX_SZ_IDX)
-        }
+        & *self.0
     }
 
     #[allow(unused)]
@@ -98,15 +87,7 @@ impl Heaps {
 static mut HEAPS: Heaps = Heaps::uninit();
 
 unsafe fn init_heaps() {
-    let mut map = MmapMut::map_anon(size_of::<ProcHeap>() * MAX_SZ_IDX)
-        .expect("Should be able to get the map");
-    let ptr = map.as_mut_ptr() as *mut MaybeUninit<ProcHeap>;
-    let slice = &mut *slice_from_raw_parts_mut(ptr, MAX_SZ_IDX);
-
-    for (index, proc) in slice.into_iter().enumerate() {
-        *proc = MaybeUninit::new(ProcHeap::new_none(index))
-    }
-    HEAPS = Heaps(Some(map))
+    HEAPS = Heaps(Array::of_size(MAX_SZ_IDX));
 }
 
 pub fn get_heaps() -> &'static mut Heaps {

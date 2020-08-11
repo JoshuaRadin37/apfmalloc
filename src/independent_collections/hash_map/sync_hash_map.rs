@@ -37,7 +37,7 @@ pub struct SyncHashMap<K, V>
     containers_used: usize,
     len: usize,
     growing: AtomicBool,
-    writers: AtomicU32
+    interactions: AtomicU32,
 }
 
 
@@ -57,6 +57,7 @@ impl<K, V> SyncHashMap<K, V>
         Self::with_capacity(INITIAL_CAPACITY)
     }
 
+
     pub fn with_capacity(capacity: usize) -> Self {
         let buckets = Array::of_size(capacity);
         Self {
@@ -65,7 +66,7 @@ impl<K, V> SyncHashMap<K, V>
             containers_used: 0,
             len: 0,
             growing: AtomicBool::new(false),
-            writers: AtomicU32::new(0)
+            interactions: AtomicU32::new(0),
         }
     }
 
@@ -97,7 +98,7 @@ impl<K, V> SyncHashMap<K, V>
         while self.growing.compare_and_swap(false, true, Ordering::AcqRel) {
             // get growing status
         }
-        while self.writers.load(Ordering::Acquire) > 0{
+        while self.interactions.load(Ordering::Acquire) > 0{
             // wait for writers to finish
         }
         let new_array = Array::of_size_using(BucketStorage::default, self.inner.buckets.len() * 2 + 1);
@@ -137,7 +138,7 @@ impl<K, V> SyncHashMap<K, V>
                 self.grow();
             }
         }
-        self.writers.fetch_add(1, Ordering::AcqRel);
+        self.interactions.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
         let buckets = &mut self.inner.buckets[hash as usize];
         if buckets.len() == 0 {
@@ -164,13 +165,13 @@ impl<K, V> SyncHashMap<K, V>
                 Some(val)
             }
         };
-        self.writers.fetch_sub(1, Ordering::AcqRel);
+        self.interactions.fetch_sub(1, Ordering::AcqRel);
         ret
     }
 
     /// Inserts the key value pair only if the key was already present in the map
     pub fn replace(&mut self, key: K, value: V) -> Result<V, ()> {
-        self.writers.fetch_add(1, Ordering::AcqRel);
+        self.interactions.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
         let buckets = &mut self.inner.buckets[hash as usize];
         let mut old_index = None;
@@ -188,35 +189,42 @@ impl<K, V> SyncHashMap<K, V>
                 Ok(val)
             }
         };
-        self.writers.fetch_sub(1, Ordering::AcqRel);
+        self.interactions.fetch_sub(1, Ordering::AcqRel);
         ret
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
         self.wait_for_end_grow();
+        self.interactions.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(key);
         let buckets = &self.inner.buckets[hash as usize];
+
         for bucket in buckets.iter() {
             if bucket.key.eq(key) {
+                self.interactions.fetch_sub(1, Ordering::AcqRel);
                 return Some(&bucket.value);
             }
         }
+        self.interactions.fetch_sub(1, Ordering::AcqRel);
         None
     }
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         self.wait_for_end_grow();
+        self.interactions.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(key);
         let buckets = &mut self.inner.buckets[hash as usize];
         for bucket in buckets {
             if bucket.key.eq(key) {
+                self.interactions.fetch_sub(1, Ordering::AcqRel);
                 return Some(&mut bucket.value);
             }
         }
+        self.interactions.fetch_sub(1, Ordering::AcqRel);
         None
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        self.writers.fetch_add(1, Ordering::AcqRel);
+        self.interactions.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
 
         let buckets = &mut self.inner.buckets[hash as usize];
@@ -234,12 +242,13 @@ impl<K, V> SyncHashMap<K, V>
                 Some(bucket.value)
             }
         };
-        self.writers.fetch_sub(1, Ordering::AcqRel);
+        self.interactions.fetch_sub(1, Ordering::AcqRel);
         ret
     }
 
     pub fn contains(&self, key: &K) -> bool {
         self.wait_for_end_grow();
+        self.interactions.fetch_add(1, Ordering::AcqRel);
         let hash = self.get_hash(&key);
         let buckets = &self.inner.buckets[hash as usize];
         for bucket in buckets.iter() {
@@ -247,6 +256,7 @@ impl<K, V> SyncHashMap<K, V>
                 return true;
             }
         }
+        self.interactions.fetch_sub(1, Ordering::AcqRel);
         false
     }
 
@@ -288,7 +298,7 @@ impl<'a, K: Hash + Eq + Clone, V> HashMapEntry<'a, K, V> {
         {
             None => HashMapEntryInner::NotPresent,
             Some(index) => {
-                map.writers.fetch_add(1, Ordering::AcqRel);
+                map.interactions.fetch_add(1, Ordering::AcqRel);
                 HashMapEntryInner::Present {
                     bucket: hash as usize,
                     index,
@@ -303,7 +313,7 @@ impl<'a, K: Hash + Eq + Clone, V> HashMapEntry<'a, K, V> {
         match self.entry {
             HashMapEntryInner::Present { bucket, index } => {
 
-                self.map.writers.fetch_sub(1, Ordering::AcqRel);
+                self.map.interactions.fetch_sub(1, Ordering::AcqRel);
 
                 &mut self
                     .map
