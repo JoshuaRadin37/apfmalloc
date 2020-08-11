@@ -455,7 +455,7 @@ pub fn unregister_desc(heap: Option<&mut ProcHeap>, super_block: &Segment) {
     }
 }
 
-pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> PageInfo {
+pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> Option<PageInfo> {
     //unsafe { S_PAGE_MAP.get_page_info(ptr) }.clone()
     unsafe {
         /*

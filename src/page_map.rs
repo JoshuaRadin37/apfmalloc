@@ -408,12 +408,11 @@ impl HashedPageMap {
     }
 
     #[inline]
-    pub unsafe fn get_page_info<T: ?Sized>(&self, ptr: *const T) -> PageInfo {
+    pub unsafe fn get_page_info<T: ?Sized>(&self, ptr: *const T) -> Option<PageInfo> {
         let key = self.addr_to_key(ptr);
         let guard = self.0.read().unwrap();
-        let ptr = guard.get(&key).unwrap();
-        let info: PageInfo = ptr.load(Ordering::Acquire);
-        info
+        let ptr = guard.get(&key);
+        ptr.map(|a| a.load(Ordering::Acquire))
     }
 
     #[inline]

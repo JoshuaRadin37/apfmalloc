@@ -217,7 +217,10 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     while cache.get_block_num() > 0 {
         let head = cache.peek_block();
         let mut tail = head;
-        let info = get_page_info_for_ptr(head);
+        let info = match get_page_info_for_ptr(head) {
+            None => continue,
+            Some(info) => info,
+        };
         let desc = unsafe {
             match info.get_desc() {
                 None => {
@@ -408,62 +411,63 @@ pub fn init_tuners() {
                     ));
                 }
             }
+        });
+        apf_init.with(|b| {
+            *b.borrow_mut() = true;
+        });
+        skip_tuners.with(|s| unsafe {
+            *s.get() = 0;
+        })
     });
-    apf_init.with(|b| {
-        *b.borrow_mut() = true;
-    });
-    skip_tuners.with(|s| unsafe {
-        *s.get() = 0;
-    })
-});
 }
 
 fn check(size_class_index: usize) -> u32 {
-return thread_cache.with(|tcache| {
-unsafe {
-return (*tcache.get())
-.get(size_class_index)
-.unwrap()
-.get_block_num();
-};
-});
+    return thread_cache.with(|tcache| {
+        unsafe {
+            return (*tcache.get())
+                .get(size_class_index)
+                .unwrap()
+                .get_block_num();
+        };
+    });
 }
 
 fn fetch(size_class_index: usize, count: usize) -> bool {
-let cache = &mut thread_cache
-.with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
+    let cache = &mut thread_cache
+        .with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
-let mut block_num = 0;
+    let mut block_num = 0;
 
-malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
+    malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
 
 // Handles no partial block and insufficient partial block cases
 // Shouldn't need to loop more than once unless fetching *really* large count
-if block_num == 0 {
-malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
-}
+    if block_num == 0 {
+        malloc_count_from_new_sb(size_class_index, cache, &mut block_num, count);
+    }
 
-return block_num > 0;
+    return block_num > 0;
 }
 
 fn ret(size_class_index: usize, count: u32) -> bool {
-let cache =
-thread_cache.with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
+    let cache =
+        thread_cache.with(|tcache| unsafe { (*tcache.get()).get_mut(size_class_index).unwrap() });
 
-assert!(
-count <= cache.get_block_num(),
-"Trying to pop return more blocks than in cache"
-);
+    assert!(
+        count <= cache.get_block_num(),
+        "Trying to pop return more blocks than in cache"
+    );
 
-for _i in 0..count {
-cache.pop_block();
-}
+    for _i in 0..count {
+        cache.pop_block();
+    }
 
-return true;
+    return true;
 }
 
 use crate::apf::ApfTuner;
 use crate::pages::{SegAllocator, SEGMENT_ALLOCATOR};
+
 
 thread_local! {
 // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());
@@ -487,24 +491,24 @@ pub static thread_use_bootstrap: UnsafeCell<bool> = UnsafeCell::new(false);
 
 #[inline]
 pub fn no_tuning<R, F: FnOnce() -> R>(func: F) -> R {
-crate::thread_cache::skip_tuners.with(|b| unsafe {
-*b.get() += 1;
-});
-let ret = func();
-crate::thread_cache::skip_tuners.with(|b| unsafe {
-if *b.get() > 0 {
-*b.get() -= 1;
-}
-});
-ret
+    crate::thread_cache::skip_tuners.with(|b| unsafe {
+        *b.get() += 1;
+    });
+    let ret = func();
+    crate::thread_cache::skip_tuners.with(|b| unsafe {
+        if *b.get() > 0 {
+            *b.get() -= 1;
+        }
+    });
+    ret
 }
 
 #[cfg(test)]
 mod test {
-use crate::thread_cache::ThreadCacheBin;
+    use crate::thread_cache::ThreadCacheBin;
 
-#[test]
-fn check_bin_consistency() {
-let _bin = ThreadCacheBin::new();
-}
+    #[test]
+    fn check_bin_consistency() {
+        let _bin = ThreadCacheBin::new();
+    }
 }

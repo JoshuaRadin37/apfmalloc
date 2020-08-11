@@ -19,7 +19,7 @@ use crate::pages::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::thread_cache::{fill_cache, flush_cache};
-use crate::page_map::HASH_PAGE_MAP;
+use crate::page_map::{HASH_PAGE_MAP};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -457,10 +457,13 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 /// Determines the size of the allocation for a pointer. If no allocation data is available for the pointer, `Err(())` is returned. Otherwise,
 /// `Ok(block size)` is returned
 pub fn get_allocation_size(ptr: *const c_void) -> Result<u32, ()> {
-    let info = get_page_info_for_ptr(ptr);
-    let desc = unsafe { &*info.get_desc().ok_or(())? };
+    if let Some(info) = get_page_info_for_ptr(ptr) {
+        let desc = unsafe { &*info.get_desc().ok_or(())? };
 
-    Ok(desc.block_size)
+        Ok(desc.block_size)
+    } else {
+        Err(())
+    }
 }
 
 /// Frees a location in memory so that it can be reused at a later time. A free to a `NULL` pointer has no effect.
@@ -475,7 +478,10 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
             return;
         }
     }
-    let info = get_page_info_for_ptr(ptr);
+    let info = match get_page_info_for_ptr(ptr) {
+        None => { return },
+        Some(info) => info,
+    };
     let desc = &mut *match info.get_desc() {
         Some(d) => d,
         None => {
