@@ -76,10 +76,6 @@ unsafe fn init_malloc() {
     init_size_class();
 
     // S_PAGE_MAP.init();
-    /*
-    let mut guard = RANGE_PAGE_MAP.write().unwrap();
-    guard.init_with_capacity(PAGE / std::mem::size_of::<PageInfo>());
-     */
     HASH_PAGE_MAP.init();
 
 

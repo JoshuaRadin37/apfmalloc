@@ -33,6 +33,7 @@ pub struct BootstrapReserve {
     next: *mut u8,
     avail: usize,
     max: usize,
+    total_allocated: usize
 }
 
 impl BootstrapReserve {
@@ -42,6 +43,7 @@ impl BootstrapReserve {
             next: null_mut(),
             avail: 0,
             max: size,
+            total_allocated: 0
         }
     }
 
@@ -110,6 +112,7 @@ impl BootstrapReserve {
          */
         self.next = self.next.offset(size as isize);
         self.avail -= size;
+        self.total_allocated += size;
         ret
     }
 

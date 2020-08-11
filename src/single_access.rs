@@ -13,6 +13,8 @@ struct SingleAccessInternal {
     access: AtomicBool,
     wait: bool,
     skip: bool,
+    #[cfg(test)]
+    elses: usize
 }
 
 impl SingleAccessInternal {
@@ -42,6 +44,10 @@ impl SingleAccessInternal {
                 self.wait = false;
                 self.skip = true;
             } else {
+                #[cfg(test)]
+                    {
+                        self.elses += 1;
+                    }
                 e();
             }
         }
@@ -74,6 +80,8 @@ impl SingleAccess {
                 access: AtomicBool::new(false),
                 wait: true,
                 skip: false,
+                #[cfg(test)]
+                elses: 0
             }),
         }
     }
