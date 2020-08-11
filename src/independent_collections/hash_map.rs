@@ -149,7 +149,9 @@ where
         }
 
         let mut old_index = None;
-        for (index, bucket) in Array::iter(&buckets).enumerate() {
+        let iterator = Array::iter(&buckets);
+        let enumerate = iterator.enumerate();
+        for (index, bucket) in enumerate {
             if bucket.key.eq(&key) {
                 old_index = Some(index);
             }

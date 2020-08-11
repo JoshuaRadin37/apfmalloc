@@ -433,7 +433,7 @@ impl <T : Debug> Debug for LinkedList<T> {
 }
 
 
-
+/*
 #[cfg(test)]
 mod test {
     use super::*;
@@ -543,3 +543,5 @@ mod test {
         }
     }
 }
+
+ */

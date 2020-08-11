@@ -1,9 +1,10 @@
-use crate::apf::constants::INIT_TRACE_LENGTH;
 use std::collections::HashMap;
 use std::fmt;
-use std::slice::from_raw_parts_mut;
 use std::vec::Vec;
 
+use crate::apf::constants::INIT_TRACE_LENGTH;
+use crate::apf::trace::Event::*;
+use crate::independent_collections::RawArray;
 /*
     Event represents allocation or free operation
     usize stores heap slot -- not sure how helpful this will be in practice, so might make it generic
@@ -23,17 +24,10 @@ impl fmt::Debug for Event {
     }
 }
 
-use crate::apf::trace::Event::*;
-use crate::pages::AllocationError;
-use crate::{allocate_type, do_free, do_realloc};
-use std::ffi::c_void;
-use std::mem::size_of;
-
 // Need trace implementation that doesn't call alloc
 #[derive(Debug)]
-pub struct Trace<'a> {
-    ptr: Option<*mut u8>,
-    accesses: &'a mut [Event],
+pub struct Trace {
+    accesses: RawArray<Event>,
     length: usize,
     alloc_count: usize,
 }
@@ -42,35 +36,12 @@ pub struct Trace<'a> {
     Memory trace
     Simple wrapper for vector of events
 */
-impl<'a> Trace<'a> {
-    pub fn new() -> Trace<'a> {
-        let page = allocate_type::<[Event; INIT_TRACE_LENGTH]>() as *mut Event as *mut u8; //;do_malloc(INIT_TRACE_LENGTH * size_of::<Event>);//page_alloc_over_commit(INIT_TRACE_LENGTH);
-        let page = if !page.is_null() {
-            Ok(page)
-        } else {
-            Err(AllocationError::AllocationFailed(
-                INIT_TRACE_LENGTH,
-                errno::errno(),
-            ))
-        };
-        match page {
-            Ok(page) => {
-                let ptr = page as *mut Event;
-                let accesses = unsafe {
-                    from_raw_parts_mut(
-                        ptr,
-                        INIT_TRACE_LENGTH, // Size?
-                    )
-                };
-
-                Trace {
-                    ptr: Some(page),
-                    accesses: accesses,
-                    length: 0,
-                    alloc_count: 0,
-                }
-            }
-            Err(e) => panic!("Error initializing trace: {:?}", e),
+impl Trace {
+    pub fn new() -> Trace {
+        Self {
+            accesses: RawArray::with_capacity(INIT_TRACE_LENGTH),
+            length: 0,
+            alloc_count: 0
         }
     }
 
@@ -82,31 +53,11 @@ impl<'a> Trace<'a> {
         self.alloc_count
     }
 
-    pub fn add(&mut self, add: Event) -> () {
+    pub fn add(&mut self, add: Event) {
         unsafe {
             if self.length == self.accesses.len() - 1 {
                 let new_max = self.accesses.len() * 2;
-                let page = do_realloc(
-                    self.accesses.as_mut_ptr() as *mut c_void,
-                    new_max * size_of::<Event>(),
-                ) as *mut u8; //page_alloc_over_commit(INIT_TRACE_LENGTH);
-                let page = if !page.is_null() {
-                    Ok(page)
-                } else {
-                    Err(AllocationError::AllocationFailed(new_max, errno::errno()))
-                };
-                match page {
-                    Ok(page) => {
-                        let ptr = page as *mut Event;
-                        let accesses = from_raw_parts_mut(
-                            ptr, new_max, // Size?
-                        );
-
-                        self.ptr = Some(page);
-                        self.accesses = accesses;
-                    }
-                    Err(e) => panic!("Error initializing trace: {:?}", e),
-                }
+                self.accesses.reserve(new_max);
             }
             (&mut self.accesses[self.length] as *mut Event).write(add);
         }
@@ -259,14 +210,9 @@ impl<'a> Trace<'a> {
     }
 }
 
-impl Drop for Trace<'_> {
+impl Drop for Trace {
     fn drop(&mut self) {
-        match self.ptr {
-            None => {}
-            Some(ptr) => unsafe {
-                do_free(ptr);
-            },
-        }
+        self.accesses.clear();
     }
 }
 

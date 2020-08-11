@@ -3,7 +3,7 @@
 //! instead uses direct memory allocation from the OS.
 
 mod array;
-pub use array::{ArrayIterator, Array, ArrayDeque};
+pub use array::{ArrayIterator, Array, ArrayDeque, RawArray};
 
 mod linked_list;
 pub use linked_list::*;

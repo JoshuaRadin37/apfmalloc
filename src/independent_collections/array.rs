@@ -18,6 +18,12 @@ pub struct RawArray<T> {
     _phantom: PhantomData<T>,
 }
 
+impl <T>  Debug for RawArray<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RawArray {{ length = {} }}", self.len())
+    }
+}
+
 impl<T> RawArray<T> {
     pub const fn new() -> Self {
         Self {
@@ -53,7 +59,7 @@ impl<T> RawArray<T> {
                         unsafe {
                             SEGMENT_ALLOCATOR.deallocate(segment);
                         }
-                    } 
+                    }
                 }
             }
         }
@@ -82,8 +88,10 @@ impl<T> RawArray<T> {
         if !self.no_dealloc {
             match std::mem::replace(&mut self.segment, None) {
                 None => {}
-                Some(_segment) => {
-                    //SEGMENT_ALLOCATOR.deallocate(segment);
+                Some(segment) => {
+                    unsafe {
+                        SEGMENT_ALLOCATOR.deallocate(segment);
+                    }
                 }
             }
         }
@@ -92,6 +100,14 @@ impl<T> RawArray<T> {
     pub unsafe fn write(&mut self, index: usize, val: T) {
         let ptr = self.get_ptr().add(index);
         ptr.write(val);
+    }
+
+    pub fn len(&self) -> usize {
+        self.segment.as_ref().map_or(0, |seg| seg.len())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -160,6 +176,12 @@ impl<T: Default> Array<T> {
             }
             self.size = new_size;
         }
+    }
+}
+
+impl<T> Drop for RawArray<T> {
+    fn drop(&mut self) {
+        self.clear();
     }
 }
 
@@ -250,13 +272,16 @@ impl<T> Array<T> {
     }
 
     pub fn clear(&mut self) {
+        let next_size = 0;
         unsafe {
-            for element in self.deref_mut() {
-                std::ptr::drop_in_place(element);
+            let slice = self.deref_mut();
+            for element in slice {
+                let ptr = element as *mut T;
+                std::mem::drop(ptr.read())
             }
         }
-        self.array.clear();
-        self.size = 0;
+        // self.array.clear();
+        self.size = next_size;
     }
 
     /// If index is a valid position, replaces the current value at the index with `val` and returns
@@ -295,16 +320,12 @@ impl<T> Array<T> {
         self.len() == 0
     }
 
-    pub fn iter(&self) -> ArrayIterator<&T> {
-        let mut arr = Array::new();
-        for i in 0..self.size {
-            arr.push(&self[i])
-        }
-        ArrayIterator {
-            index: 0,
-            array: arr,
-        }
+
+    pub fn iter(&self) -> std::slice::Iter<T> {
+        (**self).iter()
     }
+
+
 
     pub fn capacity(&self) -> usize {
         self.array.capacity()
@@ -312,6 +333,12 @@ impl<T> Array<T> {
 
     pub fn reserve(&mut self, new_capacity: usize) {
         self.array.reserve(new_capacity);
+    }
+
+    pub fn downgrade(mut self) -> RawArray<T> {
+        let empty = RawArray::new();
+        let out = std::mem::replace(&mut self.array, empty);
+        out
     }
 }
 
@@ -404,9 +431,7 @@ impl<T> IndexMut<RangeTo<usize>> for Array<T> {
 
 impl<T> Drop for Array<T> {
     fn drop(&mut self) {
-        if !self.no_dealloc {
-            self.clear()
-        }
+        self.clear()
     }
 }
 
@@ -416,57 +441,62 @@ impl<T> Default for Array<T> {
     }
 }
 
+// This struct needs to deallocate the space it's allocated to, without running destructors on it's contents
+// because the contents are no longer owned
 pub struct ArrayIterator<T> {
-    index: usize,
-    array: Array<T>,
+    ptr: *mut T,
+    end: *mut T,
+    _raw: RawArray<T>
 }
 
 impl<T> Iterator for ArrayIterator<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.array.len() {
-            None
-        } else {
-            unsafe {
-                let ret = &self.array[self.index] as *const T;
-                let ret = ret.read_unaligned();
-
-                self.index += 1;
-                Some(ret)
-            }
+        if self.ptr.is_null() || self.ptr == self.end {
+            return None;
         }
+        unsafe {
+            let ret = self.ptr.read();
+            self.ptr = self.ptr.wrapping_add(1);
+
+            Some(ret)
+        }
+
     }
 }
+
+
 
 impl<T> IntoIterator for Array<T> {
     type Item = T;
     type IntoIter = ArrayIterator<T>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let start = self.array.get_ptr();
+        // self.no_dealloc = true;
+        let size = self.len();
+        let raw = self.downgrade();
+
+        let end = if !start.is_null() {
+            start.wrapping_add(size)
+        } else {
+            null_mut()
+        };
         ArrayIterator {
-            index: 0,
-            array: self,
+            ptr: start,
+            end,
+            _raw: raw
         }
     }
 }
 
 impl<'a, T> IntoIterator for &'a Array<T> {
     type Item = &'a T;
-    type IntoIter = ArrayIterator<&'a T>;
+    type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let mut out: Array<&'a T> = Array::with_capacity(self.len());
-
-        for i in 0..self.len() {
-            let item = self.get(i).unwrap();
-            out.push(item);
-        }
-
-        ArrayIterator {
-            index: 0,
-            array: out
-        }
+        self.iter()
     }
 }
 

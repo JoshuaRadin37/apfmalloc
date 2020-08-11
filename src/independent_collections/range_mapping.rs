@@ -103,7 +103,7 @@ enum NodeInner {
 /// ```
 /// use apfmalloc_lib::independent_collections::PageRangeMapping;
 /// use apfmalloc_lib::allocation_data::{get_heaps, desc::Descriptor};
-/// use apfmalloc_lib::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator};
+/// use apfmalloc_lib::pages::{SEGMENT_ALLOCATOR, SegAllocator};
 /// let mut page_map = PageRangeMapping::new();
 /// // Optional
 /// page_map.init_with_capacity(100);
