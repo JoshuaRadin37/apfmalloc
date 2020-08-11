@@ -20,15 +20,13 @@ use winapi::um::memoryapi::VirtualQuery;
 use winapi::um::winnt::{MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_READWRITE};
 
 use crate::allocation_data::Descriptor;
-use crate::independent_collections::{PageRangeMapping};
+use crate::independent_collections::PageRangeMapping;
+use crate::independent_collections::sync::SyncHashMap;
 use crate::mem_info::{LG_PAGE, MAX_SZ, MAX_SZ_IDX};
 #[cfg(not(unix))]
 use crate::mem_info::PAGE;
 use crate::pages::page_alloc_over_commit;
 use crate::size_classes::get_size_class;
-use std::cell::UnsafeCell;
-use std::ops::{Deref};
-use crate::independent_collections::sync::SyncHashMap;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -392,46 +390,28 @@ lazy_static! {
 pub static ref RANGE_PAGE_MAP: RwLock<PageRangeMapping> = RwLock::new(PageRangeMapping::new());
 }
 
-pub struct HashedPageMap(UnsafeCell<SyncHashMap<usize, Atomic<PageInfo>>>);
+pub struct HashedPageMap(RwLock<SyncHashMap<usize, Atomic<PageInfo>>>);
 
 unsafe impl Sync for HashedPageMap {}
 unsafe impl Send for HashedPageMap {}
 
-impl Deref for HashedPageMap {
-    type Target = SyncHashMap<usize, Atomic<PageInfo>>;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe {
-            & *self.0.get()
-        }
-    }
-}
 
 const INITIAL_BUCKETS: usize = 511; //1 << PM_SB >> 16;
 
 impl HashedPageMap {
     pub fn new() -> Self {
-        Self(UnsafeCell::new(SyncHashMap::with_capacity(INITIAL_BUCKETS)))
+        Self(RwLock::new(SyncHashMap::with_capacity(INITIAL_BUCKETS)))
     }
 
-    pub fn get_map(&self) -> &mut SyncHashMap<usize, Atomic<PageInfo>> {
-        unsafe {
-            &mut *self.0.get()
-        }
+    pub fn init(&self) {
+
     }
 
     #[inline]
     pub unsafe fn get_page_info<T: ?Sized>(&self, ptr: *const T) -> PageInfo {
         let key = self.addr_to_key(ptr);
-        //println!("GET KEY: {:?}", key);
-        let ptr = &self.get_map()[&key];
-        #[cfg(windows)]
-            {
-                unsafe {
-                    // self.commit_page(self.mem_location.unwrap() as *mut u8, key)
-                    self.commit_page_of_ptr(ptr);
-                };
-            }
+        let guard = self.0.read().unwrap();
+        let ptr = guard.get(&key).unwrap();
         let info: PageInfo = ptr.load(Ordering::Acquire);
         info
     }
@@ -439,38 +419,14 @@ impl HashedPageMap {
     #[inline]
     pub unsafe fn set_page_info<T>(&self, ptr: *const T, info: PageInfo) {
         let key = self.addr_to_key(ptr);
-        //println!("SET KEY: {:?}", key);
-        let ptr =
-            self
-                .get_map()
-                .entry(key)
-                .or_insert(Atomic::new(PageInfo::default()));
-
-        #[cfg(windows)]
-            {
-                unsafe {
-                    // let page_ptr = self.commit_page(self.mem_location.unwrap() as *mut u8, key);
-                    self.commit_page_of_ptr(ptr);
-                    // println!("Page ptr: {:x?}, Ptr: {:x?}", page_ptr, ptr as * const _);
-                };
-            }
+        let mut map = self.0.write().unwrap();
+        let ptr = map.entry(key).or_insert(Atomic::new(PageInfo::default()));
         ptr.store(info, Ordering::Release);
     }
 
     #[inline]
     fn addr_to_key<T: ?Sized>(&self, ptr: *const T) -> usize {
-        /*
-        println!("ptr: {:x?}", ptr);
-        let i = (ptr as usize >> PM_KEY_SHIFT);
-        println!("i: {:x?}", i);
-        println!("KEY_MASK: {:x?}", PM_KEY_MASK);
-        let mem_loc = self.mem_location.unwrap();
-        let key = (i - (mem_loc as usize >> PM_KEY_SHIFT)) & PM_KEY_MASK as usize;
-        println!("key: {:?}", key);
-
-         */
-        let key = ((ptr as *const u8 as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize;
-        key
+        ((ptr as *const u8 as usize) >> PM_KEY_SHIFT) & PM_KEY_MASK as usize
     }
 }
 

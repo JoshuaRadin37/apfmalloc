@@ -5,7 +5,7 @@ use atomic::{Atomic, Ordering};
 use crate::allocation_data::proc_heap::ProcHeap;
 use crate::independent_collections::Array;
 use crate::mem_info::{CACHE_LINE_MASK, DESCRIPTOR_BLOCK_SZ};
-use crate::pages::external_mem_reservation::Segment;
+use crate::pages::Segment;
 use crate::pages::page_alloc;
 use crate::AVAILABLE_DESC;
 

@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::drop_in_place;
 use std::marker::PhantomData;
+use std::ptr::NonNull;
 
 pub trait AlignedAllocator {
 
@@ -85,7 +86,7 @@ impl<T, A : AlignedAllocator> AutoPtr<T, A> {
             let Self { data, _phantom } = &self;
             let deref = *data;
             let output = std::ptr::read(deref);
-            do_free(*data);
+            A::free(*data);
             std::mem::forget(self);
             output
         }
@@ -185,6 +186,13 @@ impl<T: Clone, A : AlignedAllocator> Clone for AutoPtr<T, A> {
     }
 }
 
+impl<T, A : AlignedAllocator> From<&AutoPtr<T, A>> for NonNull<T>  {
+    fn from(ptr: &AutoPtr<T, A>) -> Self {
+        let ptr = ptr.data;
+        NonNull::new(ptr).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::ptr::auto_ptr::AutoPtr;
@@ -196,6 +204,10 @@ mod test {
         assert_eq!(*auto_ptr, Some(0xdeadbeafusize));
         *auto_ptr = None;
         assert_eq!(*auto_ptr, None);
+
+        let mut ptr = AutoPtr::new(0usize);
+        *ptr = 42;
+        assert_eq!(*ptr + 53, 42 + 53);
     }
 
     #[test]

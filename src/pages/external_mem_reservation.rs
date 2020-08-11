@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicBool};
 use winapi::shared::minwindef::LPVOID;
 
 /// Represents a "segment" in memory- a contiguous section of memory.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub struct Segment {
     ptr: *mut c_void,
     #[cfg(windows)]
@@ -36,22 +36,32 @@ pub struct Segment {
 
 unsafe impl Send for Segment {}
 
+
 impl Segment {
+    /// Allows tracking of a specific segment of memory, its Windows Handle, and it's length
     #[cfg(windows)]
     pub fn new(ptr: *mut c_void, heap: HANDLE, length: usize) -> Self {
         Segment { ptr, heap, length }
     }
 
+    /// Allows tracking of a specific segment of memory and it's length
     #[cfg(unix)]
     pub fn new(ptr: *mut c_void, length: usize) -> Self {
         Segment { ptr, length }
     }
 
+    /// Gets the length of the segment
     #[allow(unused)]
     pub fn len(&self) -> usize {
         self.length
     }
 
+    /// Checks if a segment is empty
+    pub fn is_empty(&self) -> bool {
+        self.length == 0 || self.ptr.is_null()
+    }
+
+    /// Gets a pointer to the start of the segment of memory
     pub fn get_ptr(&self) -> *mut c_void {
         self.ptr
     }
@@ -185,10 +195,16 @@ impl SegAllocator for SegmentAllocator {
     }
 }
 
+
 #[cfg(unix)]
 impl SegAllocator for SegmentAllocator {
+
+    /// The Unix implementation uses a combination of `mmap()` and `sbrk()` to allocate space on the
+    /// heap
     fn allocate(&self, size: usize) -> Result<Segment, AllocationError> {
-       // while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
+        // while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
+
+
         let mmap: *mut c_void = unsafe {
             libc::mmap(
                 null_mut(),
@@ -205,8 +221,12 @@ impl SegAllocator for SegmentAllocator {
         } else {
             Ok(Segment::new(mmap, size))
         }
+
     }
 
+    /// The Unix implementation uses a `mmap()` with [`MAP_NORESERVE`] for large allocations
+    ///
+    /// [`MAP_NORESERVE`]: libc::MAP_NORESERVE
     fn allocate_massive(&self, size: usize) -> Result<Segment, AllocationError> {
         // while LOCK.compare_and_swap(false, true, Ordering::Acquire) {}
         let mmap: *mut c_void = unsafe {
@@ -230,7 +250,9 @@ impl SegAllocator for SegmentAllocator {
 
     unsafe fn deallocate(&self, segment: Segment) -> bool {
         // while LOCK.compare_and_swap(false, true, Ordering::Acquire) { }
+
         libc::munmap(segment.ptr, segment.length) == 0
+
         // LOCK.store(false, Ordering::Release);
     }
 }

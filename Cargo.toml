@@ -1,7 +1,7 @@
 [package]
 name = "apfmalloc-lib"
 description = "An implementation of (LRMalloc)[https://github.com/ricleite/lrmalloc], but improved with APF tuning (Li et. al., 2019)"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Joshua Radin <jradin2@u.rochester.edu>",
             "Elias Neuman-Donihue <eneumand@u.rochester.edu>"]
 edition = "2018"

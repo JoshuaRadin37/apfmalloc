@@ -5,7 +5,7 @@ use spin::Mutex;
 
 use crate::independent_collections::Array;
 use crate::mem_info::MAX_SZ_IDX;
-use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use crate::pages::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 use crate::thread_cache::ThreadCacheBin;
 // use crate::page_map::RANGE_PAGE_MAP;
 // use crate::allocation_data::Descriptor;

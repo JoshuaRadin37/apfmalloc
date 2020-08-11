@@ -9,6 +9,7 @@ use std::ops::{Index, IndexMut};
 use crate::independent_collections::Array;
 
 pub(super) mod sync_hash_map;
+pub(super) mod swiss_hash_map;
 
 struct Bucket<K, V>
 where

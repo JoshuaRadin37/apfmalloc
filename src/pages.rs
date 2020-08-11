@@ -1,24 +1,24 @@
-use crate::mem_info::PAGE_MASK;
-use bitfield::size_of;
-use memmap::MmapMut;
-use std::os::raw::c_void;
-
-use crate::independent_collections::HashMap;
-use crate::pages::external_mem_reservation::{
-    AllocationError, SegAllocator, Segment, SEGMENT_ALLOCATOR,
-};
-use crate::pages::MemoryOrFreePointer::Free;
-use atomic::Ordering;
-use bitfield::fmt::{Debug, Display, Formatter};
-use spin::Mutex;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
+use std::os::raw::c_void;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::sync::atomic::AtomicBool;
+
+use atomic::Ordering;
+use bitfield::fmt::{Debug, Display, Formatter};
+use bitfield::size_of;
+use memmap::MmapMut;
+use spin::Mutex;
 #[cfg(windows)] use winapi::um::heapapi::GetProcessHeap;
 
-pub mod external_mem_reservation;
+use crate::independent_collections::HashMap;
+use crate::mem_info::PAGE_MASK;
+pub use crate::pages::external_mem_reservation::*;
+use crate::pages::MemoryOrFreePointer::Free;
+
+mod external_mem_reservation;
+
 
 #[inline]
 #[allow(unused)]
@@ -502,7 +502,7 @@ impl Hash for PtrHolder {
 }
 
 struct SegmentHolder {
-    size_map: Option<HashMap<PtrHolder, usize>>,
+    size_map: Option<HashMap<PtrHolder, Segment>>,
 }
 
 static SEGMENT_HOLDER: Mutex<SegmentHolder> = Mutex::new(SegmentHolder { size_map: None });
@@ -541,7 +541,7 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
         .size_map
         .as_mut()
         .unwrap()
-        .insert(PtrHolder(ptr), size);
+        .insert(PtrHolder(ptr), segment);
     Ok(ptr)
 }
 
@@ -580,7 +580,7 @@ pub fn page_alloc_over_commit(size: usize) -> Result<*mut u8, AllocationError> {
         .size_map
         .as_mut()
         .unwrap()
-        .insert(PtrHolder(ptr), size);
+        .insert(PtrHolder(ptr), segment);
     Ok(ptr)
 
     // SEGMENT_ALLOCATOR.allocate_massive(size).map(|ptr| ptr.get_ptr() as *mut u8)
@@ -593,11 +593,11 @@ pub fn page_free(ptr: *const u8) -> bool {
     let mut segment_holder = SEGMENT_HOLDER.lock();
     let holder = PtrHolder(ptr);
     if segment_holder.size_map.as_mut().unwrap().contains(&holder) {
-        let size = segment_holder.size_map.as_mut().unwrap()[&holder];
+        let segment = segment_holder.size_map.as_mut().unwrap().remove(&holder).unwrap();
         let ret = unsafe {
-             SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, #[cfg(windows)] GetProcessHeap(), size))
+             SEGMENT_ALLOCATOR.deallocate(segment)
         };
-        segment_holder.size_map.as_mut().unwrap().remove(&holder);
+
         ret
     } else {
         false
@@ -606,10 +606,9 @@ pub fn page_free(ptr: *const u8) -> bool {
 
 #[cfg(test)]
 mod test {
-
-    use crate::pages::{page_alloc, page_free};
-    use crate::size_classes::{SizeClassData, SIZE_CLASSES};
     use crate::{init_malloc, MALLOC_INIT_S};
+    use crate::pages::{page_alloc, page_free};
+    use crate::size_classes::{SIZE_CLASSES, SizeClassData};
 
     #[test]
     fn get_page() {

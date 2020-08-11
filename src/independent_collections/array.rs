@@ -1,5 +1,5 @@
 use crate::mem_info::{align_size};
-use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use crate::pages::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::iter::FromIterator;
@@ -8,11 +8,11 @@ use std::ops::DerefMut;
 use std::ops::{Deref, Index, IndexMut, RangeFrom, RangeTo};
 use std::ptr::slice_from_raw_parts;
 use std::ptr::{null_mut, slice_from_raw_parts_mut};
-use std::slice::Iter;
+use std::slice::{Iter, IterMut};
 
 pub(super) mod sync_array;
 
-struct RawArray<T> {
+pub struct RawArray<T> {
     segment: Option<Segment>,
     no_dealloc: bool,
     _phantom: PhantomData<T>,
@@ -53,7 +53,7 @@ impl<T> RawArray<T> {
                         unsafe {
                             SEGMENT_ALLOCATOR.deallocate(segment);
                         }
-                    }
+                    } 
                 }
             }
         }
@@ -467,6 +467,16 @@ impl<'a, T> IntoIterator for &'a Array<T> {
             index: 0,
             array: out
         }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut Array<T> {
+    type Item = &'a mut T;
+    type IntoIter = IterMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let ret = &mut **self;
+        ret.iter_mut()
     }
 }
 

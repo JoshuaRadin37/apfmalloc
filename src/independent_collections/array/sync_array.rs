@@ -5,7 +5,7 @@ use std::iter::FromIterator;
 use std::fmt::{Debug, Formatter};
 use crate::ptr::auto_ptr::{AutoPtr, AlignedAllocator};
 use crate::mem_info::{align_size};
-use crate::pages::external_mem_reservation::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
+use crate::pages::{SEGMENT_ALLOCATOR, SegAllocator, Segment};
 use std::ffi::c_void;
 
 pub struct IndependentAllocator;

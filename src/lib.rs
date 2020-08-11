@@ -15,10 +15,11 @@ use crate::alloc::{get_page_info_for_ptr, register_desc, unregister_desc, update
 use crate::allocation_data::{Anchor, Descriptor, DescriptorNode, get_heaps, SuperBlockState};
 use crate::bootstrap::{bootstrap_reserve, use_bootstrap, set_use_bootstrap};
 use crate::mem_info::{align_addr, align_size, MAX_SZ, MAX_SZ_IDX, PAGE};
-use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
+use crate::pages::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::thread_cache::{fill_cache, flush_cache};
+use crate::page_map::HASH_PAGE_MAP;
 
 #[macro_export]
 macro_rules! dump_info {
@@ -79,10 +80,11 @@ unsafe fn init_malloc() {
     let mut guard = RANGE_PAGE_MAP.write().unwrap();
     guard.init_with_capacity(PAGE / std::mem::size_of::<PageInfo>());
      */
+    HASH_PAGE_MAP.init();
 
 
-    let option = option_env!("USE_APF");
-    if option == Some("false") {
+    let option = std::env::var("USE_APF");
+    if option == Ok("false".to_string()) {
         USE_APF = false;
     }
 

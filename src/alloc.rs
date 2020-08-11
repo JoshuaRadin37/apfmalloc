@@ -8,7 +8,7 @@ use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
-use crate::pages::external_mem_reservation::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
+use crate::pages::{SegAllocator, Segment, SEGMENT_ALLOCATOR};
 use std::process::exit;
 
 pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
@@ -403,7 +403,6 @@ pub unsafe fn update_page_map(
         size_class_index,
     );
     if heap.is_none() {
-        unsafe {
             // S_PAGE_MAP.set_page_info(ptr, info);
             /*
             let mut guard = RANGE_PAGE_MAP.write().unwrap();
@@ -412,7 +411,6 @@ pub unsafe fn update_page_map(
              */
             HASH_PAGE_MAP.set_page_info(ptr, info);
             return;
-        }
     }
 
     let heap = heap.unwrap();

@@ -3,10 +3,13 @@
 //! instead uses direct memory allocation from the OS.
 
 mod array;
-pub use array::*;
+pub use array::{ArrayIterator, Array, ArrayDeque};
+
+mod linked_list;
+pub use linked_list::*;
 
 mod hash_map;
-pub use hash_map::*;
+pub use hash_map::{HashMap, HashSet};
 
 mod range_mapping;
 pub use range_mapping::*;

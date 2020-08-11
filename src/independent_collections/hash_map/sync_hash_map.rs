@@ -1,16 +1,18 @@
 use std::hash::{BuildHasherDefault, Hash, BuildHasher, Hasher};
-use crate::independent_collections::Array;
+use crate::independent_collections::{Array};
 use super::{Bucket};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Debug, Formatter};
 use std::ops::{IndexMut, Index};
 
+type BucketStorage<T> = Array<T>;
+
 struct HashMapInner<K, V>
     where
         K: Eq + Hash,
 {
-    buckets: Array<Array<Bucket<K, V>>>,
+    buckets: Array<BucketStorage<Bucket<K, V>>>,
 }
 
 impl<K, V> HashMapInner<K, V>
@@ -98,7 +100,7 @@ impl<K, V> SyncHashMap<K, V>
         while self.writers.load(Ordering::Acquire) > 0{
             // wait for writers to finish
         }
-        let new_array = Array::of_size_using(|| Array::new(), self.inner.buckets.len() * 2 + 1);
+        let new_array = Array::of_size_using(BucketStorage::default, self.inner.buckets.len() * 2 + 1);
         let new_capacity = self.inner.buckets.len() * 2 + 1;
         /*
         for _ in 0..new_capacity {
@@ -143,7 +145,7 @@ impl<K, V> SyncHashMap<K, V>
         }
 
         let mut old_index = None;
-        for (index, bucket) in Array::iter(&buckets).enumerate() {
+        for (index, bucket) in BucketStorage::iter(&buckets).enumerate() {
             if bucket.key.eq(&key) {
                 old_index = Some(index);
             }
@@ -205,7 +207,7 @@ impl<K, V> SyncHashMap<K, V>
         self.wait_for_end_grow();
         let hash = self.get_hash(key);
         let buckets = &mut self.inner.buckets[hash as usize];
-        for bucket in buckets.iter_mut() {
+        for bucket in buckets {
             if bucket.key.eq(key) {
                 return Some(&mut bucket.value);
             }
@@ -299,7 +301,7 @@ impl<'a, K: Hash + Eq + Clone, V> HashMapEntry<'a, K, V> {
 
     pub fn or_insert(self, value: V) -> &'a mut V {
         match self.entry {
-            HashMapEntryInner::Present { bucket, index } => unsafe {
+            HashMapEntryInner::Present { bucket, index } => {
 
                 self.map.writers.fetch_sub(1, Ordering::AcqRel);
 
@@ -307,8 +309,10 @@ impl<'a, K: Hash + Eq + Clone, V> HashMapEntry<'a, K, V> {
                     .map
                     .inner
                     .buckets
-                    .get_unchecked_mut(bucket)
-                    .get_unchecked_mut(index)
+                    .get_mut(bucket)
+                    .unwrap()
+                    .get_mut(index)
+                    .unwrap()
                     .value
             },
             HashMapEntryInner::NotPresent => {

@@ -463,7 +463,7 @@ return true;
 }
 
 use crate::apf::ApfTuner;
-use crate::pages::external_mem_reservation::{SegAllocator, SEGMENT_ALLOCATOR};
+use crate::pages::{SegAllocator, SEGMENT_ALLOCATOR};
 
 thread_local! {
 // pub static thread_cache: UnsafeCell<ThreadCache> = UnsafeCell::new(ThreadCache::new());

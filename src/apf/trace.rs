@@ -24,7 +24,7 @@ impl fmt::Debug for Event {
 }
 
 use crate::apf::trace::Event::*;
-use crate::pages::external_mem_reservation::AllocationError;
+use crate::pages::AllocationError;
 use crate::{allocate_type, do_free, do_realloc};
 use std::ffi::c_void;
 use std::mem::size_of;
