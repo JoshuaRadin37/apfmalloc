@@ -218,7 +218,7 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         let head = cache.peek_block();
         let mut tail = head;
         let info = match get_page_info_for_ptr(head) {
-            None => continue,
+            None => return,
             Some(info) => info,
         };
         let desc = unsafe {
