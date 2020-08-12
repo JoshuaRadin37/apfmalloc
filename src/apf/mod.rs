@@ -98,6 +98,10 @@ impl ApfTuner<'_> {
                 }
             }
 
+            if demand.ceil() as usize == 0 {
+                panic!("Demand can't be zero")
+            }
+
             (self.get)(self.id, demand.ceil() as usize);
             self.count_fetch();
         }

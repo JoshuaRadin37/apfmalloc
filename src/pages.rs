@@ -9,7 +9,8 @@ use spin::Mutex;
 
 use crate::independent_collections::HashMap;
 use crate::mem_info::PAGE_MASK;
-pub use crate::pages::external_mem_reservation::*;
+pub use crate::pages::external_mem_reservation::{Segment, SegmentAllocator, SEGMENT_ALLOCATOR, AllocationError, SegAllocator};
+pub(crate) use crate::pages::external_mem_reservation::{independent_allocate, independent_deallocate};
 
 mod external_mem_reservation;
 
@@ -80,6 +81,7 @@ pub fn page_alloc(size: usize) -> Result<*mut u8, AllocationError> {
         .insert(PtrHolder(ptr), segment);
     Ok(ptr)
 }
+
 
 /// Explicitly allow overcommitting
 ///

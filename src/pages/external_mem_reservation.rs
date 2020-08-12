@@ -257,6 +257,15 @@ impl SegAllocator for SegmentAllocator {
     }
 }
 
+/// Should only be used by internal functions
+pub fn independent_allocate<T>() -> *mut T {
+    SEGMENT_ALLOCATOR.allocate(std::mem::size_of::<T>()).unwrap().ptr as *mut T
+}
+
+pub unsafe fn independent_deallocate<T>(ptr: *mut T) {
+    SEGMENT_ALLOCATOR.deallocate(Segment::new(ptr as *mut c_void, std::mem::size_of::<T>()));
+}
+
 #[cfg(test)]
 mod test {
     use crate::mem_info::PAGE;

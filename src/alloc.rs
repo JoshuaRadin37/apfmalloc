@@ -337,7 +337,7 @@ pub fn malloc_count_from_new_sb(
     desc.max_count = max_count as u32;
     desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.block_size as usize * c).ok();
 
-    let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
+    let super_block = desc.super_block.as_ref().expect(&*format!("Didn't allocate a super block of {} bytes", sc.block_size as usize * c)).get_ptr() as *mut u8;
 
 
 

@@ -210,12 +210,6 @@ impl Trace {
     }
 }
 
-impl Drop for Trace {
-    fn drop(&mut self) {
-        self.accesses.clear();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

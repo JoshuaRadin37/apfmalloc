@@ -46,6 +46,8 @@ pub const PM_KEY_MASK: u64 = (1u64 << PM_SB as u64) - 1;
 /// implemented with a static array
 pub const SC_MASK: u64 = (1u64 << 6) - 1;
 
+pub mod page_table;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(transparent)]
 pub struct PageInfo {
