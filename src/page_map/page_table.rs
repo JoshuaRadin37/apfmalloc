@@ -286,6 +286,80 @@ impl PageInfoTable {
         }
     }
 
+    pub fn print_known_pages(&self) {
+        let table = self.high_table.load(Ordering::Acquire);
+        if !table.is_null() {
+            unsafe {
+                let mut last = 0;
+                let high = & *table;
+                println!("High Table 0 [{:p}]: ", high as *const _);
+                for i in 0..512 {
+                    let med_high = high
+                        .get_entry(i << PageTableHigh::get_shift())
+                        .load(Ordering::Acquire);
+
+                    if !med_high.is_null() {
+                        println!("Med High Table {} [{:p}]:", i, med_high as *const _);
+                        for j in 0..512 {
+                            let med_low =
+                                (*med_high)
+                                    .get_entry(j << PageTableMedHigh::get_shift())
+                                    .load(Ordering::Acquire);
+
+                            if !med_low.is_null() {
+                                println!("Med Low Table {} [{:p}]:", j, med_low as *const _);
+                                for k in 0..512 {
+                                    let low =
+                                        (*med_low)
+                                            .get_entry(k << PageTableMedLow::get_shift())
+                                            .load(Ordering::Acquire);
+
+                                    if !low.is_null() {
+                                        println!("Low Table {} [{:p}]:", k, low as *const _);
+                                        for m in 0..512 {
+
+                                            let info =
+                                                (*low)
+                                                    .get_entry(m << PageTableLow::get_shift())
+                                                    .load(Ordering::Acquire);
+
+                                            if !info.is_null() {
+                                                let ptr =
+                                                    i << PageTableHigh::get_shift() |
+                                                        j << PageTableMedHigh::get_shift() |
+                                                        k << PageTableMedLow::get_shift() |
+                                                        m << PageTableLow::get_shift();
+
+                                                if last == 0 {
+                                                    print!("{:p}", ptr as *mut u8);
+                                                } else if ptr != last + PAGE{
+                                                    println!(" - {:p}", last as *mut u8);
+                                                    print!("{:p}", ptr as *mut u8);
+                                                }
+
+
+                                                last = ptr;
+                                            }
+                                        }
+                                        println!(" - {:p}", last as *mut u8);
+                                        last = 0;
+
+
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // println!("{:p}", last as *mut u8);
+            }
+
+
+        }
+
+
+    }
+
 
 }
 

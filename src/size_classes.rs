@@ -64,7 +64,7 @@ pub unsafe fn init_size_class() {
     for sc_index in 1..MAX_SZ_IDX {
         let sc = &mut SIZE_CLASSES[sc_index];
 
-        sc.block_num = sc.sb_size / sc.block_size;
+        sc.block_num = sc.sb_size / sc.block_size - 1;
         sc.cache_block_num = sc.block_num;
         assert!(sc.block_num > 0);
         assert!(sc.block_num >= sc.cache_block_num);

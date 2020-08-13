@@ -262,7 +262,8 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
 
         let mut block_count = 1;
 
-        while cache.get_block_num() > block_count && block_count <= (start - count as u32) {
+        let max = cache.get_block_num();
+        while max > block_count && block_count <= (start - count as u32 - 1) {
             if cfg!(feature = "no_met_stack") || cache.block_size.is_none() || cache.block_size == Some(0)
             {
                 let ptr = unsafe { *(tail as *mut *mut u8) };
@@ -275,18 +276,23 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
             } else {
                 // let ptr = tail as *mut usize;
                 unsafe {
+
+
                     if (*(tail as *mut *mut u8)).is_null() {
+                        if tail as usize > super_block as usize + super_block_length as usize {
+                            break;
+                        }
                         tail = tail.add(cache.block_size.unwrap() as usize);
                         block_count += 1;
                     } else if *(tail as *const usize) == std::usize::MAX {
                         block_count += 1;
+                        tail = null_mut();
                         break;
                     } else {
                         let ptr = *(tail as *mut *mut u8);
                         if ptr < super_block || ptr as usize >= super_block as usize + super_block_length as usize {
                             break;
                         }
-
                         block_count += 1;
                         tail = ptr;
                     }
@@ -294,7 +300,7 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
             }
         }
         //info!("Reclaiming {} blocks", block_count);
-        let tail =
+        let tail_next =
         unsafe {
             if !cfg!(feature = "no_met_stack") {
                 if (*(tail as *mut *mut u8)).is_null() {
@@ -308,7 +314,8 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
                 *(tail as *mut *mut u8)
             }
         };
-        cache.pop_list(tail, block_count);
+        // println!("Releasing length {} segment from cache at {:p}", block_count, head);
+        cache.pop_list(tail_next, block_count);
 
         let index = compute_index(super_block, head, size_class_index);
 
@@ -512,7 +519,7 @@ fn ret(size_class_index: usize, count: u32) -> bool {
     }
 
      */
-
+    // println!("Returning {} size class {} blocks to heap", count, size_class_index);
     let next_count = cache.get_block_num() - count;
     flush_cache_until_count(size_class_index, next_count as usize, cache);
 

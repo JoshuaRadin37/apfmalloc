@@ -7,9 +7,10 @@ use crate::Mode::{Malloc, AlignedAlloc, Realloc};
 use apfmalloc_lib::size_classes::SIZE_CLASSES;
 use std::collections::{HashMap, HashSet};
 use std::thread;
+use std::io::{stdout, Write};
 
 const NUMBER_BINS: usize = 400;
-const NUMBER_ALLOCS: usize = 100_000;
+const NUMBER_ALLOCS: usize = 10_000;
 const MAX_SIZE: usize = PAGE * 5;
 
 #[derive(Debug, Copy, Clone)]
@@ -48,11 +49,11 @@ fn malloc_test() {
     let mut frees = 0;
 
     let mut rand = rand::thread_rng();
-    for _i in 0..NUMBER_ALLOCS {
+    for i in 0..NUMBER_ALLOCS {
 
-        let mode: Mode = rand.gen_range(0, 3).into();
+        let mode: Mode = rand.gen_range(0, 1).into();
         let bin = &mut bins[rand.gen_range(0usize, NUMBER_BINS)];
-        let index = rand.gen_range(1, 2/*MAX_SZ_IDX */);
+        let index = rand.gen_range(1, MAX_SZ_IDX);
         let size =
             if index > 0 {
                 unsafe {
@@ -71,7 +72,27 @@ fn malloc_test() {
                             let found = created_pointers.contains(&bin.ptr);
                             panic!("Invalid pointer used. Pointer was{} allocated", if found {""} else {"n't"});
                         }
+                        /*
+                            unsafe {
+                                println!("-----------");
+                                PAGE_TABLE.print_known_pages();
+                                stdout().flush();
+                            }
+                            println!();
+                            println!("Free {} on {:p} after {} allocs", frees, bin.ptr, i - 1);
+                            println!();
+
+                         */
+
                         do_free(bin.ptr);
+                        /*
+                        unsafe {
+                            PAGE_TABLE.print_known_pages();
+                            println!("-----------");
+                            stdout().flush();
+                        }
+
+                         */
                     }
                     bin.ptr = do_malloc(size);
                 },
@@ -107,17 +128,39 @@ fn malloc_test() {
         }
         unsafe {
             // check for valid
+            /*
+            unsafe {
+                println!("-----------");
+                PAGE_TABLE.print_known_pages();
+            }
+
+             */
+            // println!("\nSetting {:p} (located at {:p}) to 1\n", bin.ptr, &bin.ptr);
             *bin.ptr = 1;
+            /*
+            unsafe {
+                PAGE_TABLE.print_known_pages();
+                println!("-----------");
+            }
+
+             */
         }
         if created_pointers.contains(&bin.ptr) {
             // println!("Reusing a pointer");
         }
         created_pointers.insert(bin.ptr);
 
+
+
         bin.prev_sizes.push((bin.mode, bin.size));
         bin.mode = Some(mode);
         bin.size = size;
         assert!(!bin.ptr.is_null(), "Didn't allocate {} bytes with mode {:?}", size, mode);
+    }
+
+    unsafe {
+        PAGE_TABLE.print_known_pages();
+        println!("-----------");
     }
 
     for bin in bins {
@@ -141,7 +184,7 @@ fn single_thread_random_bins() {
 fn many_threads_random_bins() {
 
     let handles =
-        (0usize..2)
+        (0usize..16)
             .into_iter()
             .map(|_| thread::spawn(malloc_test))
             .collect::<Vec<_>>();
@@ -150,6 +193,12 @@ fn many_threads_random_bins() {
         handle.join().unwrap();
     }
 
+
+
+    unsafe {
+        PAGE_TABLE.print_known_pages();
+        println!("-----------");
+    }
     unsafe {
         println!("Total space used for table = {} bytes", PAGE_TABLE.get_total_size());
     }
