@@ -45,12 +45,14 @@ fn malloc_test() {
 
     let mut created_pointers = HashSet::new();
 
+    let mut frees = 0;
+
     let mut rand = rand::thread_rng();
     for _i in 0..NUMBER_ALLOCS {
 
         let mode: Mode = rand.gen_range(0, 3).into();
         let bin = &mut bins[rand.gen_range(0usize, NUMBER_BINS)];
-        let index = rand.gen_range(1, MAX_SZ_IDX);
+        let index = rand.gen_range(1, 2/*MAX_SZ_IDX */);
         let size =
             if index > 0 {
                 unsafe {
@@ -64,6 +66,7 @@ fn malloc_test() {
             match &mode {
                 Malloc => {
                     if bin.size > 0 {
+                        frees += 1;
                         if *bin.ptr != 1 {
                             let found = created_pointers.contains(&bin.ptr);
                             panic!("Invalid pointer used. Pointer was{} allocated", if found {""} else {"n't"});
@@ -74,6 +77,7 @@ fn malloc_test() {
                 },
                 AlignedAlloc => {
                     if bin.size > 0 {
+                        frees += 1;
                         if *bin.ptr != 1 {
                             let found = created_pointers.contains(&bin.ptr);
                             panic!("Invalid pointer used. Pointer was{} allocated", if found {""} else {"n't"});
@@ -89,7 +93,7 @@ fn malloc_test() {
                     if bin.size == 0 {
                         bin.ptr = null_mut();
                     } else {
-
+                        frees += 1;
                         if *bin.ptr != 1 {
                             let found = created_pointers.contains(&bin.ptr);
                             panic!("Invalid pointer used. Pointer was{} allocated", if found {""} else {"n't"});
@@ -104,6 +108,9 @@ fn malloc_test() {
         unsafe {
             // check for valid
             *bin.ptr = 1;
+        }
+        if created_pointers.contains(&bin.ptr) {
+            // println!("Reusing a pointer");
         }
         created_pointers.insert(bin.ptr);
 
@@ -134,7 +141,7 @@ fn single_thread_random_bins() {
 fn many_threads_random_bins() {
 
     let handles =
-        (0usize..16)
+        (0usize..2)
             .into_iter()
             .map(|_| thread::spawn(malloc_test))
             .collect::<Vec<_>>();

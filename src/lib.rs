@@ -512,7 +512,9 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
         return;
     }
     let info = match get_page_info_for_ptr(ptr) {
-        None => { return },
+        None => {
+            return
+        },
         Some(info) => info,
     };
     let desc = &mut *match info.get_desc() {

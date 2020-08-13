@@ -1,8 +1,6 @@
 use crate::allocation_data::Anchor;
 
-use crate::alloc::{
-    compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb, malloc_from_new_sb, unregister_desc,
-};
+use crate::alloc::{compute_index, get_page_info_for_ptr, heap_push_partial, malloc_count_from_new_sb, malloc_from_new_sb, unregister_desc, malloc_count_from_partial, malloc_from_partial};
 use crate::allocation_data::{get_heaps, SuperBlockState};
 use crate::mem_info::{CACHE_LINE, MAX_SZ_IDX};
 use crate::size_classes::{get_size_class, SIZE_CLASSES};
@@ -198,7 +196,7 @@ pub fn fill_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
     let mut used_partial = true;
 
     // Uses a partial list from the central reserve
-    // malloc_from_partial(size_class_index, cache, &mut block_num);
+    malloc_from_partial(size_class_index, cache, &mut block_num);
     if block_num == 0 {
         // Creates a new super block. Depending on the load on the kernel, the tail latency on this operation is high.
         malloc_from_new_sb(size_class_index, cache, &mut block_num);
@@ -253,21 +251,22 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
         //info!("Descriptor: {:?}", desc);
         //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
-        let super_block = (match desc.super_block.as_ref() {
+        let (super_block, super_block_length) = match desc.super_block.as_ref() {
             None => {
                 return;
             },
             Some(ptr) => {
-                ptr.get_ptr()
+                (ptr.get_ptr() as *mut u8, ptr.len())
             },
-        }) as *mut u8;
+        };
 
         let mut block_count = 1;
+
         while cache.get_block_num() > block_count && block_count <= (start - count as u32) {
             if cfg!(feature = "no_met_stack") || cache.block_size.is_none() || cache.block_size == Some(0)
             {
                 let ptr = unsafe { *(tail as *mut *mut u8) };
-                if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
+                if ptr < super_block || ptr as usize >= super_block as usize + super_block_length as usize {
                     break;
                 }
 
@@ -284,7 +283,7 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
                         break;
                     } else {
                         let ptr = *(tail as *mut *mut u8);
-                        if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
+                        if ptr < super_block || ptr as usize >= super_block as usize + super_block_length as usize {
                             break;
                         }
 
@@ -295,7 +294,21 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
             }
         }
         //info!("Reclaiming {} blocks", block_count);
-        cache.pop_list(unsafe { *(tail as *mut *mut u8) }, block_count);
+        let tail =
+        unsafe {
+            if !cfg!(feature = "no_met_stack") {
+                if (*(tail as *mut *mut u8)).is_null() {
+                    tail.add(cache.block_size.unwrap() as usize)
+                } else if *(tail as *const usize) == std::usize::MAX {
+                    null_mut()
+                } else {
+                    *(tail as *mut *mut u8)
+                }
+            } else {
+                *(tail as *mut *mut u8)
+            }
+        };
+        cache.pop_list(tail, block_count);
 
         let index = compute_index(super_block, head, size_class_index);
 
@@ -362,138 +375,7 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
 
 /// Flushes the contents of a thread cache bin back to the central reserve.
 pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
-    // println!("Flushing Cache");
-    //info!("Flushing size class {} cache...", size_class_index);
-    let heap = get_heaps().get_heap_at_mut(size_class_index);
-    let sc = unsafe { &SIZE_CLASSES[size_class_index] };
-
-    let sb_size = sc.sb_size;
-    let block_size = sc.block_size;
-
-    let _max_count = sc.get_block_num();
-
-    // There's a to do here in the original program to optimize, which is amusing
-    while cache.get_block_num() > 0 {
-        let head = cache.peek_block();
-        let mut tail = head;
-        let info = match get_page_info_for_ptr(head) {
-            None => return,
-            Some(info) => info,
-        };
-        let desc = unsafe {
-            match info.get_desc() {
-                None => {
-                    return;
-                }
-                Some(desc) => &mut *desc,
-            }
-        };
-        //info!("Descriptor: {:?}", desc);
-        //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
-
-        let super_block = (match desc.super_block.as_ref() {
-            None => {
-                return;
-            },
-            Some(ptr) => {
-                ptr.get_ptr()
-            },
-        }) as *mut u8;
-
-        let mut block_count = 1;
-        while cache.get_block_num() > block_count {
-            if cfg!(feature = "no_met_stack") || cache.block_size.is_none() || cache.block_size == Some(0)
-            {
-                let ptr = unsafe { *(tail as *mut *mut u8) };
-                if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
-                    break;
-                }
-
-                block_count += 1;
-                tail = ptr;
-            } else {
-                // let ptr = tail as *mut usize;
-                unsafe {
-                    if (*(tail as *mut *mut u8)).is_null() {
-                        tail = tail.add(cache.block_size.unwrap() as usize);
-                        block_count += 1;
-                    } else if *(tail as *const usize) == std::usize::MAX {
-                        block_count += 1;
-                        break;
-                    } else {
-                        let ptr = *(tail as *mut *mut u8);
-                        if ptr < super_block || ptr as usize >= super_block as usize + sb_size as usize {
-                            break;
-                        }
-
-                        block_count += 1;
-                        tail = ptr;
-                    }
-                }
-            }
-        }
-        //info!("Reclaiming {} blocks", block_count);
-        cache.pop_list(unsafe { *(tail as *mut *mut u8) }, block_count);
-
-        let index = compute_index(super_block, head, size_class_index);
-
-
-        let mut new_anchor: Anchor;
-        let old_anchor = loop {
-            let old_anchor = desc.anchor.load(Ordering::Acquire);
-            unsafe {
-                // update avail
-                let next = super_block.offset((old_anchor.avail() * block_size as u64) as isize);
-
-                *(tail as *mut *mut u8) = next;
-            }
-
-            new_anchor = old_anchor;
-            new_anchor.set_avail(index as u64);
-
-            // state updates
-            // dont set to partial if state is active
-            if old_anchor.state() == SuperBlockState::FULL {
-                new_anchor.set_state(SuperBlockState::PARTIAL);
-            }
-
-            if old_anchor.count() + block_count as u64 == desc.max_count as u64 {
-                //info!("Setting new anchor to EMPTY");
-                new_anchor.set_count(desc.max_count as u64 - 1);
-                new_anchor.set_state(SuperBlockState::EMPTY);
-            } else {
-                new_anchor.set_count(block_count as u64);
-            }
-
-            if desc
-                .anchor
-                .compare_exchange_weak(old_anchor, new_anchor, Ordering::Acquire, Ordering::Relaxed)
-                .is_ok()
-            {
-                break old_anchor;
-            }
-        };
-
-        if new_anchor.state() == SuperBlockState::EMPTY {
-            unregister_desc(Some(heap), desc.super_block.as_ref().unwrap());
-            if let Some(segment) = std::mem::replace(&mut desc.super_block, None) {
-                unsafe {
-                    SEGMENT_ALLOCATOR.deallocate(segment);
-                }
-            }
-        } else if old_anchor.state() == SuperBlockState::FULL {
-            /*info!("Pushing a partially used list to the heap (Size Class Index = {}, available = {}, count = {})",
-                  size_class_index,
-                  desc.anchor.load(Ordering::Acquire).avail(),
-                  desc.anchor.load(Ordering::Acquire).count()
-            );
-
-             */
-            heap_push_partial(desc)
-        }
-    }
-
-    cache.block_size = None;
+    flush_cache_until_count(size_class_index, 0, cache)
 }
 
 pub struct ThreadCache([ThreadCacheBin; MAX_SZ_IDX]);
@@ -604,7 +486,7 @@ fn fetch(size_class_index: usize, count: usize) -> bool {
 
     let mut block_num = 0;
 
-    // malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
+    malloc_count_from_partial(size_class_index, cache, &mut block_num, count);
 
 // Handles no partial block and insufficient partial block cases
 // Shouldn't need to loop more than once unless fetching *really* large count
