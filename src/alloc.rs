@@ -562,12 +562,12 @@ macro_rules! size_classes_match {
     };
 }
 
-pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usize) -> u32 {
+pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usize) -> usize {
     let sc = unsafe { &mut SIZE_CLASSES[size_class_index] };
     let _sc_block_size = sc.block_size;
     //debug_assert!(block >= super_block);
     //debug_assert!(block < unsafe { super_block.offset(sc.sb_size as isize) });
-    let diff = block as u32 - super_block as u32;
+    let diff = block as usize - super_block as usize;
     let mut index = 0;
     let _found = size_classes_match![
         index,
@@ -613,7 +613,7 @@ pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usi
         sc(37, 13, 11, 2, yes, yes, 3, no),
         sc(38, 13, 11, 3, no, yes, 7, no)
     ];
-    debug_assert_eq!(diff / _sc_block_size, index);
+    debug_assert_eq!(diff / _sc_block_size as usize, index);
     index
 }
 
