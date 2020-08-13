@@ -165,6 +165,7 @@ impl<T: Default> Array<T> {
         ret
     }
 
+    /// Increases the capacity to `new_size`, if `new_size` is greater than the old capacity
     pub fn grow(&mut self, new_size: usize) {
         if new_size > self.size {
             self.array.reserve(new_size);

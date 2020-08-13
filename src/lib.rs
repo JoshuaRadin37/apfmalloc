@@ -19,6 +19,7 @@ use crate::pages::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::thread_cache::{fill_cache, flush_cache};
+use crate::env::{env_is_value};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -43,6 +44,7 @@ pub mod pages;
 pub mod single_access;
 pub mod size_classes;
 pub mod thread_cache;
+pub mod env;
 
 mod bootstrap;
 
@@ -78,8 +80,8 @@ unsafe fn init_malloc() {
     // HASH_PAGE_MAP.init();
 
 
-    let option = std::env::var("USE_APF");
-    if option == Ok("false".to_string()) {
+    // let option = get_env("USE_APF");
+    if env_is_value("USE_APF", "false") {
         USE_APF = false;
     }
 
