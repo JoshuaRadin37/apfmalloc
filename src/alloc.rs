@@ -1,7 +1,7 @@
 use crate::allocation_data::{
     get_heaps, Anchor, Descriptor, DescriptorNode, ProcHeap, SuperBlockState,
 };
-use crate::mem_info::{PAGE, PAGE_MASK};
+use crate::mem_info::{PAGE_MASK, PAGE};
 use crate::page_map::{PageInfo, RANGE_PAGE_MAP, PAGE_TABLE};
 use crate::size_classes::SIZE_CLASSES;
 use crate::thread_cache::ThreadCacheBin;
@@ -16,8 +16,7 @@ pub fn list_pop_partial(heap: &mut ProcHeap) -> Option<&mut Descriptor> {
 
     loop {
         let old_head = list.load(Ordering::Acquire);
-        old_head?;
-        let old_desc = old_head.unwrap().get_desc().unwrap();
+        let old_desc = old_head?.get_desc().unwrap();
         // Lets assume this descriptor exists
 
         let mut new_head: Option<DescriptorNode> = old_desc.next_partial.load(Ordering::Acquire);
@@ -358,7 +357,7 @@ pub fn malloc_count_from_new_sb(
             unsafe {
                 // let mut ptr = super_block.add(block_size as usize * max_count - block_size as usize) as *mut *mut u8;
                 let mut last: *mut u8 = null_mut();
-                for block_num in (0..super_block_size).rev() {
+                for block_num in (0..blocks).rev() {
                     let current = super_block.add((block_size as usize * block_num) as usize);
                     *(current as *mut *mut u8) = last;
                     last = current;
@@ -428,9 +427,9 @@ pub unsafe fn update_page_map(
             0,
             "sb_size must be a multiple of a page"
         );
-        for index in 0..(sb_size / PAGE) {
+        for index in 0..(sb_size >> 12) {
             //S_PAGE_MAP.set_page_info(ptr.add(index as usize), info.clone())
-            PAGE_TABLE.set_page_info(ptr.add((index as usize) * PAGE), info);
+            PAGE_TABLE.set_page_info(ptr.add(index as usize * PAGE), info);
             // HASH_PAGE_MAP.set_page_info(ptr.add((index as usize) * PAGE), info);
         }
     }
