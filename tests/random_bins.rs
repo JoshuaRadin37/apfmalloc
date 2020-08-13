@@ -51,7 +51,7 @@ fn malloc_test() {
     let mut rand = rand::thread_rng();
     for i in 0..NUMBER_ALLOCS {
 
-        let mode: Mode = rand.gen_range(0, 1).into();
+        let mode: Mode = rand.gen_range(0, 3).into();
         let bin = &mut bins[rand.gen_range(0usize, NUMBER_BINS)];
         let index = rand.gen_range(1, MAX_SZ_IDX);
         let size =
@@ -182,6 +182,40 @@ fn single_thread_random_bins() {
 
 #[test]
 fn many_threads_random_bins() {
+
+    let handles =
+        (0usize..16)
+            .into_iter()
+            .map(|_| thread::spawn(malloc_test))
+            .collect::<Vec<_>>();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+
+
+    unsafe {
+        PAGE_TABLE.print_known_pages();
+        println!("-----------");
+    }
+    unsafe {
+        println!("Total space used for table = {} bytes", PAGE_TABLE.get_total_size());
+    }
+}
+
+#[test]
+fn many_threads_random_bins_twice() {
+
+    let handles =
+        (0usize..16)
+            .into_iter()
+            .map(|_| thread::spawn(malloc_test))
+            .collect::<Vec<_>>();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
 
     let handles =
         (0usize..16)
