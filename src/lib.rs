@@ -19,7 +19,6 @@ use crate::pages::{SegAllocator, SEGMENT_ALLOCATOR};
 use crate::single_access::SingleAccess;
 use crate::size_classes::{get_size_class, init_size_class, SIZE_CLASSES};
 use crate::thread_cache::{fill_cache, flush_cache};
-use crate::page_map::{HASH_PAGE_MAP};
 
 #[macro_export]
 macro_rules! dump_info {
@@ -76,7 +75,7 @@ unsafe fn init_malloc() {
     init_size_class();
 
     // S_PAGE_MAP.init();
-    HASH_PAGE_MAP.init();
+    // HASH_PAGE_MAP.init();
 
 
     let option = std::env::var("USE_APF");
@@ -134,14 +133,12 @@ pub fn allocate_val<T>(val: T) -> *mut T {
 ///
 /// If the allocation fails, a NULL pointer is returned.
 pub fn do_malloc(size: usize) -> *mut u8 {
-    let mut ret = null_mut();
-    MALLOC_INIT_S.with_else(
+
+    MALLOC_INIT_S.with(
         || unsafe { init_malloc() },
-        || unsafe { ret = bootstrap_reserve.lock().allocate(size) }
+        // || unsafe { ret = bootstrap_reserve.lock().allocate(size) }
     );
-    if !ret.is_null() {
-        return ret;
-    }
+
     /*
     unsafe {
         if !MALLOC_SKIP {
@@ -195,14 +192,10 @@ pub fn do_aligned_alloc(align: usize, size: usize) -> *mut u8 {
     }
 
     let mut size = align_size(size, align);
-    let mut ret = null_mut();
-    MALLOC_INIT_S.with_else(
+    MALLOC_INIT_S.with(
         || unsafe { init_malloc() },
-        || unsafe { ret = bootstrap_reserve.lock().allocate(size) }
+        // || unsafe { ret = bootstrap_reserve.lock().allocate(size) }
     );
-    if !ret.is_null() {
-        return ret;
-    }
 
     if size > PAGE {
         size = size.max(MAX_SZ + 1);
@@ -420,12 +413,18 @@ pub fn allocate_to_cache(size: usize, size_class_index: usize) -> *mut u8 {
 ///
 /// # Safety
 /// If an invalid pointer is passed to this function, then a SEGFAULT will occur. As such, this function is marked as unsafe.
-pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+pub unsafe fn do_realloc<T>(ptr: *mut T, size: usize) -> *mut T {
+    /*
     if ptr.is_null() {
-        return do_malloc(size) as *mut c_void;
+        let ptr = do_malloc(size) as *mut T;
+        if ptr.is_null() {
+            println!("woops")
+        }
+        return ptr;
     }
+
     let new_size_class = get_size_class(size);
-    let old_size = match get_allocation_size(ptr) {
+    let old_size = match get_allocation_size(ptr as *mut c_void) {
         Ok(size) => size as usize,
         Err(_) => {
             /*
@@ -434,7 +433,11 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 
              */
             // just give up and return a malloc
-            return do_malloc(size) as *mut c_void;
+            let ptr = do_malloc(size) as *mut T;
+            if ptr.is_null() {
+                println!("woops")
+            }
+            return ptr;
             //return null_mut();
         }
     };
@@ -442,15 +445,37 @@ pub unsafe fn do_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     if old_size_class != 0 && old_size_class == new_size_class
         || old_size_class == 0 && new_size_class == 0 && size < old_size
     {
+        if ptr.is_null() {
+            println!("woops")
+        }
         return ptr;
     }
 
-    let ret = do_malloc(size) as *mut c_void;
+     */
 
-    if !ret.is_null() && ret != ptr {
-        libc::memcpy(ret, ptr, old_size);
+
+
+
+    let ret = do_malloc(size) as *mut T;
+
+    if !ptr.is_null() {
+
+        let old_size = get_allocation_size(ptr as *const c_void).unwrap();
+        let copy_size = old_size.min(size as u32) as usize;
+        if !ret.is_null() && ret != ptr {
+            libc::memcpy(ret as *mut c_void, ptr as *mut c_void, copy_size as usize);
+            /*
+            for i in 0..(copy_size) {
+                (ret as *mut u8).add(i).write((ptr as *mut u8).add(i).read());
+            }
+
+             */
+        }
+
+
+        do_free(ptr);
     }
-    do_free(ptr);
+
     ret
 }
 
@@ -580,7 +605,9 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
                 thread_cache::thread_cache
                     .try_with(|tcache| {
                         let cache = (*tcache.get()).get_mut(size_class_index).unwrap();
-
+                        if size_class_index != 0 && cache.get_block_size().is_none() {
+                            *cache.get_block_size_mut() = Some(SIZE_CLASSES[size_class_index].block_size);
+                        }
                         /*
                         if sc.block_num == 0 {
                             unsafe {
@@ -604,7 +631,11 @@ pub unsafe fn do_free<T: ?Sized>(ptr: *const T) {
                             }
                         }
 
-                        cache.push_block(ptr as *mut u8)
+                        if cache.block_num > 0 {
+                            cache.push_block(ptr as *mut u8)
+                        } else {
+                            cache.push_list(ptr as *mut u8, 1);
+                        }
                     })
                     .expect("Freeing to cache failed");
             }

@@ -48,23 +48,31 @@ impl ThreadCacheBin {
             // If the block size is recorded and it's less than the CACHE_LINE, it may be slightly faster to attempt to push it back as
             // a contiguous block
             Some(block_size) if block_size < CACHE_LINE as u32 && !cfg!(feature = "no_met_stack") => {
-                let old_loc = self.block as usize as isize;
-                let diff = old_loc - block as usize as isize;
-                if diff == block_size as isize {
+                if self.block_num == 0 {
                     unsafe {
-                        *(block as *mut *mut u8) = null_mut();
+                        *(block as *mut usize) = std::usize::MAX;
                     }
                 } else {
-                    unsafe {
-                        *(block as *mut *mut u8) = self.block;
+                    let old_loc = self.block as usize as isize;
+                    let diff = old_loc - block as usize as isize;
+                    if diff == block_size as isize {
+                        unsafe {
+                            *(block as *mut *mut u8) = null_mut();
+                        }
+                    } else {
+                        unsafe {
+                            *(block as *mut *mut u8) = self.block;
+                        }
                     }
                 }
                 self.block = block;
                 self.block_num += 1;
             }
             None | Some(_) => {
-                unsafe {
-                    *(block as *mut *mut u8) = self.block;
+                if self.block_num != 0 {
+                    unsafe {
+                        *(block as *mut *mut u8) = self.block;
+                    }
                 }
                 self.block = block;
                 self.block_num += 1;
@@ -110,7 +118,9 @@ impl ThreadCacheBin {
                     if (self.block as *mut u8).is_null() {
                         return null_mut();
                     }
-                    self.block = unsafe { *(self.block as *mut *mut u8) };
+                    if self.block_num > 1 {
+                        self.block = unsafe { *(self.block as *mut *mut u8) };
+                    }
                     //self.block = unsafe { self.block.offset(-1) };
 
                 }
@@ -133,6 +143,9 @@ impl ThreadCacheBin {
                 },
             };
             self.block_num -= 1;
+            if self.block_num == 0 {
+                self.block = null_mut();
+            }
             ret
         }
     }
@@ -165,6 +178,16 @@ impl ThreadCacheBin {
     #[inline]
     pub fn get_block_num(&self) -> u32 {
         self.block_num
+    }
+
+    #[inline]
+    pub fn get_block_size(&self) -> &Option<u32> {
+        &self.block_size
+    }
+
+    #[inline]
+    pub fn get_block_size_mut(&mut self) -> &mut Option<u32> {
+        &mut self.block_size
     }
 }
 
@@ -232,7 +255,14 @@ pub fn flush_cache(size_class_index: usize, cache: &mut ThreadCacheBin) {
         //info!("Descriptor: {:?}", desc);
         //info!("Cache anchor info: {:?}", desc.anchor.load(Ordering::Acquire));
 
-        let super_block = desc.super_block.as_ref().unwrap().get_ptr() as *mut u8;
+        let super_block = (match desc.super_block.as_ref() {
+            None => {
+                return;
+            },
+            Some(ptr) => {
+                ptr.get_ptr()
+            },
+        }) as *mut u8;
 
         let mut block_count = 1;
         while cache.get_block_num() > block_count {

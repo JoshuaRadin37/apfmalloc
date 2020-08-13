@@ -118,7 +118,7 @@ impl PageTable<PageInfo> for PageTableLow {
 }
 
 pub struct PageInfoTable {
-    high_table: AtomicPtr<PageTableHigh>
+    high_table: AtomicPtr<PageTableHigh>,
 }
 
 impl PageInfoTable {
@@ -129,7 +129,8 @@ impl PageInfoTable {
         }
     }
 
-    pub fn get_page_info(&self, addr: usize) -> Option<PageInfo> {
+    pub fn get_page_info(&self, addr: *mut u8) -> Option<PageInfo> {
+        let addr = addr as usize;
         unsafe {
             let high = self.high_table.load(Ordering::Acquire);
             if high.is_null() {
@@ -155,8 +156,8 @@ impl PageInfoTable {
         }
     }
 
-    pub fn set_page_info(&mut self, addr: usize, info: PageInfo) {
-
+    pub fn set_page_info(&mut self, addr: * mut u8, info: PageInfo) {
+        let addr = addr as usize;
         unsafe {
             let high =
                 if self.high_table.load(Ordering::Acquire).is_null() {
@@ -170,6 +171,7 @@ impl PageInfoTable {
                 } else {
                     self.high_table.load(Ordering::Relaxed)
                 };
+            assert!(!high.is_null());
             let med_high_ptr = (*high).get_entry(addr);
             let med_high =
                 if med_high_ptr.load(Ordering::Acquire).is_null() {
@@ -183,7 +185,7 @@ impl PageInfoTable {
                 } else {
                     med_high_ptr.load(Ordering::Relaxed)
                 };
-
+            assert!(!med_high.is_null());
             let med_low_ptr = (*med_high).get_entry(addr);
             let med_low =
                 if med_low_ptr.load(Ordering::Acquire).is_null() {
@@ -210,7 +212,7 @@ impl PageInfoTable {
                 } else {
                     low_ptr.load(Ordering::Relaxed)
                 };
-
+            assert!(!low.is_null());
             let a_info_ptr = (*low).get_entry(addr);
             let info_ptr =
                 if a_info_ptr.load(Ordering::Acquire).is_null() {
@@ -222,7 +224,7 @@ impl PageInfoTable {
                 } else {
                     a_info_ptr.load(Ordering::Relaxed)
                 };
-
+            assert!(!info_ptr.is_null());
             info_ptr.write(info)
         }
 
@@ -305,7 +307,7 @@ mod test {
         let data = 0;
         let ptr = &data as *const i32;
         let table = PageInfoTable::new();
-        assert!(table.get_page_info(ptr as usize).is_none());
+        assert!(table.get_page_info(ptr as *mut u8).is_none());
 
         println!("Total space used for table = {} bytes", table.get_total_size());
     }
@@ -316,7 +318,7 @@ mod test {
 
         let auto_ptr = AutoPtr::new(0usize);
         unsafe {
-            let ptr= auto_ptr.get_ptr() as usize;
+            let ptr= auto_ptr.get_ptr() as *mut u8;
             let info = PageInfo::default();
             table.set_page_info(ptr, info);
             assert!(table.get_page_info(ptr).is_some());
@@ -330,8 +332,7 @@ mod test {
         let mut table = PageInfoTable::new();
 
         for _i in 0..1000 {
-            let auto_ptr = page_alloc(PAGE).unwrap();
-            let ptr = auto_ptr as usize;
+            let ptr = page_alloc(PAGE).unwrap();
             let info = PageInfo::default();
             table.set_page_info(ptr, info);
             assert!(table.get_page_info(ptr).is_some());
@@ -352,10 +353,9 @@ mod test {
                 for _i in 0..1000 {
 
                     let auto_ptr = page_alloc(PAGE).unwrap();
-                    let ptr = auto_ptr as usize;
                     let info = PageInfo::default();
-                    TABLE.set_page_info(ptr, info);
-                    assert!(TABLE.get_page_info(ptr).is_some());
+                    TABLE.set_page_info(auto_ptr, info);
+                    assert!(TABLE.get_page_info(auto_ptr).is_some());
 
                 }
             }));

@@ -27,6 +27,7 @@ use crate::mem_info::{LG_PAGE, MAX_SZ, MAX_SZ_IDX};
 use crate::mem_info::PAGE;
 use crate::pages::page_alloc_over_commit;
 use crate::size_classes::get_size_class;
+use crate::page_map::page_table::PageInfoTable;
 
 /// Assuming x84-64, which has 48 bits for addressing
 /// TODO: Modify based on arch
@@ -434,3 +435,5 @@ impl HashedPageMap {
 lazy_static! {
 pub static ref HASH_PAGE_MAP: HashedPageMap = HashedPageMap::new();
 }
+
+pub static mut PAGE_TABLE: PageInfoTable = PageInfoTable::new();

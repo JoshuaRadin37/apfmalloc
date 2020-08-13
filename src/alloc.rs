@@ -2,7 +2,7 @@ use crate::allocation_data::{
     get_heaps, Anchor, Descriptor, DescriptorNode, ProcHeap, SuperBlockState,
 };
 use crate::mem_info::{PAGE, PAGE_MASK};
-use crate::page_map::{PageInfo, RANGE_PAGE_MAP};
+use crate::page_map::{PageInfo, RANGE_PAGE_MAP, PAGE_TABLE};
 use crate::size_classes::SIZE_CLASSES;
 use crate::thread_cache::ThreadCacheBin;
 use std::ptr::null_mut;
@@ -334,8 +334,12 @@ pub fn malloc_count_from_new_sb(
 
     desc.proc_heap = heap;
     desc.block_size = block_size;
-    desc.max_count = max_count as u32;
-    desc.super_block = SEGMENT_ALLOCATOR.allocate(sc.block_size as usize * c).ok();
+
+    let super_block_size_bytes = page_ceiling!(c * sc.block_size as usize);
+    let blocks = super_block_size_bytes / block_size as usize;
+    desc.max_count = blocks as u32;
+
+    desc.super_block = SEGMENT_ALLOCATOR.allocate(super_block_size_bytes).ok();
 
     let super_block = desc.super_block.as_ref().expect(&*format!("Didn't allocate a super block of {} bytes", sc.block_size as usize * c)).get_ptr() as *mut u8;
 
@@ -345,7 +349,7 @@ pub fn malloc_count_from_new_sb(
         {
             unsafe {
                 // Gets a pointer to the last block and sets it to 0xFF...F
-                let ptr = super_block.add(block_size as usize * c - block_size as usize);
+                let ptr = super_block.add(super_block_size_bytes - block_size as usize);
                 *(ptr as *mut usize) = std::usize::MAX;
             }
         }
@@ -354,7 +358,7 @@ pub fn malloc_count_from_new_sb(
             unsafe {
                 // let mut ptr = super_block.add(block_size as usize * max_count - block_size as usize) as *mut *mut u8;
                 let mut last: *mut u8 = null_mut();
-                for block_num in (0..c).rev() {
+                for block_num in (0..super_block_size).rev() {
                     let current = super_block.add((block_size as usize * block_num) as usize);
                     *(current as *mut *mut u8) = last;
                     last = current;
@@ -364,10 +368,10 @@ pub fn malloc_count_from_new_sb(
         }
 
     let block = super_block;
-    cache.push_list(block, c as u32);
+    cache.push_list(block, blocks as u32);
 
     let mut anchor: Anchor = Anchor::default();
-    anchor.set_avail(c as u64);
+    anchor.set_avail(blocks as u64);
     anchor.set_count(0);
     anchor.set_state(SuperBlockState::FULL);
 
@@ -379,7 +383,7 @@ pub fn malloc_count_from_new_sb(
 
 /* END ELIAS CODE */
 
-use crate::page_map::HASH_PAGE_MAP;
+// use crate::page_map::HASH_PAGE_MAP;
 ///
 /// Updates the page map for a pointer
 ///
@@ -398,8 +402,9 @@ pub unsafe fn update_page_map(
     }
 
     let mut info: PageInfo = PageInfo::default();
+    let desc = desc.map_or(null_mut(), |d| d as *mut Descriptor);
     info.set_ptr(
-        desc.map_or(null_mut(), |d| d as *mut Descriptor),
+        desc,
         size_class_index,
     );
     if heap.is_none() {
@@ -409,20 +414,25 @@ pub unsafe fn update_page_map(
             guard.set_page_info(ptr, info);
 
              */
-            HASH_PAGE_MAP.set_page_info(ptr, info);
+            // HASH_PAGE_MAP.set_page_info(ptr, info);
+            PAGE_TABLE.set_page_info(ptr, info);
             return;
     }
 
-    let heap = heap.unwrap();
-    let sb_size = heap.get_size_class().sb_size;
-    assert_eq!(
-        sb_size & PAGE_MASK as u32,
-        0,
-        "sb_size must be a multiple of a page"
-    );
-    for index in 0..(sb_size / PAGE as u32) {
-        //S_PAGE_MAP.set_page_info(ptr.add(index as usize), info.clone())
-        HASH_PAGE_MAP.set_page_info(ptr.add((index as usize) * PAGE), info);
+    if desc.is_null() {
+        PAGE_TABLE.set_page_info(ptr, info);
+    } else {
+        let sb_size = page_ceiling!(((*desc).max_count * (*desc).block_size) as usize);
+        assert_eq!(
+            sb_size & PAGE_MASK,
+            0,
+            "sb_size must be a multiple of a page"
+        );
+        for index in 0..(sb_size / PAGE) {
+            //S_PAGE_MAP.set_page_info(ptr.add(index as usize), info.clone())
+            PAGE_TABLE.set_page_info(ptr.add((index as usize) * PAGE), info);
+            // HASH_PAGE_MAP.set_page_info(ptr.add((index as usize) * PAGE), info);
+        }
     }
 }
 
@@ -463,7 +473,8 @@ pub fn get_page_info_for_ptr<T: ?Sized>(ptr: *const T) -> Option<PageInfo> {
         PageInfoWrapper(ptr, guard.get_page_info(ptr).map(|p| p.clone()))
 
          */
-        HASH_PAGE_MAP.get_page_info(ptr)
+        // HASH_PAGE_MAP.get_page_info(ptr)
+        PAGE_TABLE.get_page_info(ptr as *mut u8)
     }
 }
 
@@ -554,8 +565,8 @@ macro_rules! size_classes_match {
 pub fn compute_index(super_block: *mut u8, block: *mut u8, size_class_index: usize) -> u32 {
     let sc = unsafe { &mut SIZE_CLASSES[size_class_index] };
     let _sc_block_size = sc.block_size;
-    debug_assert!(block >= super_block);
-    debug_assert!(block < unsafe { super_block.offset(sc.sb_size as isize) });
+    //debug_assert!(block >= super_block);
+    //debug_assert!(block < unsafe { super_block.offset(sc.sb_size as isize) });
     let diff = block as u32 - super_block as u32;
     let mut index = 0;
     let _found = size_classes_match![
