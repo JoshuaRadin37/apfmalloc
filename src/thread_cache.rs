@@ -263,7 +263,7 @@ pub fn flush_cache_until_count(size_class_index: usize, count: usize, cache: &mu
         }) as *mut u8;
 
         let mut block_count = 1;
-        while cache.get_block_num() > block_count && block_count <= count as u32 {
+        while cache.get_block_num() > block_count && block_count <= (start - count as u32) {
             if cfg!(feature = "no_met_stack") || cache.block_size.is_none() || cache.block_size == Some(0)
             {
                 let ptr = unsafe { *(tail as *mut *mut u8) };
