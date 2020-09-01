@@ -58,7 +58,7 @@ fn main() {
 ### Independent Collections
 
 Any allocation that goes through `do_malloc`, `do_realloc`, etc. will be tracked by the APF Tuner.
-As such, its useful to have types that are designed to skip these steps.
+As such, its useful to have types that are designed to skip these steps. Many internal data structures are built off of these types, and therefore are able to reduce memory leakage in programs.
 
 #### `RawArray<T>`
 
