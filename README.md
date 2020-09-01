@@ -55,7 +55,24 @@ fn main() {
 } // p is dropped here, and the memory is free'd
 ```
 
-### Independent collections
+### Independent Collections
 
 Any allocation that goes through `do_malloc`, `do_realloc`, etc. will be tracked by the APF Tuner.
 As such, its useful to have types that are designed to skip these steps.
+
+#### `RawArray<T>`
+
+The `RawArray<T>` is a block of memory with a certain capacity. The `RawArray<T>` type automatically handles allocation of the memory segment by settings it's capacity. The array can be expanded later on, and might move the allocated memory. Accessing elements in a `RawArray<T>` is unsafe, as it doesn't manage whether there is an element initializde at an index, or whether an index is out of bounds. Taking pointers from a raw array and attempting to use them later can be unsafe, as re-allocation could move memory and make the last location invalid. 
+
+Upon dropping a `RawArray<T>`, none of it's elements will be dropped.
+
+#### `Array<T>`
+
+The `Array<T>` type is a managed array, very similar to the standard library `Vec<T>` type. The array does not allow for access of uninitialized elements. It will expand the backing memory when needed. Since the `Array<T>` type tracks the number of elements in the array, more complex methods and traits are implemented on it. `Array<T>`s can be convertered into iterators using the `into_iter()` method. This allows for a function to take ownership of the elements of an `Array<T>`.
+
+Upon dropping an `Array<T>`, the elements of the array are dropped as well. As such, any type that is backed by `Array<T>`s will always deallocate any heap allocated memory, and not have any memory leaks.
+
+#### `HashMap<K, V>`
+
+This is a hash map implementation that is backed by `Array`s. 
+
